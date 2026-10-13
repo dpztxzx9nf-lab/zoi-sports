@@ -1,10 +1,11 @@
+@font-face{font-family:Graduate;src:url(assets/fonts/Graduate-Regular.ttf) format('truetype');font-display:swap}
 :root{--bg:#000;--v:#8B3DFF;--c:#19D3FF;--g:#D4AF37;--t:#e9e6f5;--m:#9a94b3;--card:#0d0a16}
 *{box-sizing:border-box}html{scroll-behavior:smooth}
-body{margin:0;background:var(--bg);color:var(--t);font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-h1,h2,h3{font-family:Georgia,"Times New Roman",serif;letter-spacing:.06em;margin:.2em 0}
+body{margin:0;background:radial-gradient(900px 700px at -10% 10%,#1e0838 0,transparent 70%),radial-gradient(900px 700px at 110% 40%,#002330 0,transparent 70%),var(--bg);background-attachment:fixed;color:var(--t);font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+h1,h2,h3{font-family:Graduate,Georgia,serif;letter-spacing:.04em;margin:.2em 0;font-weight:400}
 a{color:var(--c)}
 .nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:.6rem 1rem;background:rgba(0,0,0,.85);backdrop-filter:blur(8px);border-bottom:1px solid #d4af3733}
-.brand{display:flex;gap:.5rem;align-items:center;color:#fff;text-decoration:none;font:700 1.3rem Georgia,serif;letter-spacing:.2em}
+.brand{display:flex;gap:.5rem;align-items:center;color:#fff;text-decoration:none;font:400 1.3rem Graduate,Georgia,serif;letter-spacing:.12em}
 .brand img{border-radius:6px}
 .nav nav{display:none;position:absolute;top:100%;left:0;right:0;flex-direction:column;background:#000;border-bottom:1px solid #d4af3733}
 .nav nav.open{display:flex}.nav nav a{padding:.8rem 1rem;color:var(--t);text-decoration:none;text-transform:uppercase;font-size:.85rem;letter-spacing:.15em}
@@ -12,21 +13,27 @@ a{color:var(--c)}
 .menu{background:none;border:1px solid var(--g);color:var(--g);font-size:1.2rem;border-radius:6px;padding:.2rem .6rem}
 section{max-width:1040px;margin:0 auto;padding:3.5rem 1.2rem}
 h2{font-size:2rem;text-align:center;background:linear-gradient(90deg,var(--v),var(--c));-webkit-background-clip:text;background-clip:text;color:transparent;text-transform:uppercase}
-h2::after{content:"❦";display:block;font-size:1rem;color:var(--g);-webkit-text-fill-color:var(--g)}
-.hero{text-align:center;padding-top:3rem;background:radial-gradient(circle at 50% 30%,#8b3dff33,transparent 60%)}
-.logo{width:min(260px,65vw);height:auto;border-radius:20px;box-shadow:0 0 60px #8b3dff55,0 0 30px #19d3ff33}
-.hero h1{font-size:clamp(2.8rem,10vw,5rem);letter-spacing:.25em;margin-top:1rem}
+h2{-webkit-text-stroke:1px var(--g);letter-spacing:.06em;font-size:clamp(1.7rem,5vw,2.4rem);filter:drop-shadow(0 3px 8px #000)}
+h2::after{content:"";display:block;width:64px;height:2px;margin:.6rem auto 0;background:var(--c);-webkit-text-stroke:0}
+.hero{text-align:center;padding-top:3rem}
+.crest{position:relative;width:min(280px,70vw);aspect-ratio:300/340;margin:0 auto;filter:drop-shadow(0 0 40px #8b3dff33)}
+.shield{position:absolute;inset:0;width:100%;height:100%}
+.logo{position:absolute;left:14%;top:12%;width:72%;height:auto;mix-blend-mode:lighten}
+.est{position:absolute;left:0;right:0;bottom:22%;font:400 clamp(.8rem,3vw,1rem) Graduate,Georgia,serif;letter-spacing:.18em;color:var(--g)}
+.hero h1{font-size:clamp(2.8rem,10vw,5rem);letter-spacing:.12em;margin-top:1rem;background:linear-gradient(90deg,var(--v),var(--c));-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-stroke:1.5px var(--g)}
+.hero h1 .pron{-webkit-text-stroke:0;-webkit-text-fill-color:var(--g)}
 .pron{font-size:.35em;letter-spacing:.1em;color:var(--g);font-family:system-ui}
 .greek{color:var(--g);font-size:1.3rem;margin:0}
 .tag{font-size:1.15rem;color:var(--m)}
 .cta{display:flex;gap:.8rem;justify-content:center;flex-wrap:wrap;margin-top:1.4rem}
-.btn{padding:.8rem 1.6rem;border-radius:999px;background:linear-gradient(90deg,var(--v),var(--c));color:#000;font-weight:700;text-decoration:none;text-transform:uppercase;letter-spacing:.1em}
+.btn{padding:.8rem 1.6rem;border-radius:4px;background:linear-gradient(90deg,var(--v),var(--c));color:#000;font-weight:700;text-decoration:none;text-transform:uppercase;letter-spacing:.1em}
 .btn.ghost{background:none;color:var(--g);border:1px solid var(--g)}
+.stripes{height:7px;max-width:1040px;margin:0 auto;border-top:2px solid var(--g);border-bottom:1px solid var(--g);opacity:.85}
 .meander{height:14px;max-width:1040px;margin:0 auto;opacity:.7;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='14'%3E%3Cpath d='M0 13H26V1H8V9H18V5H13' fill='none' stroke='%23D4AF37' stroke-width='1.6'/%3E%3C/svg%3E") repeat-x}
 .cards{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin:1.5rem 0}
-.card{background:var(--card);border:1px solid #8b3dff44;border-top:3px solid var(--g);border-radius:12px;padding:1.3rem;text-align:center}
+.card{background:var(--card);border:1px solid #8b3dff44;border-top:3px solid var(--g);border-radius:6px;padding:1.3rem;text-align:center}
 .card p{color:var(--m);margin:.3rem 0}
-.glyph{font:700 2.4rem Georgia,serif;background:linear-gradient(var(--v),var(--c));-webkit-background-clip:text;background-clip:text;color:transparent}
+.glyph{font:400 2.4rem Graduate,Georgia,serif;-webkit-text-stroke:1px var(--g);background:linear-gradient(var(--v),var(--c));-webkit-background-clip:text;background-clip:text;color:transparent}
 .player img{border-radius:50%;border:2px solid var(--g)}
 .role{text-transform:uppercase;font-size:.8rem;letter-spacing:.12em}
 .open{border-style:dashed}.slot{width:72px;height:72px;margin:0 auto;border-radius:50%;border:2px dashed var(--c);display:grid;place-items:center;font-size:2rem;color:var(--c)}
@@ -35,7 +42,7 @@ h2::after{content:"❦";display:block;font-size:1rem;color:var(--g);-webkit-text
 .socials{display:flex;flex-wrap:wrap;gap:.7rem;justify-content:center;margin-top:1rem}
 .pill{border:1px solid #19d3ff66;border-radius:999px;padding:.6rem 1.1rem}.pill small{color:var(--g);margin-left:.3rem}
 #about>p,#socials>p,#tryouts>p{text-align:center;max-width:700px;margin-left:auto;margin-right:auto}
-footer{text-align:center;padding:0 1rem 2rem;color:var(--m)}footer .meander{margin-bottom:2rem}footer img{border-radius:8px}.small{font-size:.8rem}
+footer{text-align:center;padding:0 1rem 2rem;color:var(--m)}footer .stripes{margin-bottom:2rem}footer img{border-radius:8px}.small{font-size:.8rem}
 @media(min-width:760px){.menu{display:none}.nav nav{display:flex;position:static;flex-direction:row;border:0;background:none}.nav{padding:.6rem 2rem}}
 .form{text-align:left;margin-top:1.5rem;display:flex;flex-direction:column;gap:.9rem}
 .form .grid{display:grid;gap:.9rem;grid-template-columns:1fr}
