@@ -12,3 +12,17 @@ Plain static HTML/CSS/JS — no build step.
 - Hosting: Cloudflare Pages (project `zoi-sports`). Build command: none. Output directory: `/`.
 
 Socials (@zoi_sports on X, YouTube, Twitch, TikTok) and contact are marked "coming soon" until claimed.
+
+## Layout
+- `public/` — static site (deployed output)
+- `functions/api/apply.js` — Pages Function: `POST /api/apply` validates + stores tryout applications (honeypot + 3/hour/IP rate limit)
+- `schema.sql` — D1 schema (database `zoi-tryouts`, binding `DB`)
+- `wrangler.toml` — Pages config + D1 binding
+
+## Deploy
+`wrangler pages deploy --branch main`
+
+## Reading applications
+```
+wrangler d1 execute zoi-tryouts --remote --command "SELECT id,created_at,epic_name,discord,region,platform,age,role,results_link,clips_link,email,why FROM applications ORDER BY id DESC"
+```
