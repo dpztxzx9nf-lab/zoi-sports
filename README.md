@@ -1,5 +1,8 @@
 # ZOI — zo-EE (ζωή, "life")
 
+**Live site:** https://zoi-sports.pages.dev
+
+
 Website for **ZOI**, a new competitive Fortnite Zero Build esports org founded by ZoiKneczi.
 
 Plain static HTML/CSS/JS — no build step.
