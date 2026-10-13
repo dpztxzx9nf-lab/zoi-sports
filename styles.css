@@ -1,0 +1,39 @@
+:root{--bg:#000;--v:#8B3DFF;--c:#19D3FF;--g:#D4AF37;--t:#e9e6f5;--m:#9a94b3;--card:#0d0a16}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--t);font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+h1,h2,h3{font-family:Georgia,"Times New Roman",serif;letter-spacing:.06em;margin:.2em 0}
+a{color:var(--c)}
+.nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:.6rem 1rem;background:rgba(0,0,0,.85);backdrop-filter:blur(8px);border-bottom:1px solid #d4af3733}
+.brand{display:flex;gap:.5rem;align-items:center;color:#fff;text-decoration:none;font:700 1.3rem Georgia,serif;letter-spacing:.2em}
+.brand img{border-radius:6px}
+.nav nav{display:none;position:absolute;top:100%;left:0;right:0;flex-direction:column;background:#000;border-bottom:1px solid #d4af3733}
+.nav nav.open{display:flex}.nav nav a{padding:.8rem 1rem;color:var(--t);text-decoration:none;text-transform:uppercase;font-size:.85rem;letter-spacing:.15em}
+.nav nav a:hover{color:var(--c)}
+.menu{background:none;border:1px solid var(--g);color:var(--g);font-size:1.2rem;border-radius:6px;padding:.2rem .6rem}
+section{max-width:1040px;margin:0 auto;padding:3.5rem 1.2rem}
+h2{font-size:2rem;text-align:center;background:linear-gradient(90deg,var(--v),var(--c));-webkit-background-clip:text;background-clip:text;color:transparent;text-transform:uppercase}
+h2::after{content:"❦";display:block;font-size:1rem;color:var(--g);-webkit-text-fill-color:var(--g)}
+.hero{text-align:center;padding-top:3rem;background:radial-gradient(circle at 50% 30%,#8b3dff33,transparent 60%)}
+.logo{width:min(260px,65vw);height:auto;border-radius:20px;box-shadow:0 0 60px #8b3dff55,0 0 30px #19d3ff33}
+.hero h1{font-size:clamp(2.8rem,10vw,5rem);letter-spacing:.25em;margin-top:1rem}
+.pron{font-size:.35em;letter-spacing:.1em;color:var(--g);font-family:system-ui}
+.greek{color:var(--g);font-size:1.3rem;margin:0}
+.tag{font-size:1.15rem;color:var(--m)}
+.cta{display:flex;gap:.8rem;justify-content:center;flex-wrap:wrap;margin-top:1.4rem}
+.btn{padding:.8rem 1.6rem;border-radius:999px;background:linear-gradient(90deg,var(--v),var(--c));color:#000;font-weight:700;text-decoration:none;text-transform:uppercase;letter-spacing:.1em}
+.btn.ghost{background:none;color:var(--g);border:1px solid var(--g)}
+.meander{height:14px;max-width:1040px;margin:0 auto;opacity:.7;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='14'%3E%3Cpath d='M0 13H26V1H8V9H18V5H13' fill='none' stroke='%23D4AF37' stroke-width='1.6'/%3E%3C/svg%3E") repeat-x}
+.cards{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin:1.5rem 0}
+.card{background:var(--card);border:1px solid #8b3dff44;border-top:3px solid var(--g);border-radius:12px;padding:1.3rem;text-align:center}
+.card p{color:var(--m);margin:.3rem 0}
+.glyph{font:700 2.4rem Georgia,serif;background:linear-gradient(var(--v),var(--c));-webkit-background-clip:text;background-clip:text;color:transparent}
+.player img{border-radius:50%;border:2px solid var(--g)}
+.role{text-transform:uppercase;font-size:.8rem;letter-spacing:.12em}
+.open{border-style:dashed}.slot{width:72px;height:72px;margin:0 auto;border-radius:50%;border:2px dashed var(--c);display:grid;place-items:center;font-size:2rem;color:var(--c)}
+.list li{margin:.3rem 0}.note{text-align:left;margin-top:1.5rem}
+.soon{color:var(--g)!important;font-size:.85rem;text-transform:uppercase;letter-spacing:.12em}
+.socials{display:flex;flex-wrap:wrap;gap:.7rem;justify-content:center;margin-top:1rem}
+.pill{border:1px solid #19d3ff66;border-radius:999px;padding:.6rem 1.1rem}.pill small{color:var(--g);margin-left:.3rem}
+#about>p,#socials>p,#tryouts>p{text-align:center;max-width:700px;margin-left:auto;margin-right:auto}
+footer{text-align:center;padding:0 1rem 2rem;color:var(--m)}footer .meander{margin-bottom:2rem}footer img{border-radius:8px}.small{font-size:.8rem}
+@media(min-width:760px){.menu{display:none}.nav nav{display:flex;position:static;flex-direction:row;border:0;background:none}.nav{padding:.6rem 2rem}}
