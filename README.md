@@ -1,3 +1,5 @@
+<p align="center"><img src="public/assets/zoi-icon.png" alt="ZOI logo" width="180"></p>
+
 # ZOI — zo-EE (ζωή, "life")
 
 **Live site:** https://zoisports.com
