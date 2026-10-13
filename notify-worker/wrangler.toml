@@ -5,4 +5,4 @@ workers_dev = false
 
 [[send_email]]
 name = "EMAIL"
-destination_address = "REDACTED"
+# Destination is set via secret NOTIFY_TO (wrangler secret put NOTIFY_TO); must be a verified Email Routing destination.

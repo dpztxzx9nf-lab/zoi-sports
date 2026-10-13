@@ -1,13 +1,15 @@
 // Internal-only Worker: called by the Pages Function via service binding. No public route.
 import { EmailMessage } from "cloudflare:email";
 const FROM = "tryouts@zoisports.com";
-const TO = "REDACTED";
 const clean = (v, n = 300) => String(v ?? "").replace(/[\r\n]+/g, " ").slice(0, n);
 
 export default {
   async fetch(request, env) {
     if (request.method !== "POST") return new Response("no", { status: 405 });
-    const a = await request.json();
+    const TO = env.NOTIFY_TO;
+    if (!TO) return Response.json({ ok: false, error: "not configured" }, { status: 500 });
+    let a;
+    try { a = await request.json(); } catch { return new Response("bad request", { status: 400 }); }
     const subject = `New ZOI tryout: ${clean(a.epic_name, 40)}`;
     const body = [
       `New tryout application (#${clean(a.id)})`, "",
@@ -29,7 +31,8 @@ export default {
       await env.EMAIL.send(new EmailMessage(FROM, TO, raw));
       return Response.json({ ok: true });
     } catch (e) {
-      return Response.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
+      console.error("send failed", e);
+      return Response.json({ ok: false, error: "send failed" }, { status: 500 });
     }
   },
 };

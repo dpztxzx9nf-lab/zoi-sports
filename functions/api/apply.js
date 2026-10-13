@@ -46,11 +46,14 @@ export async function onRequestPost({ request, env }) {
   ).bind(ip_hash).first();
   if (recent && recent.n >= 3) return json({ ok: false, error: "Too many applications from this network. Try again in an hour." }, 429);
 
-  const res = await env.DB.prepare(
+  let res;
+  try {
+  res = await env.DB.prepare(
     `INSERT INTO applications (epic_name,discord,region,platform,age,role,results_link,clips_link,why,email,ip_hash,user_agent)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
   ).bind(a.epic_name, a.discord, a.region, a.platform, a.age, a.role, a.results_link || null, a.clips_link || null,
          a.why, a.email || null, ip_hash, str(request.headers.get("user-agent"), 200)).run();
+  } catch (e) { console.error("db error", e); return json({ ok: false, error: "Something went wrong. Try again later." }, 500); }
 
   // Best-effort alert to the team; never affects the applicant's response.
   let notified = false;

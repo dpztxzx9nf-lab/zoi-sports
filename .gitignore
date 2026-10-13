@@ -1,3 +1,13 @@
 screenshots/
 .wrangler/
 node_modules/
+.env
+.env.*
+.dev.vars
+.dev.vars.*
+*.sqlite
+*.sqlite3
+*.db
+exports/
+*.sql.bak
+.DS_Store
