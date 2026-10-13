@@ -46,12 +46,25 @@ export async function onRequestPost({ request, env }) {
   ).bind(ip_hash).first();
   if (recent && recent.n >= 3) return json({ ok: false, error: "Too many applications from this network. Try again in an hour." }, 429);
 
-  await env.DB.prepare(
+  const res = await env.DB.prepare(
     `INSERT INTO applications (epic_name,discord,region,platform,age,role,results_link,clips_link,why,email,ip_hash,user_agent)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
   ).bind(a.epic_name, a.discord, a.region, a.platform, a.age, a.role, a.results_link || null, a.clips_link || null,
          a.why, a.email || null, ip_hash, str(request.headers.get("user-agent"), 200)).run();
-  return json({ ok: true });
+
+  // Best-effort alert to the team; never affects the applicant's response.
+  let notified = false;
+  try {
+    if (env.NOTIFY) {
+      const r = await env.NOTIFY.fetch("https://notify.internal/", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: res?.meta?.last_row_id, ...a }),
+      });
+      notified = r.ok;
+      if (!r.ok) console.error("notify failed", r.status, await r.text());
+    }
+  } catch (e) { console.error("notify error", e); }
+  return json({ ok: true, notified });
 }
 
 export const onRequest = () => json({ ok: false, error: "Method not allowed." }, 405);

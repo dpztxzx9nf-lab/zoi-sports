@@ -6,3 +6,7 @@ compatibility_date = "2026-10-01"
 binding = "DB"
 database_name = "zoi-tryouts"
 database_id = "3c5d2cf7-5335-4468-bcd0-0ebbea094760"
+
+[[services]]
+binding = "NOTIFY"
+service = "zoi-tryout-notify"
