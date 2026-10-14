@@ -86,3 +86,12 @@ html,body{overflow-x:hidden}img{max-width:100%}
 .recruit-note{text-align:center;font-size:.9rem;color:var(--m);margin-top:1rem}.recruit-note a{color:var(--g)}
 @media(max-width:480px){.game-tabs{width:100%}.game-tabs [role=tab]{flex:1;padding:.6rem .5rem;font-size:.72rem;letter-spacing:.08em}}
 .avatar{display:flex;align-items:center;justify-content:center;width:72px;height:72px;margin:0 auto .5rem;border-radius:50%;overflow:hidden;background:radial-gradient(circle at 35% 30%,#fff6d0,var(--g) 55%,#b8954a);color:#0b0b0d;font:400 1.9rem Graduate,Georgia,serif;box-shadow:0 0 0 2px #e6d3a066,0 0 18px #ffd63c22}.avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.card.clickable{cursor:pointer;transition:transform .15s,box-shadow .15s}.card.clickable:hover{transform:translateY(-2px);box-shadow:0 0 24px #ffd63c22}.card.clickable:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+.profile{width:min(420px,calc(100vw - 2rem));max-height:calc(100dvh - 2rem);overflow:auto;background:var(--card);color:var(--t);border:1px solid #e6d3a044;border-top:3px solid var(--g);border-radius:10px;padding:2rem 1.5rem 1.5rem;text-align:center;box-shadow:0 0 60px #ffd63c22}
+.profile::backdrop{background:#000c;backdrop-filter:blur(3px)}
+.pf-close{position:absolute;top:.5rem;right:.5rem;width:44px;height:44px;border:0;background:none;color:var(--g);font-size:1.8rem;line-height:1;cursor:pointer;border-radius:50%}.pf-close:hover{color:#fff}.pf-close:focus-visible{outline:2px solid var(--gold)}
+.pf-avatar{width:96px;height:96px;font-size:2.4rem}
+.pf-facts{display:grid;grid-template-columns:auto 1fr;gap:.35rem 1rem;text-align:left;margin:1.2rem auto;max-width:280px;font-size:.9rem}.pf-facts dt{color:var(--m);text-transform:uppercase;letter-spacing:.1em;font-size:.72rem;align-self:center}.pf-facts dd{margin:0;color:var(--t)}
+.pf-bio{color:var(--m);font-style:italic}
+.pf-socials{list-style:none;display:flex;flex-wrap:wrap;justify-content:center;gap:.5rem;padding:0;margin:.8rem 0 0}.pf-socials a{display:inline-block;padding:.45rem .9rem;border:1px solid var(--g);border-radius:999px;color:var(--g);text-decoration:none;font-size:.8rem;letter-spacing:.06em}.pf-socials a:hover{background:var(--g);color:#0b0b0d}.pf-socials:empty{display:none}
+.pf-soon{color:var(--g);font-size:.75rem;text-transform:uppercase;letter-spacing:.14em;opacity:.75;margin-top:.8rem}
