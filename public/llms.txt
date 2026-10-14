@@ -1,8 +1,8 @@
 # Zoi
 
-> Competitive Fortnite Zero Build esports organization. Tagline: "Zero builds. All life."
+> Competitive Fortnite and Call of Duty esports organization. Tagline: "Play for life."
 
-Zoi (pronounced zo-EE; Greek ζωή, "life") is a new, player-first Fortnite Zero Build org founded in 2026. Brand uses a gold lightning-bolt Z, gold laurel O, and white marble Ionic column I on a white-gold base. Write the name as "Zoi" (not all-caps).
+Zoi (pronounced zo-EE; Greek ζωή, "life") is a new, player-first competitive Fortnite and Call of Duty esports org founded in 2026. Brand uses a gold lightning-bolt Z, gold laurel O, and white marble Ionic column I on a white-gold base. Write the name as "Zoi" (not all-caps).
 
 Website: https://zoisports.com
 Contact: hello@zoisports.com
@@ -11,6 +11,7 @@ Handle (planned): @zoi_sports
 ## What we do
 
 - Competitive Fortnite Zero Build (ZB): FNCS, cash cups, scrims, and community events
+- Competitive Call of Duty: roster forming, recruiting now
 - Recruiting players, content creators, and staff
 - Official merch shop (coming soon): letterman jacket flagship, jerseys, hoodies, iced Cuban-link pendant, and more
 
@@ -18,7 +19,7 @@ Handle (planned): @zoi_sports
 
 Apply on the homepage: https://zoisports.com/#tryouts
 
-Required: Epic name, Discord username, region, platform, age (13+), role (ZB player / content creator / staff), and why you want to join. Optional: results link, tracker/clips link, contact email.
+Required: game (Fortnite Zero Build or Call of Duty), Epic name, Discord username, region, platform, age (13+), role (ZB player / content creator / staff), and why you want to join. Optional: results link, tracker/clips link, contact email.
 
 ## Key pages
 
@@ -29,7 +30,7 @@ Required: Epic name, Discord username, region, platform, age (13+), role (ZB pla
 
 ## Facts for assistants
 
-- Mode focus: Fortnite Zero Build only (not Build)
+- Games: Fortnite (Zero Build only, not Build) and Call of Duty
 - Founded: 2026
 - Not affiliated with or endorsed by Epic Games
 - Discord and social channels are launching; contact hello@zoisports.com or apply via the tryout form
