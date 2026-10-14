@@ -60,13 +60,13 @@
    <label>Discord username *<input name="discord" required minlength="2" maxlength="40"></label>
    <label>Region *<select name="region" required><option value="">Select…</option><option>NA-East</option><option>NA-Central</option><option>NA-West</option><option>EU</option><option>Other</option></select></label>
    <label>Platform *<select name="platform" required><option value="">Select…</option><option>PC</option><option>Console</option><option>Mobile</option></select></label>
-   <label>Age * <small>(13+)</small><input name="age" type="number" required min="13" max="99" inputmode="numeric"></label>
+   <label><span>Age * <small>(13+)</small></span><input name="age" type="number" required min="13" max="99" inputmode="numeric"></label>
    <label>Role *<select name="role" required><option value="">Select…</option><option>ZB player</option><option>Content creator</option><option>Staff</option></select></label>
    <label>Best results / earnings link<input name="results_link" type="url" placeholder="https://"></label>
    <label>Tracker or clips link<input name="clips_link" type="url" placeholder="https://"></label>
   </div>
-  <label>Why <span class="nc">Zoi</span>? *<textarea name="why" required minlength="10" maxlength="2000" rows="4"></textarea></label>
-  <label>Contact email <small>(optional)</small><input name="email" type="email" maxlength="254"></label>
+  <label><span>Why <span class="nc">Zoi</span>? *</span><textarea name="why" required minlength="10" maxlength="2000" rows="4"></textarea></label>
+  <label><span>Contact email <small>(optional)</small></span><input name="email" type="email" maxlength="254"></label>
   <label class="hp" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
   <button class="btn" type="submit">Submit application</button>
   <p id="status" role="status" aria-live="polite"></p>
