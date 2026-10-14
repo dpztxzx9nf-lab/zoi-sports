@@ -1,11 +1,11 @@
-<p align="center"><img src="public/assets/zoi-icon.png" alt="ZOI logo" width="180"></p>
+<p align="center"><img src="public/assets/zoi-icon.png" alt="Zoi logo" width="180"></p>
 
-# ZOI — zo-EE (ζωή, "life")
+# Zoi — zo-EE (ζωή, "life")
 
 **Live site:** https://zoisports.com
 
 
-Website for **ZOI**, a new competitive Fortnite Zero Build esports org founded by ZoiKneczi.
+Website for **Zoi**, a new competitive Fortnite Zero Build esports org founded by ZoiKneczi.
 
 Plain static HTML/CSS/JS — no build step.
 

@@ -35,7 +35,7 @@ export async function onRequestPost({ request, env }) {
   if (!ROLES.includes(a.role)) errors.push("Pick a role.");
   if (a.results_link && !isUrl(a.results_link)) errors.push("Results link must be a valid URL.");
   if (a.clips_link && !isUrl(a.clips_link)) errors.push("Tracker/clips link must be a valid URL.");
-  if (a.why.length < 10) errors.push("Tell us why ZOI (at least 10 characters).");
+  if (a.why.length < 10) errors.push("Tell us why Zoi (at least 10 characters).");
   if (a.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email)) errors.push("Email looks invalid.");
   if (errors.length) return json({ ok: false, errors }, 422);
 

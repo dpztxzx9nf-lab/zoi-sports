@@ -10,17 +10,17 @@ export default {
     if (!TO) return Response.json({ ok: false, error: "not configured" }, { status: 500 });
     let a;
     try { a = await request.json(); } catch { return new Response("bad request", { status: 400 }); }
-    const subject = `New ZOI tryout: ${clean(a.epic_name, 40)}`;
+    const subject = `New Zoi tryout: ${clean(a.epic_name, 40)}`;
     const body = [
       `New tryout application (#${clean(a.id)})`, "",
       `Epic: ${clean(a.epic_name)}`, `Discord: ${clean(a.discord)}`, `Region: ${clean(a.region)}`,
       `Platform: ${clean(a.platform)}`, `Age: ${clean(a.age)}`, `Role: ${clean(a.role)}`,
       `Results: ${clean(a.results_link) || "-"}`, `Clips: ${clean(a.clips_link) || "-"}`,
-      `Email: ${clean(a.email) || "-"}`, "", "Why ZOI:", String(a.why ?? "").slice(0, 2000),
+      `Email: ${clean(a.email) || "-"}`, "", "Why Zoi:", String(a.why ?? "").slice(0, 2000),
     ].join("\r\n");
     const b64 = (s) => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
     const raw = [
-      `From: ZOI Tryouts <${FROM}>`, `To: <${TO}>`,
+      `From: Zoi Tryouts <${FROM}>`, `To: <${TO}>`,
       `Subject: =?UTF-8?B?${b64(subject)}?=`,
       `Date: ${new Date().toUTCString()}`,
       `Message-ID: <${crypto.randomUUID()}@zoisports.com>`,
