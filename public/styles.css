@@ -76,3 +76,12 @@ html,body{overflow-x:hidden}img{max-width:100%}
 .zn{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-weight:700;text-transform:none;letter-spacing:.01em;color:#fff6dc;-webkit-text-fill-color:#fff6dc}
 .zn-h1{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:clamp(2.4rem,9vw,3.6rem);letter-spacing:0}.zn-h1 .pron{font-size:.45em}
 .crest .logo{left:12%;width:76%;top:26%;mix-blend-mode:normal}
+
+.game-tabs{display:flex;justify-content:center;gap:.4rem;margin:1rem auto 1.4rem;padding:.3rem;border:1px solid #e6d3a033;border-radius:999px;width:max-content;max-width:100%;background:#0c0c0e}
+.game-tabs [role=tab]{font:700 .8rem system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--m);background:none;border:0;border-radius:999px;padding:.6rem 1.2rem;cursor:pointer;min-height:44px;transition:color .2s,background .2s}
+.game-tabs [role=tab]:hover{color:var(--g)}
+.game-tabs [role=tab][aria-selected=true]{background:linear-gradient(180deg,#fff,var(--g));color:#0b0b0d;box-shadow:0 0 18px #ffd63c22}
+.game-tabs [role=tab]:focus-visible,.game-panel:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+.card .meta{font-size:.8rem;letter-spacing:.08em;color:var(--g)}
+.recruit-note{text-align:center;font-size:.9rem;color:var(--m);margin-top:1rem}.recruit-note a{color:var(--g)}
+@media(max-width:480px){.game-tabs{width:100%}.game-tabs [role=tab]{flex:1;padding:.6rem .5rem;font-size:.72rem;letter-spacing:.08em}}

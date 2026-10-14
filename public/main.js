@@ -13,3 +13,7 @@ if(f)f.addEventListener('submit',async e=>{
   else{st.className='err';st.textContent=(j.errors||[j.error||'Something went wrong. Try again.']).join(' ')}
  }catch{st.className='err';st.textContent='Network error. Try again.'}
  btn.disabled=false});
+
+(()=>{const tabs=[...document.querySelectorAll('.game-tabs [role=tab]')];if(!tabs.length)return;
+const sel=(t,focus)=>{tabs.forEach(x=>{const on=x===t;x.setAttribute('aria-selected',on);x.tabIndex=on?0:-1;document.getElementById(x.getAttribute('aria-controls')).hidden=!on});if(focus)t.focus()};
+tabs.forEach((t,i)=>{t.addEventListener('click',()=>sel(t));t.addEventListener('keydown',e=>{let j=null;if(e.key==='ArrowRight')j=(i+1)%tabs.length;else if(e.key==='ArrowLeft')j=(i-1+tabs.length)%tabs.length;else if(e.key==='Home')j=0;else if(e.key==='End')j=tabs.length-1;if(j!==null){e.preventDefault();sel(tabs[j],true)}})})})();

@@ -1,5 +1,6 @@
 const REGIONS = ["NA-East","NA-Central","NA-West","EU","Other"];
 const PLATFORMS = ["PC","Console","Mobile"];
+const GAMES = ["Fortnite Zero Build","Call of Duty"];
 const ROLES = ["ZB player","Content creator","Staff"];
 const json = (b, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { "content-type": "application/json" } });
 const str = (v, max) => (typeof v === "string" ? v.trim() : "").slice(0, max);
@@ -24,7 +25,7 @@ export async function onRequestPost({ request, env }) {
     epic_name: str(d.epic_name, 32), discord: str(d.discord, 40), region: str(d.region, 20),
     platform: str(d.platform, 20), age: parseInt(d.age, 10), role: str(d.role, 30),
     results_link: str(d.results_link, 300), clips_link: str(d.clips_link, 300),
-    why: str(d.why, 2000), email: str(d.email, 254),
+    why: str(d.why, 2000), game: str(d.game, 40) || "Fortnite Zero Build", email: str(d.email, 254),
   };
   const errors = [];
   if (a.epic_name.length < 3) errors.push("Epic name is required.");
@@ -32,6 +33,7 @@ export async function onRequestPost({ request, env }) {
   if (!REGIONS.includes(a.region)) errors.push("Pick a region.");
   if (!PLATFORMS.includes(a.platform)) errors.push("Pick a platform.");
   if (!Number.isInteger(a.age) || a.age < 13 || a.age > 99) errors.push("You must be 13 or older to apply.");
+  if (!GAMES.includes(a.game)) errors.push("Pick a game.");
   if (!ROLES.includes(a.role)) errors.push("Pick a role.");
   if (a.results_link && !isUrl(a.results_link)) errors.push("Results link must be a valid URL.");
   if (a.clips_link && !isUrl(a.clips_link)) errors.push("Tracker/clips link must be a valid URL.");
@@ -48,11 +50,22 @@ export async function onRequestPost({ request, env }) {
 
   let res;
   try {
-  res = await env.DB.prepare(
-    `INSERT INTO applications (epic_name,discord,region,platform,age,role,results_link,clips_link,why,email,ip_hash,user_agent)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
-  ).bind(a.epic_name, a.discord, a.region, a.platform, a.age, a.role, a.results_link || null, a.clips_link || null,
-         a.why, a.email || null, ip_hash, str(request.headers.get("user-agent"), 200)).run();
+  const ua = str(request.headers.get("user-agent"), 200);
+  const vals = [a.epic_name, a.discord, a.region, a.platform, a.age, a.role, a.results_link || null, a.clips_link || null, a.why, a.email || null, ip_hash, ua];
+  try {
+    res = await env.DB.prepare(
+      `INSERT INTO applications (epic_name,discord,region,platform,age,role,results_link,clips_link,why,email,ip_hash,user_agent,game)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).bind(...vals, a.game).run();
+  } catch (e) {
+    // Fallback until migrations/0002_add_game.sql is applied (no "game" column yet).
+    if (!/no column named game|has no column/i.test(String(e?.message || e))) throw e;
+    console.warn("game column missing; saving without it");
+    res = await env.DB.prepare(
+      `INSERT INTO applications (epic_name,discord,region,platform,age,role,results_link,clips_link,why,email,ip_hash,user_agent)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).bind(...vals).run();
+  }
   } catch (e) { console.error("db error", e); return json({ ok: false, error: "Something went wrong. Try again later." }, 500); }
 
   // Best-effort alert to the team; never affects the applicant's response.
