@@ -1,0 +1,245 @@
+# QA checks (report-only pilot). Copied from dpztxzx9nf-lab/ThinkCore qa-checks (PR #56),
+# self-contained so it does not depend on that branch. Every job always succeeds;
+# results are recorded in qa-status.json and never block a merge.
+name: QA (report-only)
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write      # only used to update the qa-status branch on default-branch runs
+  pull-requests: read
+concurrency:
+  group: qa-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  QA_WEB: "true"                 # "true" when the project has a website (checked on main; on PRs only if QA_PREVIEW_PR is set)
+  QA_PREVIEW_PR: ""   # {slug} = sanitized PR branch name; empty = no PR preview
+  QA_PREVIEW_PROD: "https://zoisports.com"
+  QA_SLUG_MAX: "28"
+  QA_WAIT_TRIES: "30"               # x10s
+  QA_DENYLIST_EXEMPT: ""  # comma-separated
+  QA_PUBLIC_PATHS: "public"      # public/built output + user-visible source only; empty = denylist n/a
+  QA_NOWEB_REASON: "no PR preview: Pages is not Git-connected for PR branches"
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    outputs:
+      url: ${{ steps.p.outputs.url }}
+      result: ${{ steps.p.outputs.result }}
+      details: ${{ steps.p.outputs.details }}
+    steps:
+      - id: p
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          out() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
+          if [ "$QA_WEB" != "true" ] || { [ "$EVENT" = pull_request ] && [ -z "$QA_PREVIEW_PR" ]; }; then out result "n/a"; out details "n/a – no web preview ($QA_NOWEB_REASON)"; exit 0; fi
+          if [ "$EVENT" = pull_request ]; then
+            s=$(printf '%s' "$HEAD_REF" | tr 'A-Z' 'a-z' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//' | cut -c1-"$QA_SLUG_MAX" | sed 's/-*$//')
+            url="${QA_PREVIEW_PR//\{slug\}/$s}"
+          else url="$QA_PREVIEW_PROD"; fi
+          out url "$url"
+          for i in $(seq 1 "$QA_WAIT_TRIES"); do
+            c=$(curl -s -o /dev/null -w '%{http_code}' "$url/" || true); echo "try $i: $c"
+            if [ "$c" = 200 ]; then out result pass; out details "$url returned 200 after $i tries"; exit 0; fi
+            sleep 10; done
+          out result fail; out details "$url never returned 200 (last HTTP $c)"
+
+  mobile-layout:
+    needs: preview
+    if: needs.preview.outputs.result == 'pass'
+    runs-on: ubuntu-latest
+    outputs:
+      result: ${{ steps.r.outputs.result }}
+      details: ${{ steps.r.outputs.details }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { sparse-checkout: .github/qa }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - id: r
+        env: { URL: "${{ needs.preview.outputs.url }}" }
+        run: |
+          set +e
+          (cd .github/qa && npm i --no-save --no-audit --no-fund playwright@1.48.2 >/dev/null && npx playwright install --with-deps webkit >/dev/null 2>&1) || echo "install failed" > layout.log
+          [ -s layout.log ] || node .github/qa/layout.mjs "$URL" shots >> layout.log 2>&1
+          code=$?; [ -s layout.log ] && grep -q "install failed" layout.log && code=2
+          cat layout.log
+          { echo "### Mobile layout (WebKit 390x844, 390x664)"; echo '```'; cat layout.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          d=$(grep -E 'issues=|^  ' layout.log | head -12 | tr '\n' ';' | tr -s ' ' | cut -c1-600)
+          if [ $code = 0 ]; then r=pass; else r=fail; fi
+          echo "result=$r" >> "$GITHUB_OUTPUT"; echo "details=${d:-exit $code}" >> "$GITHUB_OUTPUT"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: mobile-screenshots, path: shots/, if-no-files-found: ignore }
+
+  links:
+    needs: preview
+    if: needs.preview.outputs.result == 'pass'
+    runs-on: ubuntu-latest
+    outputs:
+      result: ${{ steps.r.outputs.result }}
+      details: ${{ steps.r.outputs.details }}
+    steps:
+      - id: lychee
+        uses: lycheeverse/lychee-action@v2
+        continue-on-error: true
+        with:
+          args: --no-progress --max-redirects 5 --exclude "/api/" "${{ needs.preview.outputs.url }}/"
+          fail: false
+          jobSummary: true
+          output: lychee.md
+      - id: r
+        env: { CODE: "${{ steps.lychee.outputs.exit_code }}" }
+        run: |
+          s=$(grep -iE '(Total|Successful|Errors|Excluded)' lychee.md 2>/dev/null | tr -d '|*' | tr -s ' ' | tr '\n' ';' | cut -c1-300)
+          e=$(grep -oE '\[(ERROR|[45][0-9][0-9])\][^ ]* *<?https?://[^ >]+' lychee.md 2>/dev/null | head -5 | tr '\n' ' ')
+          if [ "$CODE" = 0 ]; then r=pass; else r=fail; fi
+          echo "result=$r" >> "$GITHUB_OUTPUT"; echo "details=exit ${CODE:-?}; $s $e" >> "$GITHUB_OUTPUT"
+
+  denylist:
+    needs: preview
+    if: always()
+    runs-on: ubuntu-latest
+    outputs:
+      result: ${{ steps.r.outputs.result }}
+      details: ${{ steps.r.outputs.details }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: r
+        env:
+          URL: "${{ needs.preview.outputs.url }}"
+          PREVIEW_OK: "${{ needs.preview.outputs.result }}"
+        run: |
+          if [ -z "$QA_PUBLIC_PATHS" ]; then echo "result=n/a" >> "$GITHUB_OUTPUT"; echo "details=n/a – no public output to scan" >> "$GITHUB_OUTPUT"; exit 0; fi
+          terms="Brock Knechtel Kindex Liahona"
+          IFS=',' read -ra ex <<< "$QA_DENYLIST_EXEMPT"
+          pat=""; for t in $terms; do skip=; for e in "${ex[@]}"; do [ "${t,,}" = "$(echo "${e,,}" | xargs)" ] && skip=1; done; [ -z "$skip" ] && pat="${pat:+$pat|}$t"; done
+          echo "Pattern: $pat"
+          hits=$(grep -rniIwE --exclude='*.test.*' --exclude='*.spec.*' --exclude-dir=__tests__ --exclude-dir=tests --exclude-dir=e2e --exclude-dir=fixtures --exclude-dir=node_modules "$pat" $QA_PUBLIC_PATHS 2>/dev/null | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|/?\*|\{/\*|<!--|#)' || true)  # whole words; skip code comments
+          live=""; [ "$PREVIEW_OK" = pass ] && live=$(curl -s "$URL/" | grep -noiwE "$pat" || true)
+          { echo "### Denylist ($pat) in: $QA_PUBLIC_PATHS"; echo '```'; echo "${hits:-files: clean}"; echo "${live:+live: $live}"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          n=$(printf '%s' "$hits" | grep -c . || true); nl=$(printf '%s' "$live" | grep -c . || true)
+          files=$(printf '%s' "$hits" | grep . | cut -d: -f1 | sort | uniq -c | sort -rn | head -8 | awk '{print $2"("$1")"}' | tr '\n' ' ')
+          scope="files"; [ "$PREVIEW_OK" = pass ] && scope="files + live HTML"
+          if [ -z "$hits$live" ]; then r=pass; else r=fail; fi
+          echo "result=$r" >> "$GITHUB_OUTPUT"
+          echo "details=terms=$pat; scope=$scope; file hits=$n ${files}; live hits=$nl" >> "$GITHUB_OUTPUT"
+
+  icons:
+    runs-on: ubuntu-latest
+    outputs:
+      result: ${{ steps.r.outputs.result }}
+      details: ${{ steps.r.outputs.details }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - id: r
+        env:
+          BASE: "${{ github.event.pull_request.base.sha || github.event.before }}"
+        run: |
+          base="$BASE"; git cat-file -e "$base^{commit}" 2>/dev/null || base=HEAD~1
+          bad=$(git diff --diff-filter=M --name-only "$base" HEAD | grep -iE '(favicon|apple-touch-icon|icon)[^/]*\.(png|ico|svg|webp)$' | tr '\n' ' ' || true)
+          { echo "### Icon filename check"; echo "${bad:+Changed in place (rename instead): $bad}${bad:-OK}"; } >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$bad" ]; then echo "result=pass" >> "$GITHUB_OUTPUT"; echo "details=no icon file changed in place" >> "$GITHUB_OUTPUT"
+          else echo "result=fail" >> "$GITHUB_OUTPUT"; echo "details=changed in place (ship a new filename): $bad" >> "$GITHUB_OUTPUT"; fi
+
+  scripts:
+    runs-on: ubuntu-latest
+    outputs:
+      typecheck: ${{ steps.r.outputs.typecheck }}
+      typecheck_details: ${{ steps.r.outputs.typecheck_details }}
+      lint: ${{ steps.r.outputs.lint }}
+      lint_details: ${{ steps.r.outputs.lint_details }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - id: r
+        run: |
+          set +e
+          for s in typecheck lint; do
+            if [ ! -f package.json ] || ! node -e "process.exit(require('./package.json').scripts?.['$s']?0:1)"; then
+              echo "$s=n/a" >> "$GITHUB_OUTPUT"; echo "${s}_details=no '$s' script" >> "$GITHUB_OUTPUT"; continue; fi
+            [ -d node_modules ] || npm ci --no-audit --no-fund >/dev/null 2>&1 || { echo "$s=fail" >> "$GITHUB_OUTPUT"; echo "${s}_details=npm ci failed" >> "$GITHUB_OUTPUT"; continue; }
+            npm run -s "$s" > "$s.log" 2>&1; c=$?; tail -40 "$s.log"
+            last=$(grep -vE '^\s*$' "$s.log" | tail -3 | tr '\n' ' ' | tr -s ' ' | cut -c1-300)
+            if [ $c = 0 ]; then echo "$s=pass" >> "$GITHUB_OUTPUT"; echo "${s}_details=npm run $s ok" >> "$GITHUB_OUTPUT"
+            else echo "$s=fail" >> "$GITHUB_OUTPUT"; echo "${s}_details=npm run $s exit $c: $last" >> "$GITHUB_OUTPUT"; fi
+          done
+
+  report:
+    needs: [preview, mobile-layout, links, denylist, icons, scripts]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build qa-status.json
+        env:
+          N: ${{ toJSON(needs) }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.head_ref || github.ref_name }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          python3 - <<'PY'
+          import json, os, datetime
+          n = json.loads(os.environ["N"])
+          o = lambda j: (n.get(j) or {}).get("outputs") or {}
+          pv = o("preview")
+          def web(job, label):
+              if pv.get("result") == "n/a": return {"name": label, "result": "n/a", "details": "n/a – no web preview"}
+              if pv.get("result") != "pass": return {"name": label, "result": "n/a", "details": "skipped – preview unreachable"}
+              r = o(job); return {"name": label, "result": r.get("result") or "fail", "details": r.get("details") or f"job {n.get(job,{}).get('result')}"}
+          def std(job, label, k="result", kd="details"):
+              r = o(job); return {"name": label, "result": r.get(k) or "fail", "details": r.get(kd) or f"job {n.get(job,{}).get('result')}"}
+          checks = [
+              {"name": "preview", "result": pv.get("result") or "fail", "details": pv.get("details") or "job did not report"},
+              web("mobile-layout", "mobile-layout"),
+              web("links", "links"),
+              std("denylist", "denylist"),
+              std("icons", "icons"),
+              std("scripts", "typecheck", "typecheck", "typecheck_details"),
+              std("scripts", "lint", "lint", "lint_details"),
+          ]
+          applicable = [c for c in checks if c["result"] != "n/a"]
+          s = {
+              "repo": os.environ["REPO"].split("/")[-1],
+              "checks": checks,
+              "passing": sum(c["result"] == "pass" for c in applicable),
+              "total": len(applicable),
+              "run_url": os.environ["RUN_URL"],
+              "commit": os.environ["SHA"],
+              "event": os.environ["EVENT"],
+              "ref": os.environ["REF"],
+              "pr": int(os.environ["PR"]) if os.environ.get("PR") else None,
+              "mode": "report-only",
+              "updated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+          }
+          json.dump(s, open("qa-status.json", "w"), indent=2)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write(f"## QA (report-only): {s['passing']}/{s['total']} passing\n\n| check | result | details |\n|---|---|---|\n")
+              for c in checks: f.write(f"| {c['name']} | {c['result']} | {c['details'].replace('|','/')} |\n")
+          PY
+          cat qa-status.json
+      - uses: actions/upload-artifact@v4
+        with: { name: qa-status, path: qa-status.json }
+      - name: Publish to qa-status branch (default branch only)
+        if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -e
+          f="$PWD/qa-status.json"; d="$RUNNER_TEMP/s"; git init -q "$d"; cd "$d"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          if git fetch -q --depth 1 origin qa-status 2>/dev/null; then git checkout -q -b qa-status FETCH_HEAD; else git checkout -q --orphan qa-status; fi
+          cp "$f" qa-status.json; git add qa-status.json
+          git -c user.name="github-actions[bot]" -c user.email="41898283+github-actions[bot]@users.noreply.github.com" commit -qm "qa-status: ${SHA:0:7} [CI Skip]" || { echo "no change"; exit 0; }
+          git push -q origin qa-status
