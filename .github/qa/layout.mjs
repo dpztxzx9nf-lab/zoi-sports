@@ -17,6 +17,10 @@ for (const [w, h] of [[390, 844], [390, 664]]) for (const p of paths) {
       if (!['fixed', 'sticky'].includes(s.position)) return false; const b = e.getBoundingClientRect();
       return b.top <= 1 && b.height > 0 && b.height < h / 2 && b.width > innerWidth * 0.5; });
     const hdrBottom = Math.max(0, ...hdrs.map(e => e.getBoundingClientRect().bottom));
+    // Bottom-anchored fixed/sticky: bottom within 4px of the viewport bottom, or of the top of another anchored one (stacked bars).
+    const fx = [...document.querySelectorAll('body *')].filter(e => ['fixed', 'sticky'].includes(getComputedStyle(e).position)).map(e => [e, e.getBoundingClientRect()]).filter(([, b]) => b.height > 0);
+    const anchored = new Set(fx.filter(([, b]) => Math.abs(b.bottom - h) <= 4).map(([e]) => e));
+    for (let grew = true; grew;) { grew = false; for (const [e, b] of fx) if (!anchored.has(e) && fx.some(([a, ab]) => anchored.has(a) && Math.abs(b.bottom - ab.top) <= 4)) { anchored.add(e); grew = true; } }
     const bad = []; const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     let n; while ((n = tw.nextNode())) { if (!n.textContent.trim()) continue; const el = n.parentElement;
       if (hdrs.some(x => x.contains(el))) continue; const s = getComputedStyle(el);
@@ -27,8 +31,8 @@ for (const [w, h] of [[390, 844], [390, 664]]) for (const p of paths) {
         if (!why && b.bottom > h - 100) {
           // only flag fixed/sticky, footer/nav/CTA/link/button, or pages that end within the viewport
           let fixed = null; for (let a = el; a && a !== document.body; a = a.parentElement) { const p = getComputedStyle(a).position; if (p === 'fixed' || p === 'sticky') { fixed = a; break; } }
-          // iOS Safari 26 draws bottom-anchored fixed/sticky bars (tab bars, Call/Directions) above its floating bar: exempt them.
-          if (fixed && Math.abs(fixed.getBoundingClientRect().bottom - h) <= 4) continue;
+          // iOS Safari 26 draws bottom-anchored fixed/sticky bars (tab bars, Call/Directions, bars stacked on them) above its floating bar: exempt them.
+          if (fixed && anchored.has(fixed)) continue;
           const ui = el.closest('footer, nav, a, button, [role=button], [role=navigation], [role=contentinfo], .button, .cta, [class*="cta"]');
           const short = document.documentElement.scrollHeight <= h + 1;
           if (fixed || ui || short) why = 'bottom100' + (fixed ? '[fixed]' : ui ? `[${ui.tagName.toLowerCase()}]` : '[pageEnds]');
