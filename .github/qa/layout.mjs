@@ -26,7 +26,9 @@ for (const [w, h] of [[390, 844], [390, 664]]) for (const p of paths) {
         let why = hdrBottom && b.top < hdrBottom ? 'underHeader' : null;
         if (!why && b.bottom > h - 100) {
           // only flag fixed/sticky, footer/nav/CTA/link/button, or pages that end within the viewport
-          let fixed = false; for (let a = el; a && a !== document.body; a = a.parentElement) { const p = getComputedStyle(a).position; if (p === 'fixed' || p === 'sticky') { fixed = true; break; } }
+          let fixed = null; for (let a = el; a && a !== document.body; a = a.parentElement) { const p = getComputedStyle(a).position; if (p === 'fixed' || p === 'sticky') { fixed = a; break; } }
+          // iOS Safari 26 draws bottom-anchored fixed/sticky bars (tab bars, Call/Directions) above its floating bar: exempt them.
+          if (fixed && Math.abs(fixed.getBoundingClientRect().bottom - h) <= 4) continue;
           const ui = el.closest('footer, nav, a, button, [role=button], [role=navigation], [role=contentinfo], .button, .cta, [class*="cta"]');
           const short = document.documentElement.scrollHeight <= h + 1;
           if (fixed || ui || short) why = 'bottom100' + (fixed ? '[fixed]' : ui ? `[${ui.tagName.toLowerCase()}]` : '[pageEnds]');
