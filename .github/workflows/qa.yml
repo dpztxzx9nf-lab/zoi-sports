@@ -4,8 +4,10 @@
 name: QA (report-only)
 on:
   pull_request:
+    paths-ignore: ['docs/**', '**/*.md']
   push:
     branches: [main]
+    paths-ignore: ['docs/**', '**/*.md']
   workflow_dispatch:
 permissions:
   contents: write      # only used to update the qa-status branch on default-branch runs
@@ -26,6 +28,7 @@ env:
 jobs:
   preview:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     outputs:
       url: ${{ steps.p.outputs.url }}
       result: ${{ steps.p.outputs.result }}
@@ -53,6 +56,7 @@ jobs:
     needs: preview
     if: needs.preview.outputs.result == 'pass'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       result: ${{ steps.r.outputs.result }}
       details: ${{ steps.r.outputs.details }}
@@ -81,6 +85,7 @@ jobs:
     needs: preview
     if: needs.preview.outputs.result == 'pass'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       result: ${{ steps.r.outputs.result }}
       details: ${{ steps.r.outputs.details }}
@@ -105,6 +110,7 @@ jobs:
     needs: preview
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       result: ${{ steps.r.outputs.result }}
       details: ${{ steps.r.outputs.details }}
@@ -132,6 +138,7 @@ jobs:
 
   icons:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       result: ${{ steps.r.outputs.result }}
       details: ${{ steps.r.outputs.details }}
@@ -150,6 +157,7 @@ jobs:
 
   scripts:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       typecheck: ${{ steps.r.outputs.typecheck }}
       typecheck_details: ${{ steps.r.outputs.typecheck_details }}
@@ -176,6 +184,7 @@ jobs:
     needs: [preview, mobile-layout, links, denylist, icons, scripts]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Build qa-status.json
         env:
