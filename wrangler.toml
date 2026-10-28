@@ -10,3 +10,16 @@ database_id = "3c5d2cf7-5335-4468-bcd0-0ebbea094760"
 [[services]]
 binding = "NOTIFY"
 service = "zoi-tryout-notify"
+
+# The lab signs people in through Cloudflare Access. Wrangler pushes these on deploy,
+# so they have to live here: a plain-text var set only in the dashboard gets cleared
+# back to nothing the next time this file is deployed.
+[vars]
+LAB_ACCESS_TEAM = "seniortechvisits.cloudflareaccess.com"
+LAB_ACCESS_AUD = "776b7c622ec9bc429b9c37747ed7457ce834b789e390c9c35d9ecd1058453ca7"
+LAB_ALLOWED_EMAILS = "kneczi@thinkcore.io,brock@thinkcore.io"
+
+[env.preview.vars]
+LAB_ACCESS_TEAM = "seniortechvisits.cloudflareaccess.com"
+LAB_ACCESS_AUD = "776b7c622ec9bc429b9c37747ed7457ce834b789e390c9c35d9ecd1058453ca7"
+LAB_ALLOWED_EMAILS = "kneczi@thinkcore.io,brock@thinkcore.io"
