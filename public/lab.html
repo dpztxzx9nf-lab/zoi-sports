@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Settings Lab — Zoi</title>
+<meta name="description" content="A private log for testing one Fortnite setting at a time: what you're watching for before you play, and the verdict after.">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#050506">
+<link rel="icon" href="favicon.ico" sizes="any"><link rel="icon" type="image/png" href="favicon-32.png">
+<link rel="stylesheet" href="styles.css?v=23">
+</head>
+<body class="lab-page">
+<header class="lab-header"><a href="/" class="brand"><img class="zw" src="/assets/zoi-wordmark-gold.png?v=10" alt="Zoi" width="600" height="320"></a></header>
+<main class="lab">
+<h1 class="lab-h1">Settings Lab</h1>
+<p class="lab-lede">One change at a time. Say what you're watching for before you play, then log what it did.</p>
+
+<section class="lab-gate" id="gate" hidden>
+ <form class="lab-keyform" id="key-form" novalidate>
+  <label class="lab-sr" for="key-input">Lab key</label>
+  <input type="password" id="key-input" name="key" placeholder="Key" autocomplete="current-password" spellcheck="false" autocapitalize="none" required>
+  <button class="btn" type="submit">Unlock</button>
+ </form>
+ <p class="lab-note" id="key-error" hidden>That key didn't work.</p>
+</section>
+
+<div class="lab-error" id="load-error" hidden>
+ <p id="load-error-text">Couldn't reach the log. It may be the connection rather than the key.</p>
+ <button class="btn ghost" type="button" id="retry">Try again</button>
+</div>
+
+<div id="app" hidden>
+
+<section class="lab-block">
+ <h2 class="lab-h2">Start a test</h2>
+ <form class="lab-form" id="start-form" novalidate>
+  <label class="lab-field" for="f-setting">Setting
+   <select id="f-setting" name="setting"></select>
+  </label>
+  <div class="lab-pair">
+   <label class="lab-field" for="f-from">From
+    <input id="f-from" name="from_value" inputmode="decimal" autocomplete="off" spellcheck="false">
+   </label>
+   <label class="lab-field" for="f-to">To
+    <input id="f-to" name="to_value" inputmode="decimal" autocomplete="off" spellcheck="false">
+   </label>
+  </div>
+  <label class="lab-field" for="f-watch">What you're watching for
+   <textarea id="f-watch" name="watch_for" rows="4"></textarea>
+   <small>Worth writing before you play, not after. One thing you'll be able to see in a fight.</small>
+  </label>
+  <label class="lab-field lab-field-sm" for="f-games">Games planned
+   <input type="number" id="f-games" name="games_planned" inputmode="numeric" min="1" max="50" step="1" value="3">
+  </label>
+  <p class="lab-repeat" id="repeat" hidden></p>
+  <ul class="lab-errors" id="start-errors" hidden></ul>
+  <button class="btn lab-submit" type="submit">Start test</button>
+ </form>
+</section>
+
+<section class="lab-block">
+ <h2 class="lab-h2">Testing now</h2>
+ <div id="testing"></div>
+</section>
+
+<section class="lab-block">
+ <h2 class="lab-h2">History</h2>
+ <div id="history"></div>
+</section>
+
+</div>
+</main>
+<script src="lab.js" defer></script>
+</body>
+</html>
