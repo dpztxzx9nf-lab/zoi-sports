@@ -6,7 +6,7 @@ Zoi (pronounced zo-EE; Greek ζωή, "life") is a new, player-first competitive 
 
 Website: https://zoisports.com
 Contact: hello@zoisports.com
-Handle (planned): @zoi_sports
+Handle: @zoi_sports_gg (Kick: https://kick.com/zoi_sports_gg; X, YouTube, Twitch and TikTok coming soon)
 
 ## What we do
 
@@ -32,5 +32,5 @@ Required: game (Fortnite Zero Build or Call of Duty), Epic name, Discord usernam
 
 - Games: Fortnite (Zero Build only, not Build) and Call of Duty
 - Founded: 2026
-- Not affiliated with or endorsed by Epic Games
+- Not affiliated with or endorsed by Epic Games or Activision
 - Discord and social channels are launching; contact hello@zoisports.com or apply via the tryout form

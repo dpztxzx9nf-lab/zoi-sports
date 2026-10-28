@@ -13,7 +13,7 @@ Plain static HTML/CSS/JS — no build step.
 - Local preview: `python3 -m http.server` then open http://localhost:8000
 - Hosting: Cloudflare Pages (project `zoi-sports`). Build command: none. Output directory: `/`.
 
-Socials (@zoi_sports on X, YouTube, Twitch, TikTok) and contact are marked "coming soon" until claimed.
+Socials use @zoi_sports_gg. Kick is linked; X, YouTube, Twitch and TikTok stay "coming soon" until claimed.
 
 ## Layout
 - `public/` — static site (deployed output)
