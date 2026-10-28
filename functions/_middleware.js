@@ -5,5 +5,13 @@ export async function onRequest({ request, next }) {
     u.hostname = "zoisports.com"; u.protocol = "https:"; u.port = "";
     return Response.redirect(u.toString(), 301);
   }
-  return next();
+  const res = await next();
+  // The settings lab is a private tool: keep it out of every index, on the page
+  // and on the JSON API alike, without a path-scoped rule in _headers.
+  if (u.pathname === "/lab" || u.pathname.startsWith("/lab/") || u.pathname === "/lab.html") {
+    const r2 = new Response(res.body, res);
+    r2.headers.set("x-robots-tag", "noindex, nofollow");
+    return r2;
+  }
+  return res;
 }
