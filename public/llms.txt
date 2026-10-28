@@ -25,8 +25,13 @@ Required: game (Fortnite Zero Build or Call of Duty), Epic name, Discord usernam
 
 - Home / About / Roster / Tryouts / Events / Socials: https://zoisports.com/
 - Shop (preview, coming soon): https://zoisports.com/shop
+- Settings: https://zoisports.com/settings
 - Privacy: https://zoisports.com/privacy
 - Terms: https://zoisports.com/terms
+
+## Settings
+
+Kneczi's Fortnite Zero Build settings, read off his PC on 28 October 2026: controller (Razer Wolverine V3 TE, wired), graphics and audio, split into three tabs. Includes the numbers behind them, a short order of changes to test, and a change log that starts from that baseline.
 
 ## Facts for assistants
 
