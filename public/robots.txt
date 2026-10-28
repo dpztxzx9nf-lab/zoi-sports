@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
+Disallow: /lab
 
 Sitemap: https://zoisports.com/sitemap.xml
