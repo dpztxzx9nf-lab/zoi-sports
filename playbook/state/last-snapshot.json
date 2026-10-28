@@ -1,0 +1,195 @@
+{
+  "takenAt": "2026-10-28 13:02",
+  "display": {
+    "ResolutionSizeY": "1440",
+    "FullscreenMode": "0",
+    "bMotionBlur": "False",
+    "bShowGrass": "False",
+    "bShowFPS": "False",
+    "FortAntiAliasingMethod": "DLSS",
+    "bEnableDLSSFrameGeneration": "False",
+    "DLSSQuality": "2",
+    "PotentiallyUpscaledResolutionQuality": "85.000000",
+    "bUseNanite": "False",
+    "DesiredGlobalIlluminationQuality": "1",
+    "DesiredReflectionQuality": "1",
+    "bRayTracing": "False",
+    "bUseHeadphoneMode": "True",
+    "bDisableMouseAcceleration": "False",
+    "bUseVSync": "False",
+    "bUseDynamicResolution": "False",
+    "ResolutionSizeX": "2560",
+    "LastConfirmedFullscreenMode": "0",
+    "AudioQualityLevel": "0",
+    "FrameRateLimit": "240.000000",
+    "bUseHDRDisplayOutput": "False"
+  },
+  "scalability": {
+    "ResolutionQuality": "100",
+    "ViewDistanceQuality": "1",
+    "AntiAliasingQuality": "0",
+    "ShadowQuality": "0",
+    "GlobalIlluminationQuality": "0",
+    "ReflectionQuality": "0",
+    "PostProcessQuality": "0",
+    "TextureQuality": "0",
+    "EffectsQuality": "0",
+    "FoliageQuality": "0",
+    "ShadingQuality": "1",
+    "LandscapeQuality": "2"
+  },
+  "controller": {
+    "LookHorizontalSpeed": 43,
+    "LookVerticalSpeed": 43,
+    "LookHorizontalSpeedAds": 12,
+    "LookVerticalSpeedAds": 12,
+    "LookHorizontalBoostSpeed": 0,
+    "LookVerticalBoostSpeed": 0,
+    "ScopedSensitivityMultiplier": 1.12,
+    "LookBoostAccelerationTime": 0.0,
+    "LookBoostAccelerationTimeAds": 0.0,
+    "LookEaseTime": 0.0,
+    "GamepadMoveStickDeadZone": 0.06,
+    "GamepadLookStickDeadZone": 0.05,
+    "GamepadLeftTriggerReleaseThreshold": 0.05,
+    "GamepadRightTriggerReleaseThreshold": 0.05,
+    "TargetingSlow": 0.43,
+    "ScopedSlow": 0.43,
+    "BuildingMultiplier": 1.15,
+    "EditingMultiplier": 1.15,
+    "MotionTargetingSlow": 0.4,
+    "MotionScopedSlow": 0.4,
+    "MotionHarvestingToolSlow": 0.4
+  },
+  "sensitivity": {
+    "ScopedSensitivityMultiplier": 1.12,
+    "MouseSensitivity": -1.0,
+    "MouseSensitivityX": 0.02075,
+    "MouseSensitivityY": 0.02075,
+    "UpgradedMouseSensitivityX": 0.02075,
+    "UpgradedMouseSensitivityY": 0.02075,
+    "MouseSensitivityDefaultVersion": 1
+  },
+  "bindings": {
+    "GamepadJump": [
+      "Gamepad_FaceButton_Bottom"
+    ],
+    "CrouchOrRepair": [
+      "Gamepad_RightThumbstick"
+    ],
+    "GamepadSprint": [
+      "Gamepad_LeftThumbstick"
+    ],
+    "Fire": [
+      "Gamepad_RightTrigger"
+    ],
+    "Target": [
+      "Gamepad_LeftTrigger"
+    ],
+    "UseOrReload": [
+      "Gamepad_FaceButton_Left"
+    ],
+    "GamepadSelectNextWeapon": [
+      "Gamepad_RightShoulder"
+    ],
+    "GamepadSelectPreviousWeapon": [
+      "Gamepad_LeftShoulder"
+    ],
+    "GamepadToggleHarvestWeaponOrAltInteract": [
+      "Gamepad_FaceButton_Top"
+    ],
+    "PlaceMapMarkerInWorld": [
+      "Gamepad_DPad_Left"
+    ],
+    "GamepadSwitchModeOrEditBuilding": [
+      "Gamepad_FaceButton_Right"
+    ],
+    "GamepadSprintWhileBuilding": [
+      "Gamepad_LeftThumbstick"
+    ],
+    "ChangeMaterial": [
+      "Gamepad_DPad_Left"
+    ],
+    "GamepadRepairHoldOrRotateBuildingPiece": [
+      "Gamepad_RightThumbstick"
+    ],
+    "GamepadUseOrTrapPickerAndPlace": [
+      "Gamepad_FaceButton_Left"
+    ],
+    "GamepadBuildingSlot1": [
+      "Gamepad_RightTrigger"
+    ],
+    "GamepadBuildingSlot2": [
+      "Gamepad_RightShoulder"
+    ],
+    "GamepadBuildingSlot3": [
+      "Gamepad_LeftTrigger"
+    ],
+    "GamepadBuildingSlot4": [
+      "Gamepad_LeftShoulder"
+    ],
+    "GamepadToggleFullScreenMapWhileBuilding": [
+      "Gamepad_Special_Left"
+    ],
+    "GamepadToggleInventoryWhileBuilding": [
+      "Gamepad_DPad_Up"
+    ],
+    "GamepadEmotePickerOrReplayLastEmoteHoldWhileBuilding": [
+      "Gamepad_DPad_Down"
+    ],
+    "EditSelect": [
+      "Gamepad_RightTrigger"
+    ],
+    "CompleteBuildingEditInteraction": [
+      "Gamepad_FaceButton_Right"
+    ],
+    "BuildingEditReset": [
+      "Gamepad_RightThumbstick"
+    ],
+    "GamepadSprintWhileEditing": [
+      "Gamepad_LeftThumbstick"
+    ],
+    "GamepadToggleFullScreenMapWhileEditing": [
+      "Gamepad_Special_Left"
+    ],
+    "GamepadToggleInventoryWhileEditing": [
+      "Gamepad_DPad_Up"
+    ],
+    "GamepadEmotePickerOrReplayLastEmoteHoldWhileEditing": [
+      "Gamepad_DPad_Down"
+    ],
+    "GamepadEmotePickerOrReplayLastEmoteHold": [
+      "Gamepad_DPad_Down"
+    ],
+    "GamepadToggleFullScreenMap": [
+      "Gamepad_Special_Left"
+    ],
+    "GamepadToggleInventory": [
+      "Gamepad_DPad_Up"
+    ],
+    "MapZoomIn_Gamepad": [
+      "Gamepad_RightTrigger"
+    ],
+    "MapZoomOut_Gamepad": [
+      "Gamepad_LeftTrigger"
+    ],
+    "ToggleMapCursor_Gamepad": [
+      "Virtual_Accept"
+    ],
+    "Trait.HighTower.Power.Type.Secondary": [
+      "Gamepad_RightShoulder"
+    ],
+    "Trait.HighTower.Power.Type.Utility": [
+      "Gamepad_LeftShoulder"
+    ],
+    "GamepadSimpleBuildSlot1": [
+      "Gamepad_LeftTrigger"
+    ],
+    "GamepadSimpleBuildSlot2": [
+      "Gamepad_RightTrigger"
+    ],
+    "GamepadChangeMaterialSimpleBuild": [
+      "Gamepad_DPad_Left"
+    ]
+  }
+}
