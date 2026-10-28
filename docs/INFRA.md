@@ -19,8 +19,8 @@ Source: `notify-worker/` (`index.js`, `wrangler.toml`).
 - **Routes:** none. No zone routes, no cron schedules, and `workers_dev = false` (workers.dev subdomain disabled, confirmed live). It is internal-only.
 - **Bindings (live):**
   - `EMAIL`: `send_email` (Cloudflare Email Routing outbound)
-  - `NOTIFY_TO`: `secret_text`
-- **Secret names:** `NOTIFY_TO` (the destination address; must be a verified Email Routing destination). Set with `wrangler secret put NOTIFY_TO` from `notify-worker/`. Value deliberately not stored in the repo.
+  - `NOTIFY_TO`: `secret_text` = kneczi@thinkcore.io (verified Email Routing destination)
+- **Secret names:** `NOTIFY_TO` (the destination address; a verified Email Routing destination). Set with `wrangler secret put NOTIFY_TO` from `notify-worker/`. Current value: kneczi@thinkcore.io.
 - **Deploy:** `cd notify-worker && wrangler deploy`.
 - **Failure modes:** missing `NOTIFY_TO` returns 500 `not configured`; a send error is logged (`send failed`) and returns 500. The application is already saved in D1 either way.
 
