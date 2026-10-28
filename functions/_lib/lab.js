@@ -98,7 +98,11 @@ export const sameValue = (a, b) => {
    Access terminates sign-in at the edge and forwards a signed JWT in
    Cf-Access-Jwt-Assertion. Preview hostnames are not behind Access, so that
    header cannot be taken on trust: the signature is checked here against the
-   team's published keys, and no claim is read until it verifies. */
+   team's published keys, and no claim is read until it verifies.
+
+   Anyone Access has signed in may use the lab. The token says who someone is,
+   not whether they belong: the identity it carries is the owner id that scopes
+   every row they can read or change. */
 
 const JWT_HEADER = "Cf-Access-Jwt-Assertion";
 const CLOCK_SKEW = 60; // seconds a clock may run ahead before nbf/iat is refused
@@ -161,31 +165,48 @@ function b64urlBytes(part) {
 
 const unauthorized = () => json({ ok: false, error: "Unauthorized." }, 401);
 
-/* Returns a Response to send instead of the handler's, or null to continue. */
-export async function gate(request, env) {
+/* Who a verified token stands for. The owner id is lowercased either way: Access
+   reports an email in whatever case the sign-in used, and the same person has to
+   land on the same rows every time. A service token carries no email, so its
+   common_name stands in. A token with neither is not an identity, so it fails
+   closed rather than writing rows nobody can claim. `name` is display only and is
+   never used for ownership. */
+function identityFrom(claims) {
+  const name = typeof claims.name === "string" ? claims.name : "";
+  const email = typeof claims.email === "string" ? claims.email.trim().toLowerCase() : "";
+  if (email) return { id: email, email, name };
+  const commonName = typeof claims.common_name === "string" ? claims.common_name.trim().toLowerCase() : "";
+  if (commonName) return { id: commonName, email: "", name };
+  return null;
+}
+
+/* Verifies the Access JWT and says who is signed in:
+   { ok: true, id, email, name } or { ok: false, response }, where response is
+   the thing to send instead of the handler's own reply. */
+export async function identity(request, env) {
   const team = str(env && env.LAB_ACCESS_TEAM, 200);
   const auds = listOf(env && env.LAB_ACCESS_AUD);
   if (!team || !auds.length) {
-    return json({ ok: false, error: "Sign-in is not configured." }, 500);
+    return { ok: false, response: json({ ok: false, error: "Sign-in is not configured." }, 500) };
   }
 
   const token = (request.headers.get(JWT_HEADER) || "").trim();
-  if (!token) return unauthorized();
+  if (!token) return { ok: false, response: unauthorized() };
 
   const parts = token.split(".");
-  if (parts.length !== 3) return unauthorized();
+  if (parts.length !== 3) return { ok: false, response: unauthorized() };
 
   const headerBytes = b64urlBytes(parts[0]);
   const payloadBytes = b64urlBytes(parts[1]);
   const signature = b64urlBytes(parts[2]);
-  if (!headerBytes || !payloadBytes || !signature || !signature.length) return unauthorized();
+  if (!headerBytes || !payloadBytes || !signature || !signature.length) return { ok: false, response: unauthorized() };
 
   /* alg goes first: none and the symmetric HS* family are refused before any key
      is imported, so a token cannot talk us into a different kind of check. */
   let header;
-  try { header = JSON.parse(decoder.decode(headerBytes)); } catch { return unauthorized(); }
-  if (!header || typeof header !== "object" || header.alg !== "RS256") return unauthorized();
-  if (typeof header.kid !== "string" || !header.kid) return unauthorized();
+  try { header = JSON.parse(decoder.decode(headerBytes)); } catch { return { ok: false, response: unauthorized() }; }
+  if (!header || typeof header !== "object" || header.alg !== "RS256") return { ok: false, response: unauthorized() };
+  if (typeof header.kid !== "string" || !header.kid) return { ok: false, response: unauthorized() };
 
   let keys = keyCache.get(team);
   let key = keys && keys.get(header.kid);
@@ -197,11 +218,11 @@ export async function gate(request, env) {
       keys = await keysFor(team);
     } catch (e) {
       console.error("access certs unavailable", e);
-      return json({ ok: false, error: "Couldn't check your sign-in just now. Try again in a moment." }, 503);
+      return { ok: false, response: json({ ok: false, error: "Couldn't check your sign-in just now. Try again in a moment." }, 503) };
     }
     key = keys.get(header.kid);
   }
-  if (!key) return unauthorized();
+  if (!key) return { ok: false, response: unauthorized() };
 
   let valid = false;
   try {
@@ -212,43 +233,40 @@ export async function gate(request, env) {
       encoder.encode(parts[0] + "." + parts[1]),
     );
   } catch { valid = false; }
-  if (!valid) return unauthorized();
+  if (!valid) return { ok: false, response: unauthorized() };
 
   /* Past this line the token was signed by Access, so its claims can be read. */
   let claims;
-  try { claims = JSON.parse(decoder.decode(payloadBytes)); } catch { return unauthorized(); }
-  if (!claims || typeof claims !== "object") return unauthorized();
+  try { claims = JSON.parse(decoder.decode(payloadBytes)); } catch { return { ok: false, response: unauthorized() }; }
+  if (!claims || typeof claims !== "object") return { ok: false, response: unauthorized() };
 
   const now = Math.floor(Date.now() / 1000);
   const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
   const exp = num(claims.exp);
-  if (exp === null || exp <= now) return unauthorized();
+  if (exp === null || exp <= now) return { ok: false, response: unauthorized() };
 
   for (const field of ["nbf", "iat"]) {
     const at = num(claims[field]);
-    if (at !== null && at > now + CLOCK_SKEW) return unauthorized();
+    if (at !== null && at > now + CLOCK_SKEW) return { ok: false, response: unauthorized() };
   }
 
-  if (claims.iss !== "https://" + team) return unauthorized();
+  if (claims.iss !== "https://" + team) return { ok: false, response: unauthorized() };
 
   const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
-  if (!audiences.some((a) => typeof a === "string" && auds.includes(a))) return unauthorized();
+  if (!audiences.some((a) => typeof a === "string" && auds.includes(a))) return { ok: false, response: unauthorized() };
 
-  /* A user token carries an email and has to be on the allowlist. A service
-     token carries a common_name and no email, and is allowed. Neither is not. */
-  const email = typeof claims.email === "string" ? claims.email.trim().toLowerCase() : "";
-  const commonName = typeof claims.common_name === "string" ? claims.common_name.trim() : "";
-  if (email) {
-    const allowed = listOf(env && env.LAB_ALLOWED_EMAILS).map((e) => e.toLowerCase());
-    if (!allowed.includes(email)) return unauthorized();
-  } else if (!commonName) {
-    return unauthorized();
-  }
-
-  return null;
+  const who = identityFrom(claims);
+  if (!who) return { ok: false, response: unauthorized() };
+  return { ok: true, ...who };
 }
 
+/* Returns a Response to send instead of the handler's, or null to continue.
+   Thin wrapper so a caller that only needs the go/no-go stays one line. */
+export async function gate(request, env) {
+  const who = await identity(request, env);
+  return who.ok ? null : who.response;
+}
 export async function readBody(request) {
   try {
     const ct = request.headers.get("content-type") || "";
@@ -258,7 +276,9 @@ export async function readBody(request) {
   } catch { return null; }
 }
 
-export const SELECT_TEST = "SELECT id,setting,label,from_value,to_value,watch_for,games_planned,games_played,status,result_note,started_at,decided_at FROM lab_tests";
+/* owner is the signed-in person's id, and every statement that reads or writes a
+   test carries it: a row is only ever visible to the owner it was written with. */
+export const SELECT_TEST = "SELECT id,setting,label,from_value,to_value,watch_for,games_planned,games_played,status,result_note,started_at,decided_at,owner FROM lab_tests";
 
 /* Group rows by setting. Input is expected newest first; the first row seen for a
    setting decides the label, so the most recent label wins. */

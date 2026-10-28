@@ -1,10 +1,10 @@
 // Redirect www (and pages.dev) to the apex domain.
 //
-// The settings lab is a private tool: the page and its API are both behind
-// Cloudflare Access, which signs the person in at the edge. Preview hostnames
-// (abc123.zoi-sports.pages.dev and friends) are not behind Access, so the page
-// needs the same check the API has, and the JWT is verified rather than trusted.
-// See _lib/lab.js for that check.
+// The settings lab is personal rather than private to one person: anyone Access
+// has signed in may use it, and each person's log is scoped to the identity in
+// their token (see _lib/lab.js). Preview hostnames (abc123.zoi-sports.pages.dev
+// and friends) are not behind Access, so the page needs the same check the API
+// has, and the JWT is verified rather than trusted.
 import { gate } from "./_lib/lab.js";
 
 const isLabPath = (pathname) =>
