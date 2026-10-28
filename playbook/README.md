@@ -2,6 +2,8 @@
 
 Kneczi's Fortnite Zero Build settings, sensitivity, aim and strategy — the part of the game that's about *him*, not the machine.
 
+**He plays on a Razer Wolverine V3 TE controller, so [`controller/`](controller/current.md) is the live file.** The mouse sensitivity section stays for the day he switches, and for the sake of not losing what's already recorded.
+
 **This folder is not about hardware.** Frame times, drivers, GPU and display settings, capture tooling, overclocks and Windows tuning belong to Knexrig. If a change only matters because of the PC it runs on, it doesn't go here. If it changes how the aim feels or how the game is played, it does.
 
 ## The rule
@@ -27,7 +29,9 @@ A fourth field is what makes the whole thing worth keeping: **what changed in ai
 
 | File | What's in it |
 |---|---|
-| [`sensitivity/current.md`](sensitivity/current.md) | The numbers running right now, plus the derived figures worth knowing (eDPI, cm/360) |
+| [`controller/current.md`](controller/current.md) | **The live setup.** Look speed, deadzones, binds — everything the Wolverine is set to |
+| [`controller/log.md`](controller/log.md) | Every controller change, dated, with why and the verdict |
+| [`sensitivity/current.md`](sensitivity/current.md) | Mouse numbers, kept for the day he switches. Not in use |
 | [`sensitivity/log.md`](sensitivity/log.md) | Every sensitivity change, dated, with why and the verdict |
 | [`settings/current.md`](settings/current.md) | In-game graphics, display and input settings as they stand |
 | [`settings/log.md`](settings/log.md) | Every in-game settings change, dated, with why and the verdict |

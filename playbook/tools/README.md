@@ -1,68 +1,51 @@
 # Playbook tools
 
-Two small scripts that keep [`sensitivity/current.md`](../sensitivity/current.md) and
-[`settings/current.md`](../settings/current.md) honest without anyone typing numbers.
+Two scripts keep [`controller/current.md`](../controller/current.md) and
+[`settings/current.md`](../settings/current.md) honest without anyone typing a number.
 
-They only ever **read** Fortnite's config. Nothing here writes to the game, changes a setting,
-or touches anything outside `%LOCALAPPDATA%\FortniteGame\Saved\Config`.
+They only **read** Fortnite's config. Nothing here writes to the game, changes a setting,
+or touches a file outside `%LOCALAPPDATA%\FortniteGame\Saved\Config`.
 
-## zoi-snapshot.ps1
-
-Reads Fortnite's settings off the PC and writes them to `C:\Users\Golf\zoi-snapshot.json`.
-
-Run it:
+## The three steps
 
 ```
-powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Users\Golf\zoi-snapshot.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File zoi-snapshot.ps1
+python3 parse.py fortnite-config snapshot.json
+python3 diff.py playbook/state/last-snapshot.json snapshot.json
 ```
 
-Where the numbers come from:
+**1. `zoi-snapshot.ps1`** copies two files into `fortnite-config\` beside the script:
 
-- **Display, graphics, audio** — `GameUserSettings.ini`, plain text, read directly.
-- **Sensitivity, input devices** — `ClientSettings.Sav`, a binary file. The script finds each
-  property by name and reads the float that follows it.
+- `GameUserSettings.ini` — display, graphics, audio. Plain text.
+- `ClientSettings.Sav` — sensitivity, controller, bindings. Binary.
 
-`ClientSettings.Sav` also contains Gamepad sections, mobile keys and legacy fields. Those exist
-on every install regardless of what anyone plays on, which is why the script reports *which input
-profiles are present* rather than guessing which one is in use.
+It's a plain copy on purpose. Parsing happens in Python, where it can be tested, instead of
+in PowerShell, where a byte offset that's off by one silently returns a wrong number.
 
-## diff.py
+**2. `parse.py`** reads both and writes one flat JSON snapshot. It reads
+`ClientSettings.Sav`'s tagged property stream — name, type, a size marker, then a 4-byte
+value — which is more reliable than searching for byte patterns that might appear anywhere
+in a 480 KB file.
 
-Compares two snapshots and prints what actually changed, with readable names.
-
-```
-python3 diff.py OLD.json NEW.json
-```
-
-Prints nothing and exits 0 when the two are identical, so it can be run on a schedule without
-producing noise.
-
-Example output:
-
-```
-3 change(s):
-  Shadows: 0 -> 2   [ShadowQuality]
-  Sensitivity X (current): 0.02075 -> 0.019   [UpgradedMouseSensitivityX]
-  Motion blur: False -> True   [bMotionBlur]
-```
+**3. `diff.py`** compares two snapshots and prints what moved, in plain names. Prints
+nothing and exits 0 when they're identical, so it can run on a schedule without noise.
 
 ## The loop
 
-1. `zoi-snapshot.ps1` runs → fresh JSON.
-2. `diff.py playbook/state/last-snapshot.json NEW.json` → the changes, if any.
-3. Each change becomes a row in the relevant log with a `pending` verdict.
-4. `current.md` is updated to the new values.
-5. The new snapshot replaces `state/last-snapshot.json`.
+1. Snapshot, parse, diff.
+2. Each change becomes a log row with a `pending` verdict.
+3. `current.md` gets the new values.
+4. The reviewed snapshot replaces `state/last-snapshot.json`.
 
-Steps 1–2 are mechanical. Step 3 is where a reason gets attached, and that part is Kneczi's —
-only he knows why he moved a number. Step 5 is what makes the next run meaningful, which is why
-the baseline lives in [`state/`](../state/).
+Steps 1–2 are mechanical and run on a schedule. Step 2's *reason* is the part only Kneczi
+knows, which is why the log has a column for it.
 
 ## What this can't see
 
-- **Mouse DPI and the mouse software profile.** Not in Fortnite's files.
-- **Windows-level mouse acceleration, monitor settings, GPU driver state.** Knexrig's lane.
-- **Which input device he actually plays on.** The file lists profiles, not a choice.
-- **Keybinds.** Stored differently from the numeric settings and not yet extracted.
-
-Everything in that list needs a human once, and then it's known.
+- **Razer Synapse.** Paddle assignments, stick curves, trigger stops, polling rate — the pad
+  holds those itself and Fortnite's files never mention them.
+- **Anything set in the controller.** The save shows what the *game* thinks the bindings are.
+  If the Wolverine remaps A to a paddle in hardware, Fortnite still calls it A.
+- **Keybinds for a keyboard.** Mouse and keyboard bindings live in a different part of the
+  save stream and aren't extracted yet.
+- **PC and hardware.** Frame times, drivers, monitor settings. Knexrig's lane.

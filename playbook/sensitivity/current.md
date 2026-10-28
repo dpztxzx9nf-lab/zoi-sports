@@ -1,6 +1,11 @@
 # Sensitivity — current
 
-The numbers running right now, read straight off the PC by
+> **Not in use.** Kneczi plays on a Razer Wolverine V3 TE controller. The live numbers are
+> in [`controller/current.md`](../controller/current.md). This file is kept because a mouse
+> switch is a real possibility, and because deleting a working baseline to save a file is a
+> bad trade.
+
+The mouse numbers, read straight off the PC by
 [`tools/zoi-snapshot.ps1`](../tools/zoi-snapshot.ps1). No typing, no screenshots.
 
 Last synced: **2026-10-28 12:47** (Fortnite config last written 2026-10-26 12:52)

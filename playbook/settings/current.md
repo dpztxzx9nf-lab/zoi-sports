@@ -70,6 +70,7 @@ and reloads carry further with nothing to muffle them.
 | Field | Value |
 |---|---|
 | Mouse acceleration (game-side) | Not disabled — `bDisableMouseAcceleration = False` |
+| Input device | Controller — Razer Wolverine V3 TE, wired. See [`controller/current.md`](../controller/current.md). |
 | Sprint by default | — |
 | Auto-open doors | — |
 | Toggle or hold to aim | — |
