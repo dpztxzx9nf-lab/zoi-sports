@@ -9,12 +9,12 @@
     {
       "name": "mobile-layout",
       "result": "fail",
-      "details": "/ 390x844 header=51px maxBand=64px issues=2; bottom100[a]: \"Try out\" top=732 bottom=751; bottom100[a]: \"Our name\" top=733 bottom=752;/shop 390x844 header=51px maxBand=41px issues=0;/privacy 390x844 header=51px maxBand=25px issues=0;/terms 390x844 header=51px maxBand=37px issues=0;/ 390x664 header=51px maxBand=44px issues=2; bottom100[a]: \"Try out\" top=654 bottom=673; bottom100[a]: \"Our name\" top=655 bottom=674;/shop 390x664 header=51px maxBand=24px issues=0;/privacy 390x664 header=51px maxBand=25px issues=0;/terms 390x664 header=51px maxBand=37px issues=0;"
+      "details": "exit 2"
     },
     {
       "name": "links",
       "result": "fail",
-      "details": "exit 2;  \ud83d\udd0d Total 26 ; \u2705 Successful 25 ; \ud83d\udc7b Excluded 0 ; \ud83d\udeab Errors 1 ;## Errors per input;### Errors in https://zoisports.com/; [404] <https://zoisports.com/cdn-cgi/l/email-protection#a8c0cdc4c4c7e8d2c7c1dbd8c7dadcdb86cbc7c5 "
+      "details": "exit 2;  \ud83d\udd0d Total 26 ; \u2705 Successful 25 ; \ud83d\udc7b Excluded 0 ; \ud83d\udeab Errors 1 ;## Errors per input;### Errors in https://zoisports.com/; [404] <https://zoisports.com/cdn-cgi/l/email-protection#68000d040407281207011b18071a1c1b460b0705 "
     },
     {
       "name": "denylist",
@@ -39,11 +39,11 @@
   ],
   "passing": 3,
   "total": 5,
-  "run_url": "https://github.com/dpztxzx9nf-lab/zoi-sports/actions/runs/38991733565",
-  "commit": "fc916ea4dbf238e51c2000220d17bc0f501dd0f2",
+  "run_url": "https://github.com/dpztxzx9nf-lab/zoi-sports/actions/runs/40717719321",
+  "commit": "d665dec28254489981427cdf2a95ea6d63e15a08",
   "event": "push",
   "ref": "main",
   "pr": null,
   "mode": "report-only",
-  "updated_at": "2026-10-17T01:40:04Z"
+  "updated_at": "2026-10-28T15:38:02Z"
 }
