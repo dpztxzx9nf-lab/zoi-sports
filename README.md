@@ -22,6 +22,13 @@ Socials use @zoi_sports_gg. Kick is linked; X, YouTube, Twitch and TikTok stay "
 - `schema.sql` — D1 schema (database `zoi-tryouts`, binding `DB`)
 - `wrangler.toml` — Pages config + D1 binding
 
+## Logging a match
+`/results` renders `public/results.json`, which `tools/log-match.mjs` writes. Log each match once; re-logging the same `--match` number replaces it, and events are matched on game + name + date.
+```
+node tools/log-match.mjs --game "Fortnite Zero Build" --event "ZB Scrim Block" --date 2026-10-30 --format "Duos, 6 matches" --match 1 --placement 3 --eliminations 4 --field 25 --points 12
+```
+Add `--dry-run` to validate and print the JSON without writing, or `--list` for a text table of everything logged. Bad input exits non-zero and leaves the file untouched.
+
 ## Deploy
 `wrangler pages deploy --branch main`
 
