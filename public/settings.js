@@ -22,7 +22,7 @@ sel(tabs.find(t=>t.getAttribute('aria-selected')==='true')||tabs[0]);
 const out=document.getElementById('fn-desc');
 if(!out)return;
 const def=out.getAttribute('data-default')||out.textContent;
-const rows=[...document.querySelectorAll('.fn-row[data-desc],.fn-bind[data-desc]')];
+const rows=[...document.querySelectorAll('.fn-row[data-desc],.fn-bind[data-desc],.dg-btn[data-desc]')];
 const show=r=>{const d=r.getAttribute('data-desc');out.textContent=d||def};
 const reset=()=>{out.textContent=def};
 rows.forEach(r=>{
