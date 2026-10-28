@@ -56,6 +56,7 @@ const hide = n => { n.hidden = true; };
 /* ---------- state ---------- */
 const state = { tests: [], settings: [] };
 const nodes = {
+  who: $('who'),
   loadError: $('load-error'), loadErrorText: $('load-error-text'), retry: $('retry'),
   app: $('app'), startForm: $('start-form'), setting: $('f-setting'), from: $('f-from'),
   to: $('f-to'), watch: $('f-watch'), games: $('f-games'), repeat: $('repeat'),
@@ -109,6 +110,7 @@ function needSignIn() {
   signInNeeded = true;
   state.tests = [];
   state.settings = [];
+  hide(nodes.who);
   failLoad('Your sign-in expired. Reload the page to sign in again.');
 }
 
@@ -128,11 +130,22 @@ async function load() {
   }
   state.tests = Array.isArray(r.data && r.data.tests) ? r.data.tests : [];
   state.settings = Array.isArray(r.data && r.data.settings) ? r.data.settings : [];
+  showWho(r.data && r.data.me);
   signInNeeded = false;
   hide(nodes.loadError);
   show(nodes.app);
   render();
   return true;
+}
+
+/* Who this log belongs to, straight from the API's read-only copy of the
+   verified token. Purely a label: the server never takes a name from here. */
+function showWho(me) {
+  const seen = me && typeof me === 'object'
+    ? String(me.email || me.name || '').trim()
+    : '';
+  nodes.who.textContent = seen ? 'Your log \u2014 signed in as ' + seen + '.' : '';
+  if (seen) show(nodes.who); else hide(nodes.who);
 }
 
 /* ---------- catalog ---------- */

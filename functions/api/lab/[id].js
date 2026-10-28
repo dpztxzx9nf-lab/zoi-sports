@@ -1,4 +1,4 @@
-import { STATUSES, SELECT_TEST, gate, json, readBody, str } from "../../_lib/lab.js";
+import { STATUSES, SELECT_TEST, identity, json, readBody, str } from "../../_lib/lab.js";
 
 const NOTE_MAX = 600;
 
@@ -7,12 +7,16 @@ const idFrom = params => {
   return Number.isInteger(n) && n > 0 ? n : null;
 };
 
+/* Someone else's row answers exactly like a row that does not exist: 404, same
+   body. Saying "not yours" would confirm the id is real. */
+const notFound = () => json({ ok: false, error: "No test with that id." }, 404);
+
 export async function onRequest({ request, env, params }) {
-  const blocked = await gate(request, env);
-  if (blocked) return blocked;
+  const who = await identity(request, env);
+  if (!who.ok) return who.response;
 
   const id = idFrom(params);
-  if (id === null) return json({ ok: false, error: "Not found." }, 404);
+  if (id === null) return notFound();
 
   if (request.method === "PATCH") {
     const body = await readBody(request);
@@ -20,12 +24,12 @@ export async function onRequest({ request, env, params }) {
 
     let current;
     try {
-      current = await env.DB.prepare(`${SELECT_TEST} WHERE id = ?`).bind(id).first();
+      current = await env.DB.prepare(`${SELECT_TEST} WHERE id = ? AND owner = ?`).bind(id, who.id).first();
     } catch (e) {
       console.error("lab read failed", e);
       return json({ ok: false, error: "Couldn't read that test." }, 500);
     }
-    if (!current) return json({ ok: false, error: "No test with that id." }, 404);
+    if (!current || current.owner !== who.id) return notFound();
 
     const errors = [];
     const sets = [];
@@ -64,8 +68,11 @@ export async function onRequest({ request, env, params }) {
     if (!sets.length) return json({ ok: false, errors: ["Nothing to change."] }, 422);
 
     try {
-      await env.DB.prepare(`UPDATE lab_tests SET ${sets.join(", ")} WHERE id = ?`).bind(...binds, id).run();
-      const test = await env.DB.prepare(`${SELECT_TEST} WHERE id = ?`).bind(id).first();
+      const res = await env.DB.prepare(
+        `UPDATE lab_tests SET ${sets.join(", ")} WHERE id = ? AND owner = ?`
+      ).bind(...binds, id, who.id).run();
+      if (!(res?.meta?.changes ?? 0)) return notFound();
+      const test = await env.DB.prepare(`${SELECT_TEST} WHERE id = ? AND owner = ?`).bind(id, who.id).first();
       return json({ ok: true, test });
     } catch (e) {
       console.error("lab update failed", e);
@@ -75,9 +82,9 @@ export async function onRequest({ request, env, params }) {
 
   if (request.method === "DELETE") {
     try {
-      const res = await env.DB.prepare("DELETE FROM lab_tests WHERE id = ?").bind(id).run();
+      const res = await env.DB.prepare("DELETE FROM lab_tests WHERE id = ? AND owner = ?").bind(id, who.id).run();
       const changed = res?.meta?.changes ?? 0;
-      if (!changed) return json({ ok: false, error: "No test with that id." }, 404);
+      if (!changed) return notFound();
       return json({ ok: true });
     } catch (e) {
       console.error("lab delete failed", e);

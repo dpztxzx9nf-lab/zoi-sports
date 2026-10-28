@@ -1,4 +1,4 @@
-import { CATALOG, SELECT_TEST, gate, groupBySetting, json, readBody, sameValue, str } from "../../_lib/lab.js";
+import { CATALOG, SELECT_TEST, groupBySetting, identity, json, readBody, sameValue, str } from "../../_lib/lab.js";
 
 const SETTING_MAX = 60;
 const LABEL_MAX = 80;
@@ -12,14 +12,18 @@ const badGameCount = v => {
 };
 
 export async function onRequest({ request, env }) {
-  const blocked = await gate(request, env);
-  if (blocked) return blocked;
+  const who = await identity(request, env);
+  if (!who.ok) return who.response;
 
   if (request.method === "GET") {
     try {
-      const { results } = await env.DB.prepare(`${SELECT_TEST} ORDER BY started_at DESC, id DESC`).all();
+      /* Only the signed-in person's rows. An empty owner never matches, so rows
+         written before the log was per-person stay out of everyone's view. */
+      const { results } = await env.DB.prepare(
+        `${SELECT_TEST} WHERE owner = ? ORDER BY started_at DESC, id DESC`
+      ).bind(who.id).all();
       const tests = results || [];
-      return json({ ok: true, tests, settings: groupBySetting(tests), catalog: CATALOG });
+      return json({ ok: true, me: { email: who.email, name: who.name }, tests, settings: groupBySetting(tests), catalog: CATALOG });
     } catch (e) {
       console.error("lab list failed", e);
       return json({ ok: false, error: "Couldn't read the log." }, 500);
@@ -50,10 +54,12 @@ export async function onRequest({ request, env }) {
     const games = gamesRaw === undefined || gamesRaw === null || gamesRaw === "" ? null : Number(String(gamesRaw).trim());
 
     try {
+      /* The owner comes from the verified token, never from the body: whatever a
+         client sends as owner is ignored. */
       const row = await env.DB.prepare(
-        `INSERT INTO lab_tests (setting,label,from_value,to_value,watch_for,games_planned,status)
-         VALUES (?,?,?,?,?,?,'testing')`
-      ).bind(setting, label, from_value, to_value, watch_for || null, games).run();
+        `INSERT INTO lab_tests (setting,label,from_value,to_value,watch_for,games_planned,status,owner)
+         VALUES (?,?,?,?,?,?,'testing',?)`
+      ).bind(setting, label, from_value, to_value, watch_for || null, games, who.id).run();
       const id = row?.meta?.last_row_id ?? null;
       return json({ ok: true, id }, 201);
     } catch (e) {
