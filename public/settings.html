@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#050506">
 <link rel="icon" href="favicon.ico" sizes="any"><link rel="icon" type="image/png" href="favicon-32.png"><link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=9">
 <link rel="canonical" href="https://zoisports.com/settings">
-<link rel="stylesheet" href="styles.css?v=20">
+<link rel="stylesheet" href="styles.css?v=21">
 </head>
 <body>
 <header class="nav"><a href="/" class="brand"><img class="zw" src="/assets/zoi-wordmark-gold.png?v=10" alt="Zoi" width="600" height="320"></a>
@@ -16,126 +16,127 @@
 <main id="top">
 <section class="shop-hero"><h1 class="page-h1">Settings</h1><p class="tag">Kneczi's live Zero Build setup, read straight off the PC.</p><p class="read-date">Read 28 October 2026</p></section>
 <div class="stripes" aria-hidden="true"></div>
-<section>
-<div class="tabs" role="tablist" aria-label="Settings sections">
- <button type="button" role="tab" id="tab-controller" aria-controls="panel-controller" aria-selected="true">Controller</button>
- <button type="button" role="tab" id="tab-graphics" aria-controls="panel-graphics" aria-selected="false" tabindex="-1">Graphics</button>
+<section class="fn-sec">
+<div class="fn-tabs" role="tablist" aria-label="Fortnite settings tabs">
+ <button type="button" role="tab" id="tab-video" aria-controls="panel-video" aria-selected="true" tabindex="0">Video</button>
  <button type="button" role="tab" id="tab-audio" aria-controls="panel-audio" aria-selected="false" tabindex="-1">Audio</button>
+ <button type="button" role="tab" id="tab-controller" aria-controls="panel-controller" aria-selected="false" tabindex="-1">Controller</button>
+ <button type="button" role="tab" id="tab-controller-mapping" aria-controls="panel-controller-mapping" aria-selected="false" tabindex="-1">Controller Mapping</button>
 </div>
-
-<div class="tab-panel" role="tabpanel" id="panel-controller" aria-labelledby="tab-controller" tabindex="0">
-<h2 class="sub">Look settings</h2>
-<p>Brock plays on a <strong>Razer Wolverine V3 TE, wired</strong>. These are Fortnite's own numbers.</p>
-<table class="tbl stack">
-<thead><tr><th scope="col">Setting</th><th scope="col">Value</th><th scope="col">What it means</th></tr></thead>
-<tbody>
-<tr><td>Hipfire look speed</td><td class="v" data-label="Value">43</td><td class="why">How fast you turn with the stick fully pushed and sights down</td></tr>
-<tr><td>ADS look speed</td><td class="v" data-label="Value">12</td><td class="why">The same while aiming down sights — this is the number that decides most fights</td></tr>
-<tr><td>Scope multiplier</td><td class="v" data-label="Value">1.12</td><td class="why">Applied when scoping; above 1.0 means scoped turns faster than aimed</td></tr>
-<tr><td>Look boost speed</td><td class="v" data-label="Value">0</td><td class="why">No acceleration past the base turn rate</td></tr>
-<tr><td>Look boost ramp</td><td class="v" data-label="Value">0.0</td><td class="why">Time to reach boost speed — moot at zero boost</td></tr>
-<tr><td>Look ease time</td><td class="v" data-label="Value">0.0</td><td class="why">No smoothing on the stick</td></tr>
-<tr><td>Look deadzone</td><td class="v" data-label="Value">0.05</td><td class="why">How far the stick moves before anything registers</td></tr>
-<tr><td>Move deadzone</td><td class="v" data-label="Value">0.06</td><td class="why">The same for walking</td></tr>
-<tr><td>Trigger release</td><td class="v" data-label="Value">0.05</td><td class="why">How far a trigger must come back up to count as released</td></tr>
-</tbody>
-</table>
-
-<h2 class="sub">Turn speed</h2>
-<div class="turnbars" role="img" aria-label="Turn speed comparison. Hipfire 43. Aiming 12. Scoped 13.4.">
- <div class="turnbar"><span class="lbl">Hipfire</span><span class="track"><span class="fill w100"></span></span><span class="val">43</span></div>
- <div class="turnbar"><span class="lbl">Aiming</span><span class="track"><span class="fill w28"></span></span><span class="val">12</span></div>
- <div class="turnbar"><span class="lbl">Scoped</span><span class="track"><span class="fill w31"></span></span><span class="val">13.4</span></div>
+<div class="fn-card">
+<div class="fn-stage">
+<div class="fn-panel" role="tabpanel" id="panel-video" aria-labelledby="tab-video" tabindex="0">
+<h2 class="fn-h">Display</h2>
+<div class="fn-row" tabindex="0" data-desc="Fullscreen gives the game the whole display. Borderless trades that for faster alt-tabbing."><span class="fn-label">Window Mode</span><span class="fn-ctrl"><span class="fn-enum"><span class="fn-eval">Fullscreen</span><span class="fn-chev" aria-hidden="true"></span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="The output pixel grid. 2560 × 1440 on this display."><span class="fn-label">Resolution</span><span class="fn-ctrl"><span class="fn-enum"><span class="fn-eval">2560 × 1440</span><span class="fn-chev" aria-hidden="true"></span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="The cap the game renders toward. 240 here."><span class="fn-label">Frame Rate Limit</span><span class="fn-ctrl"><span class="fn-plain">240</span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Syncs frames to the display refresh. Off keeps input close to the stick."><span class="fn-label">VSync</span><span class="fn-ctrl"><span class="fn-bool">Off</span></span></div>
+<div class="fn-row" tabindex="0" data-desc="High dynamic range output. Off here, so the game stays SDR."><span class="fn-label">HDR</span><span class="fn-ctrl"><span class="fn-bool">Off</span></span></div>
+<h2 class="fn-h">Graphics Quality</h2>
+<div class="fn-row" tabindex="0" data-desc="Edge smoothing method. DLSS renders lower and upscales with the GPU."><span class="fn-label">Anti-Aliasing &amp; Super Resolution</span><span class="fn-ctrl"><span class="fn-enum"><span class="fn-eval">DLSS</span><span class="fn-chev" aria-hidden="true"></span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="The DLSS preset. Quality 2 keeps more detail in the upscale."><span class="fn-label">DLSS Quality</span><span class="fn-ctrl"><span class="fn-enum"><span class="fn-eval">Quality 2</span><span class="fn-chev" aria-hidden="true"></span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Adds generated frames between rendered ones. Off here."><span class="fn-label">DLSS Frame Generation</span><span class="fn-ctrl"><span class="fn-bool">Off</span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Share of native resolution the 3D scene renders at, before upscaling."><span class="fn-label">3D Resolution</span><span class="fn-ctrl"><span class="fn-slider f100"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">100</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="How much upscale work the renderer applies. 85 of 100."><span class="fn-label">Upscaling Quality</span><span class="fn-ctrl"><span class="fn-slider f85"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">85</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="How far objects and detail stay drawn. Low end of the 0 to 4 scale."><span class="fn-label">View Distance</span><span class="fn-ctrl"><span class="fn-slider f25 fn-ticks"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">1</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="The scalability step for anti-aliasing. 0 is the cheapest."><span class="fn-label">Anti-Aliasing</span><span class="fn-ctrl"><span class="fn-slider f0 fn-ticks"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">0</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Shadow quality on the 0 to 4 scale. 0 is the cheapest step."><span class="fn-label">Shadows</span><span class="fn-ctrl"><span class="fn-slider f0 fn-ticks"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">0</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Bounced light. 0 turns it off."><span class="fn-label">Global Illumination</span><span class="fn-ctrl"><span class="fn-slider f0 fn-ticks"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">0</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Screen-space reflections. 0 turns them off."><span class="fn-label">Reflections</span><span class="fn-ctrl"><span class="fn-slider f0 fn-ticks"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">0</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Bloom, depth of field and the rest of the post stack."><span class="fn-label">Post Processing</span><span class="fn-ctrl"><span class="fn-slider f0 fn-ticks"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">0</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Texture resolution step. 0 is the lowest."><span class="fn-label">Textures</span><span class="fn-ctrl"><span class="fn-slider f0 fn-ticks"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">0</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Particle and effect density."><span class="fn-label">Effects</span><span class="fn-ctrl"><span class="fn-slider f0 fn-ticks"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">0</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="How much grass and leaf detail draws."><span class="fn-label">Foliage</span><span class="fn-ctrl"><span class="fn-slider f0 fn-ticks"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">0</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Surface shading quality step."><span class="fn-label">Shading</span><span class="fn-ctrl"><span class="fn-slider f25 fn-ticks"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">1</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Terrain detail step."><span class="fn-label">Landscape</span><span class="fn-ctrl"><span class="fn-slider f50 fn-ticks"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">2</span></span></span></div>
+<p class="fn-foot">Fortnite's scale runs from 0 (Low) to 4 (Epic).</p>
+<h2 class="fn-h">Advanced Graphics</h2>
+<div class="fn-row" tabindex="0" data-desc="Blur on camera movement. Off keeps the image still."><span class="fn-label">Motion Blur</span><span class="fn-ctrl"><span class="fn-bool">Off</span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Grass rendering. Off removes grass from the world."><span class="fn-label">Show Grass</span><span class="fn-ctrl"><span class="fn-bool">Off</span></span></div>
+<div class="fn-row" tabindex="0" data-desc="High-detail geometry system. Off here."><span class="fn-label">Nanite</span><span class="fn-ctrl"><span class="fn-bool">Off</span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Hardware ray-traced lighting. Off here."><span class="fn-label">Ray Tracing</span><span class="fn-ctrl"><span class="fn-bool">Off</span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Lets the renderer drop resolution to hold frame rate. Off keeps it fixed."><span class="fn-label">Dynamic Resolution</span><span class="fn-ctrl"><span class="fn-bool">Off</span></span></div>
+<div class="fn-card-note"><p>Shadows at 0 buys frames and costs the shadow that shows someone coming around a corner. That tradeoff matters more in Zero Build, where cover is buildings and terrain.</p></div>
 </div>
-<p class="small muted">Turn speed in Fortnite's units. Aiming drops the turn rate by about 72%.</p>
-
-<div class="card note"><h3>The scope multiplier, deliberate</h3><p>At 1.12 the scope turns a little faster than the same value would unscoped. This is set on purpose, not a leftover default, so treat it as part of the aim you've built rather than something to correct.</p></div>
-
-<h2 class="sub">Binds</h2>
-<table class="tbl stack">
-<thead><tr><th scope="col">Action</th><th scope="col">Button</th></tr></thead>
-<tbody>
-<tr><td>Jump</td><td class="v">A</td></tr>
-<tr><td>Crouch</td><td class="v">Right stick click</td></tr>
-<tr><td>Sprint</td><td class="v">Left stick click</td></tr>
-<tr><td>Fire</td><td class="v">Right trigger</td></tr>
-<tr><td>Aim</td><td class="v">Left trigger</td></tr>
-<tr><td>Use / reload</td><td class="v">X</td></tr>
-<tr><td>Next weapon</td><td class="v">RB</td></tr>
-<tr><td>Previous weapon</td><td class="v">LB</td></tr>
-<tr><td>Pickaxe</td><td class="v">Y</td></tr>
-<tr><td>Place marker</td><td class="v">D-pad left</td></tr>
-</tbody>
-</table>
-<div class="card note"><p>The Wolverine's extra buttons don't appear in Fortnite's config at all, because the controller remaps in hardware, so whether they're in use isn't visible here.</p><p>In Zero Build, with no building eating buttons, direct weapon-slot selection on those paddles is the clearest thing left on the table.</p></div>
+<div class="fn-panel" role="tabpanel" id="panel-audio" aria-labelledby="tab-audio" tabindex="0" hidden>
+<h2 class="fn-h">Sound</h2>
+<div class="fn-row" tabindex="0" data-desc="Sets the sound quality. Low here, the lighter of the game's two options."><span class="fn-label">Sound Quality</span><span class="fn-ctrl"><span class="fn-enum"><span class="fn-eval">Low</span><span class="fn-chev" aria-hidden="true"></span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Headphone spatial audio, so steps and shots carry direction."><span class="fn-label">3D Headphones</span><span class="fn-ctrl"><span class="fn-bool fn-on">On</span></span></div>
+<div class="fn-card-note"><p>In Zero Build there are no structures to muffle footsteps and reloads, so audio carries further. That makes this the highest-value corner of the settings for hearing people first.</p></div>
 </div>
-
-<div class="tab-panel" role="tabpanel" id="panel-graphics" aria-labelledby="tab-graphics" tabindex="0" hidden>
-<h2 class="sub">Display</h2>
-<table class="tbl stack">
-<thead><tr><th scope="col">Setting</th><th scope="col">Value</th></tr></thead>
-<tbody>
-<tr><td>Resolution</td><td class="v">2560 × 1440</td></tr>
-<tr><td>Display mode</td><td class="v">Fullscreen</td></tr>
-<tr><td>Frame rate cap</td><td class="v">240</td></tr>
-<tr><td>VSync</td><td class="v">Off</td></tr>
-<tr><td>HDR</td><td class="v">Off</td></tr>
-</tbody>
-</table>
-
-<h2 class="sub">Rendering</h2>
-<table class="tbl stack">
-<thead><tr><th scope="col">Setting</th><th scope="col">Value</th></tr></thead>
-<tbody>
-<tr><td>Anti-aliasing</td><td class="v">DLSS (quality 2)</td></tr>
-<tr><td>DLSS frame generation</td><td class="v">Off</td></tr>
-<tr><td>Upscale quality</td><td class="v">85%</td></tr>
-<tr><td>3D resolution</td><td class="v">100%</td></tr>
-<tr><td>Nanite</td><td class="v">Off</td></tr>
-<tr><td>Ray tracing</td><td class="v">Off</td></tr>
-<tr><td>Global illumination</td><td class="v">1</td></tr>
-<tr><td>Reflections</td><td class="v">1</td></tr>
-<tr><td>Motion blur</td><td class="v">Off</td></tr>
-<tr><td>Show grass</td><td class="v">Off</td></tr>
-<tr><td>Dynamic resolution</td><td class="v">Off</td></tr>
-</tbody>
-</table>
-
-<h2 class="sub">Scalability</h2>
-<p>Fortnite's scale runs from 0 (Low) to 4 (Epic).</p>
-<table class="tbl stack">
-<thead><tr><th scope="col">Setting</th><th scope="col">Value</th></tr></thead>
-<tbody>
-<tr><td>View distance</td><td class="v">1</td></tr>
-<tr><td>Anti-aliasing</td><td class="v">0</td></tr>
-<tr><td>Shadows</td><td class="v">0</td></tr>
-<tr><td>Global illumination</td><td class="v">0</td></tr>
-<tr><td>Reflections</td><td class="v">0</td></tr>
-<tr><td>Post processing</td><td class="v">0</td></tr>
-<tr><td>Textures</td><td class="v">0</td></tr>
-<tr><td>Effects</td><td class="v">0</td></tr>
-<tr><td>Foliage</td><td class="v">0</td></tr>
-<tr><td>Shading</td><td class="v">1</td></tr>
-<tr><td>Landscape</td><td class="v">2</td></tr>
-</tbody>
-</table>
-<div class="card note"><p>Shadows at 0 buys frames and costs the shadow that shows someone coming around a corner. That tradeoff matters more in Zero Build, where cover is buildings and terrain.</p></div>
+<div class="fn-panel" role="tabpanel" id="panel-controller" aria-labelledby="tab-controller" tabindex="0" hidden>
+<p class="fn-intro">Brock plays on a Razer Wolverine V3 TE, wired. These are Fortnite's own numbers.</p>
+<h2 class="fn-h">Look Sensitivity</h2>
+<div class="fn-row" tabindex="0" data-desc="Turn speed left and right with sights down, on Fortnite's 1 to 100 scale."><span class="fn-label">Look Horizontal Speed</span><span class="fn-ctrl"><span class="fn-slider f43"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">43</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Up and down turn speed, on the same scale."><span class="fn-label">Look Vertical Speed</span><span class="fn-ctrl"><span class="fn-slider f43"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">43</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Turn speed added once the stick is held at the edge. 0 here."><span class="fn-label">Look Boost Speed</span><span class="fn-ctrl"><span class="fn-slider f0"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">0</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="How long boost takes to build. Nothing to build at 0."><span class="fn-label">Look Boost Ramp</span><span class="fn-ctrl"><span class="fn-slider f0"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">0.0</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Smoothing on stick input. 0 is direct."><span class="fn-label">Look Ease Time</span><span class="fn-ctrl"><span class="fn-slider f0"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">0.0</span></span></span></div>
+<h2 class="fn-h">ADS Look Sensitivity</h2>
+<div class="fn-row" tabindex="0" data-desc="Turn speed left and right while aiming down sights."><span class="fn-label">ADS Look Horizontal Speed</span><span class="fn-ctrl"><span class="fn-slider f12"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">12</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Up and down turn speed while aiming."><span class="fn-label">ADS Look Vertical Speed</span><span class="fn-ctrl"><span class="fn-slider f12"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">12</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Boost added while aiming. 0 here."><span class="fn-label">ADS Boost Speed</span><span class="fn-ctrl"><span class="fn-slider f0"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">0</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Ramp time while aiming. 0.0 here."><span class="fn-label">ADS Boost Ramp</span><span class="fn-ctrl"><span class="fn-slider f0"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">0.0</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Smoothing while aiming. 0.0 is direct."><span class="fn-label">ADS Look Ease Time</span><span class="fn-ctrl"><span class="fn-slider f0"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">0.0</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="Applied when scoped. Above 1.00 turns faster scoped than aimed."><span class="fn-label">Scope Multiplier<span class="fn-note">Above 1.00 turns faster scoped than aimed.</span></span><span class="fn-ctrl"><span class="fn-slider f56 fn-centre"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">1.12</span></span></span></div>
+<p class="fn-foot">1.12 is a deliberate choice, part of the aim built on this setup.</p>
+<h2 class="fn-h">Stick Deadzones</h2>
+<div class="fn-row" tabindex="0" data-desc="How far the move stick travels before input registers."><span class="fn-label">Move Stick Deadzone</span><span class="fn-ctrl"><span class="fn-slider f6"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">0.06</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="The same for the look stick."><span class="fn-label">Look Stick Deadzone</span><span class="fn-ctrl"><span class="fn-slider f5"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">0.05</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="How far the left trigger comes back up before the game counts it released."><span class="fn-label">Left Trigger Release</span><span class="fn-ctrl"><span class="fn-slider f5"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">0.05</span></span></span></div>
+<div class="fn-row" tabindex="0" data-desc="The same for the right trigger."><span class="fn-label">Right Trigger Release</span><span class="fn-ctrl"><span class="fn-slider f5"><span class="fn-track" aria-hidden="true"><span class="fn-fill"></span><span class="fn-thumb"></span></span><span class="fn-num">0.05</span></span></span></div>
 </div>
-
-<div class="tab-panel" role="tabpanel" id="panel-audio" aria-labelledby="tab-audio" tabindex="0" hidden>
-<h2 class="sub">Audio</h2>
-<table class="tbl stack">
-<thead><tr><th scope="col">Setting</th><th scope="col">Value</th></tr></thead>
-<tbody>
-<tr><td>Headphone mode</td><td class="v">On</td></tr>
-<tr><td>Audio quality</td><td class="v">0</td></tr>
-</tbody>
-</table>
-<p>In Zero Build there are no structures to muffle footsteps and reloads, so audio carries further. That makes this the highest-value corner of the settings for hearing people first.</p>
+<div class="fn-panel" role="tabpanel" id="panel-controller-mapping" aria-labelledby="tab-controller-mapping" tabindex="0" hidden>
+<h2 class="fn-h">Controller Binds</h2>
+<ul class="fn-binds">
+<li class="fn-bind" tabindex="0" data-desc="Jump is on A."><span class="fn-act">Jump</span><span class="fn-key">A</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Crouch is on Right Stick."><span class="fn-act">Crouch</span><span class="fn-key">Right Stick</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Sprint is on Left Stick."><span class="fn-act">Sprint</span><span class="fn-key">Left Stick</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Fire is on Right Trigger."><span class="fn-act">Fire</span><span class="fn-key">Right Trigger</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Aim is on Left Trigger."><span class="fn-act">Aim</span><span class="fn-key">Left Trigger</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Use / Reload is on X."><span class="fn-act">Use / Reload</span><span class="fn-key">X</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Next Weapon is on RB."><span class="fn-act">Next Weapon</span><span class="fn-key">RB</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Previous Weapon is on LB."><span class="fn-act">Previous Weapon</span><span class="fn-key">LB</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Pickaxe / Harvest is on Y."><span class="fn-act">Pickaxe / Harvest</span><span class="fn-key">Y</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Place Marker is on D-pad Left."><span class="fn-act">Place Marker</span><span class="fn-key">D-pad Left</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Edit / Switch Mode is on B. Not used in Zero Build."><span class="fn-act">Edit / Switch Mode<span class="fn-tag">Not used in ZB</span></span><span class="fn-key">B</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Crouch / Repair is on Right Stick."><span class="fn-act">Crouch / Repair</span><span class="fn-key">Right Stick</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Emote / Replay is on D-pad Down."><span class="fn-act">Emote / Replay</span><span class="fn-key">D-pad Down</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Inventory is on D-pad Up."><span class="fn-act">Inventory</span><span class="fn-key">D-pad Up</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Full Screen Map is on View."><span class="fn-act">Full Screen Map</span><span class="fn-key">View</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Repair / Rotate (build) is on Right Stick. Not used in Zero Build."><span class="fn-act">Repair / Rotate (build)<span class="fn-tag">Not used in ZB</span></span><span class="fn-key">Right Stick</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Material Change is on D-pad Left. Not used in Zero Build."><span class="fn-act">Material Change<span class="fn-tag">Not used in ZB</span></span><span class="fn-key">D-pad Left</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Build Slot 1 is on Right Trigger. Not used in Zero Build."><span class="fn-act">Build Slot 1<span class="fn-tag">Not used in ZB</span></span><span class="fn-key">Right Trigger</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Build Slot 2 is on RB. Not used in Zero Build."><span class="fn-act">Build Slot 2<span class="fn-tag">Not used in ZB</span></span><span class="fn-key">RB</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Build Slot 3 is on Left Trigger. Not used in Zero Build."><span class="fn-act">Build Slot 3<span class="fn-tag">Not used in ZB</span></span><span class="fn-key">Left Trigger</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Build Slot 4 is on LB. Not used in Zero Build."><span class="fn-act">Build Slot 4<span class="fn-tag">Not used in ZB</span></span><span class="fn-key">LB</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Edit Select is on Right Trigger. Not used in Zero Build."><span class="fn-act">Edit Select<span class="fn-tag">Not used in ZB</span></span><span class="fn-key">Right Trigger</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Complete Edit is on B. Not used in Zero Build."><span class="fn-act">Complete Edit<span class="fn-tag">Not used in ZB</span></span><span class="fn-key">B</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Edit Reset is on Right Stick. Not used in Zero Build."><span class="fn-act">Edit Reset<span class="fn-tag">Not used in ZB</span></span><span class="fn-key">Right Stick</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Simple Build Slot 1 is on Left Trigger. Not used in Zero Build."><span class="fn-act">Simple Build Slot 1<span class="fn-tag">Not used in ZB</span></span><span class="fn-key">Left Trigger</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Simple Build Slot 2 is on Right Trigger. Not used in Zero Build."><span class="fn-act">Simple Build Slot 2<span class="fn-tag">Not used in ZB</span></span><span class="fn-key">Right Trigger</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Map Zoom In is on Right Trigger."><span class="fn-act">Map Zoom In</span><span class="fn-key">Right Trigger</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Map Zoom Out is on Left Trigger."><span class="fn-act">Map Zoom Out</span><span class="fn-key">Left Trigger</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Map Cursor Toggle is on A."><span class="fn-act">Map Cursor Toggle</span><span class="fn-key">A</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Trait Secondary is on RB."><span class="fn-act">Trait Secondary</span><span class="fn-key">RB</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Trait Utility is on LB."><span class="fn-act">Trait Utility</span><span class="fn-key">LB</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Emote Picker is on D-pad Down."><span class="fn-act">Emote Picker</span><span class="fn-key">D-pad Down</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Harvest Tool / Alt Interact is on Y."><span class="fn-act">Harvest Tool / Alt Interact</span><span class="fn-key">Y</span></li>
+<li class="fn-bind" tabindex="0" data-desc="Trap Picker / Place is on X. Not used in Zero Build."><span class="fn-act">Trap Picker / Place<span class="fn-tag">Not used in ZB</span></span><span class="fn-key">X</span></li>
+</ul>
+<div class="fn-card-note"><p>The Wolverine's extra buttons don't appear in Fortnite's config at all, because the controller remaps in hardware, so whether they're in use isn't visible here. In Zero Build, with no building eating buttons, direct weapon-slot selection on those paddles is the clearest thing left on the table.</p></div>
+</div>
+</div>
+<p class="fn-desc" id="fn-desc" aria-live="polite" data-default="Hover or focus any setting to read what it does. This page is a record of the values on Brock's PC.">Hover or focus any setting to read what it does. This page is a record of the values on Brock's PC.</p>
+<div class="fn-actions">
+ <button type="button" class="fn-btn apply" disabled>Apply</button>
+ <button type="button" class="fn-btn reset" disabled>Reset to Defaults</button>
+</div>
+<p class="fn-caption">Read-only. These are the values on Brock's PC, not editable here.</p>
 </div>
 </section>
 <div class="stripes" aria-hidden="true"></div>
-<section><h2>What to test, in order</h2>
+<section class="fn-below"><h2>What to test, in order</h2>
 <div class="legal"><ol class="list">
 <li><strong>Start at the scope multiplier.</strong> 1.12 makes scoped turns slightly quicker than aimed ones. Test a step up or down from it, one value at a time, and judge it over a full session.</li>
 <li><strong>Then try a small move in ADS look speed.</strong> From 12, a few points either way, giving each step a real session before the next.</li>
@@ -144,7 +145,7 @@
 </ol></div>
 </section>
 <div class="stripes" aria-hidden="true"></div>
-<section><h2>Change log</h2>
+<section class="fn-below"><h2>Change log</h2>
 <table class="tbl log">
 <thead><tr><th scope="col">Date</th><th scope="col">Setting</th><th scope="col">Change</th><th scope="col">Why</th><th scope="col">Verdict</th></tr></thead>
 <tbody><tr><td class="empty" colspan="5">Nothing logged yet. The 28 October read is the baseline, not a change.</td></tr></tbody>
