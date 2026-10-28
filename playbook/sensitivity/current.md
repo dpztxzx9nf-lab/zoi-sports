@@ -15,10 +15,16 @@ Last synced: **2026-10-28 12:47** (Fortnite config last written 2026-10-26 12:52
 | Legacy sensitivity | `-1` | `MouseSensitivity` — unset, which is correct. The X/Y pair above is what the game uses. |
 | Settings version | `0` | `MouseSensitivityDefaultVersion` |
 
-Fortnite's own settings screen shows sensitivity as a percentage, so `0.02075` on disk is
-**2.075%** in the menu. The file stores the raw 0–1 value; the menu multiplies by 100. Written
-here as the raw number because that's what the file holds, and it's what a diff compares
-against — no rounding drift.
+Fortnite's settings screen shows sensitivity as a percentage; the file stores the raw decimal
+behind it. The raw number is what's recorded here, because that's exactly what the file holds and
+what a diff compares against — no conversion, no rounding drift, nothing to argue with.
+
+**Worth confirming on screen:** `0.02075` is a small number, and this file also contains an
+unset legacy `MouseSensitivity` of `-1` and a settings version of `0`. Those together suggest
+these values may never have been set deliberately on this install — they could be a default that
+was never touched, or a leftover from a controller or mobile session. Opening Settings and reading
+the sensitivity percentage takes ten seconds and settles it. If the on-screen number doesn't
+correspond to this value, the mapping assumption in here is wrong and this file needs correcting.
 
 X and Y match, which is the usual and the right default. Unmatching them changes diagonal
 feel and makes every log row ambiguous.
@@ -32,7 +38,10 @@ feel and makes every log row ambiguous.
 
 ## Derived — the numbers that actually compare
 
-Needs DPI, so these fill in once it's known. For reference at the current 2.075%:
+Needs DPI, so these fill in once it's known. The figures below assume the in-game percentage is
+twenty times the raw value in the file (the mapping most Fortnite versions use). If the settings
+screen shows something different, this table is wrong and gets corrected — the raw numbers above
+are the ones that are certain.
 
 | DPI | eDPI | cm/360 |
 |---|---|---|
