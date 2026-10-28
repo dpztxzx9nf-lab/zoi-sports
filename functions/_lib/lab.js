@@ -72,7 +72,7 @@ export const CATALOG = [
 ];
 
 const encoder = new TextEncoder();
-const sha256 = async (s) => new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(s)));
+const decoder = new TextDecoder();
 
 export const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -94,21 +94,158 @@ export const sameValue = (a, b) => {
   return Number.isFinite(x) && Number.isFinite(y) && x === y;
 };
 
-/* Constant-time-ish: both sides are hashed to 32 bytes first, so the compare
-   walks the same number of steps and the real lengths are never compared. */
-export async function sameKey(given, expected) {
-  const [a, b] = await Promise.all([sha256(given), sha256(expected)]);
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
-  return diff === 0;
+/* ---------- Cloudflare Access sign-in ----------
+   Access terminates sign-in at the edge and forwards a signed JWT in
+   Cf-Access-Jwt-Assertion. Preview hostnames are not behind Access, so that
+   header cannot be taken on trust: the signature is checked here against the
+   team's published keys, and no claim is read until it verifies. */
+
+const JWT_HEADER = "Cf-Access-Jwt-Assertion";
+const CLOCK_SKEW = 60; // seconds a clock may run ahead before nbf/iat is refused
+
+const listOf = (value) => (typeof value === "string" ? value.split(",") : [])
+  .map((v) => v.trim()).filter(Boolean);
+
+/* Public keys, parsed once at module scope. They rotate rarely, so a kid we have
+   not seen is the only reason to fetch again. The in-flight map means a burst of
+   requests for the same team shares one fetch instead of one each. */
+const keyCache = new Map();    // team -> Map(kid -> CryptoKey)
+const keyFetches = new Map();  // team -> Promise<Map(kid -> CryptoKey>>
+
+async function fetchKeys(team) {
+  const res = await fetch("https://" + team + "/cdn-cgi/access/certs");
+  if (!res.ok) throw new Error("cert fetch failed with status " + res.status);
+  const body = await res.json();
+  const keys = new Map();
+  const list = body && Array.isArray(body.keys) ? body.keys : [];
+  for (const jwk of list) {
+    if (!jwk || typeof jwk !== "object" || jwk.kty !== "RSA") continue;
+    if (typeof jwk.kid !== "string" || !jwk.kid) continue;
+    try {
+      keys.set(jwk.kid, await crypto.subtle.importKey(
+        "jwk",
+        jwk,
+        { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+        false,
+        ["verify"],
+      ));
+    } catch { /* a key that will not import is a key that cannot verify */ }
+  }
+  if (!keys.size) throw new Error("cert fetch returned no usable keys");
+  return keys;
 }
+
+function keysFor(team) {
+  let pending = keyFetches.get(team);
+  if (!pending) {
+    pending = fetchKeys(team)
+      .then((keys) => { keyCache.set(team, keys); return keys; })
+      .finally(() => { keyFetches.delete(team); });
+    keyFetches.set(team, pending);
+  }
+  return pending;
+}
+
+/* base64url to bytes. atob wants standard base64, so translate and pad first.
+   Anything outside the alphabet is a malformed token, not something to guess at. */
+function b64urlBytes(part) {
+  if (typeof part !== "string" || !/^[A-Za-z0-9_-]+$/.test(part)) return null;
+  const padded = part.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (part.length % 4)) % 4);
+  try {
+    const bin = atob(padded);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  } catch { return null; }
+}
+
+const unauthorized = () => json({ ok: false, error: "Unauthorized." }, 401);
 
 /* Returns a Response to send instead of the handler's, or null to continue. */
 export async function gate(request, env) {
-  const expected = typeof env?.LAB_KEY === "string" ? env.LAB_KEY : "";
-  if (!expected) return json({ ok: false, error: "The lab key is not configured." }, 500);
-  const given = request.headers.get("x-lab-key") || "";
-  if (!given || !(await sameKey(given, expected))) return json({ ok: false, error: "Unauthorized." }, 401);
+  const team = str(env && env.LAB_ACCESS_TEAM, 200);
+  const auds = listOf(env && env.LAB_ACCESS_AUD);
+  if (!team || !auds.length) {
+    return json({ ok: false, error: "Sign-in is not configured." }, 500);
+  }
+
+  const token = (request.headers.get(JWT_HEADER) || "").trim();
+  if (!token) return unauthorized();
+
+  const parts = token.split(".");
+  if (parts.length !== 3) return unauthorized();
+
+  const headerBytes = b64urlBytes(parts[0]);
+  const payloadBytes = b64urlBytes(parts[1]);
+  const signature = b64urlBytes(parts[2]);
+  if (!headerBytes || !payloadBytes || !signature || !signature.length) return unauthorized();
+
+  /* alg goes first: none and the symmetric HS* family are refused before any key
+     is imported, so a token cannot talk us into a different kind of check. */
+  let header;
+  try { header = JSON.parse(decoder.decode(headerBytes)); } catch { return unauthorized(); }
+  if (!header || typeof header !== "object" || header.alg !== "RS256") return unauthorized();
+  if (typeof header.kid !== "string" || !header.kid) return unauthorized();
+
+  let keys = keyCache.get(team);
+  let key = keys && keys.get(header.kid);
+  if (!key) {
+    /* An unseen kid is the only reason to go back to the endpoint, and a fetch
+       already in flight is shared rather than repeated, so a burst of requests
+       carrying the same new kid costs one fetch between them. */
+    try {
+      keys = await keysFor(team);
+    } catch (e) {
+      console.error("access certs unavailable", e);
+      return json({ ok: false, error: "Couldn't check your sign-in just now. Try again in a moment." }, 503);
+    }
+    key = keys.get(header.kid);
+  }
+  if (!key) return unauthorized();
+
+  let valid = false;
+  try {
+    valid = await crypto.subtle.verify(
+      { name: "RSASSA-PKCS1-v1_5" },
+      key,
+      signature,
+      encoder.encode(parts[0] + "." + parts[1]),
+    );
+  } catch { valid = false; }
+  if (!valid) return unauthorized();
+
+  /* Past this line the token was signed by Access, so its claims can be read. */
+  let claims;
+  try { claims = JSON.parse(decoder.decode(payloadBytes)); } catch { return unauthorized(); }
+  if (!claims || typeof claims !== "object") return unauthorized();
+
+  const now = Math.floor(Date.now() / 1000);
+  const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+
+  const exp = num(claims.exp);
+  if (exp === null || exp <= now) return unauthorized();
+
+  for (const field of ["nbf", "iat"]) {
+    const at = num(claims[field]);
+    if (at !== null && at > now + CLOCK_SKEW) return unauthorized();
+  }
+
+  if (claims.iss !== "https://" + team) return unauthorized();
+
+  const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
+  if (!audiences.some((a) => typeof a === "string" && auds.includes(a))) return unauthorized();
+
+  /* A user token carries an email and has to be on the allowlist. A service
+     token carries a common_name and no email, and is allowed. Neither is not. */
+  const email = typeof claims.email === "string" ? claims.email.trim().toLowerCase() : "";
+  const commonName = typeof claims.common_name === "string" ? claims.common_name.trim() : "";
+  if (email) {
+    const allowed = listOf(env && env.LAB_ALLOWED_EMAILS).map((e) => e.toLowerCase());
+    if (!allowed.includes(email)) return unauthorized();
+  } else if (!commonName) {
+    return unauthorized();
+  }
+
   return null;
 }
 

@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#050506">
 <link rel="icon" href="favicon.ico" sizes="any"><link rel="icon" type="image/png" href="favicon-32.png">
-<link rel="stylesheet" href="styles.css?v=24">
+<link rel="stylesheet" href="styles.css?v=25">
 </head>
 <body class="lab-page">
 <header class="nav"><a href="/" class="brand"><img class="zw" src="/assets/zoi-wordmark-gold.png?v=10" alt="Zoi" width="600" height="320"></a>
@@ -17,17 +17,8 @@
 <h1 class="lab-h1">Settings Lab</h1>
 <p class="lab-lede">One change at a time. Say what you're watching for before you play, then log what it did.</p>
 
-<section class="lab-gate" id="gate" hidden>
- <form class="lab-keyform" id="key-form" novalidate>
-  <label class="lab-sr" for="key-input">Lab key</label>
-  <input type="password" id="key-input" name="key" placeholder="Key" autocomplete="current-password" spellcheck="false" autocapitalize="none" required>
-  <button class="btn" type="submit">Unlock</button>
- </form>
- <p class="lab-note" id="key-error" hidden>That key didn't work.</p>
-</section>
-
 <div class="lab-error" id="load-error" hidden>
- <p id="load-error-text">Couldn't reach the log. It may be the connection rather than the key.</p>
+ <p id="load-error-text">Couldn't reach the log. It may be the connection.</p>
  <button class="btn ghost" type="button" id="retry">Try again</button>
 </div>
 

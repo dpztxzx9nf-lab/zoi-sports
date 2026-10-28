@@ -1,7 +1,6 @@
 /* Settings Lab: a private log for one aim change at a time.
-   The key lives in localStorage and goes out on x-lab-key with every request. */
+   Sign-in happens at the edge (Cloudflare Access), so this file only reads the log. */
 (() => {
-const KEY_STORE = 'zoi.lab.key';
 
 const CATALOG = [
   { id: 'look_horizontal_speed', label: 'Look Horizontal Speed', value: '42', type: 'int', step: 2, min: 1, max: 100,
@@ -55,9 +54,8 @@ const show = n => { n.hidden = false; };
 const hide = n => { n.hidden = true; };
 
 /* ---------- state ---------- */
-const state = { key: '', tests: [], settings: [] };
+const state = { tests: [], settings: [] };
 const nodes = {
-  gate: $('gate'), keyForm: $('key-form'), keyInput: $('key-input'), keyError: $('key-error'),
   loadError: $('load-error'), loadErrorText: $('load-error-text'), retry: $('retry'),
   app: $('app'), startForm: $('start-form'), setting: $('f-setting'), from: $('f-from'),
   to: $('f-to'), watch: $('f-watch'), games: $('f-games'), repeat: $('repeat'),
@@ -70,7 +68,7 @@ class NetError extends Error {}
 /* ---------- transport ---------- */
 async function api(path, options) {
   const opt = options || {};
-  const headers = { 'x-lab-key': state.key };
+  const headers = {};
   if (opt.body !== undefined) headers['content-type'] = 'application/json';
   let res;
   try {
@@ -95,26 +93,23 @@ function showErrors(list, messages) {
 }
 const clearErrors = list => { list.replaceChildren(); hide(list); };
 
-/* ---------- the gate ---------- */
-function lock(message) {
-  state.key = '';
-  try { localStorage.removeItem(KEY_STORE); } catch { /* storage can be blocked; the prompt still shows */ }
-  state.tests = [];
-  state.settings = [];
-  hide(nodes.app);
-  hide(nodes.loadError);
-  show(nodes.gate);
-  if (message) { nodes.keyError.textContent = message; show(nodes.keyError); }
-  else { nodes.keyError.textContent = ''; hide(nodes.keyError); }
-  nodes.keyInput.value = '';
-}
 
 /* ---------- load ---------- */
+/* A 401 means the Access session is gone, and retrying the fetch would fail the
+   same way, so the retry button reloads the page to go back through sign-in. */
+let signInNeeded = false;
+
 function failLoad(message) {
   nodes.loadErrorText.textContent = message;
   show(nodes.loadError);
   hide(nodes.app);
-  hide(nodes.gate);
+}
+
+function needSignIn() {
+  signInNeeded = true;
+  state.tests = [];
+  state.settings = [];
+  failLoad('Your sign-in expired. Reload the page to sign in again.');
 }
 
 async function load() {
@@ -123,7 +118,7 @@ async function load() {
   try {
     r = await api('/api/lab');
   } catch (e) {
-    if (e instanceof AuthError) { lock("That key didn't work."); return false; }
+    if (e instanceof AuthError) { needSignIn(); return false; }
     failLoad("Couldn't reach the log. Check the connection and try again.");
     return false;
   }
@@ -133,7 +128,7 @@ async function load() {
   }
   state.tests = Array.isArray(r.data && r.data.tests) ? r.data.tests : [];
   state.settings = Array.isArray(r.data && r.data.settings) ? r.data.settings : [];
-  hide(nodes.gate);
+  signInNeeded = false;
   hide(nodes.loadError);
   show(nodes.app);
   render();
@@ -249,7 +244,7 @@ nodes.startForm.addEventListener('submit', async e => {
     applySetting(true);
     nodes.games.value = '3';
   } catch (err) {
-    if (err instanceof AuthError) { lock("That key didn't work."); return; }
+    if (err instanceof AuthError) { needSignIn(); return; }
     showErrors(nodes.startErrors, ["Couldn't reach the log. Nothing was saved. Try again."]);
   } finally {
     btn.disabled = false;
@@ -309,7 +304,7 @@ function verdictPanel(test) {
       if (!r.ok) { showErrors(errs, errorsFrom(r.data, 'Could not save that verdict.')); return; }
       await load();
     } catch (err) {
-      if (err instanceof AuthError) { lock("That key didn't work."); return; }
+      if (err instanceof AuthError) { needSignIn(); return; }
       showErrors(errs, ["Couldn't reach the log. Nothing was saved. Try again."]);
     } finally {
       busy = false;
@@ -332,7 +327,7 @@ function addGameButton(test) {
       if (!r.ok) { showErrors(errs, errorsFrom(r.data, 'Could not add a game.')); return; }
       await load();
     } catch (err) {
-      if (err instanceof AuthError) { lock("That key didn't work."); return; }
+      if (err instanceof AuthError) { needSignIn(); return; }
       showErrors(errs, ["Couldn't reach the log. Nothing was saved."]);
     } finally {
       inc.disabled = false;
@@ -365,7 +360,7 @@ function dropControl(test) {
       if (!r.ok) { showErrors(errs, errorsFrom(r.data, 'Could not drop that test.')); return; }
       await load();
     } catch (err) {
-      if (err instanceof AuthError) { lock("That key didn't work."); return; }
+      if (err instanceof AuthError) { needSignIn(); return; }
       showErrors(errs, ["Couldn't reach the log. Nothing was removed."]);
     } finally {
       yes.disabled = false;
@@ -490,27 +485,14 @@ function render() {
 }
 
 /* ---------- boot ---------- */
-async function submitKey() {
-  const value = nodes.keyInput.value.trim();
-  if (!value) { nodes.keyInput.focus(); return; }
-  const btn = nodes.keyForm.querySelector('button[type=submit]');
-  state.key = value;
-  hide(nodes.keyError);
-  btn.disabled = true;
-  const ok = await load();
-  btn.disabled = false;
-  if (ok) { try { localStorage.setItem(KEY_STORE, value); } catch { /* private mode: it just won't stick */ } }
-}
-
 function boot() {
   fillCatalog();
-  nodes.retry.addEventListener('click', () => { load(); });
-  nodes.keyForm.addEventListener('submit', e => { e.preventDefault(); submitKey(); });
+  nodes.retry.addEventListener('click', () => {
+    if (signInNeeded) { location.reload(); return; }
+    load();
+  });
   applySetting(true);
-
-  let stored = '';
-  try { stored = localStorage.getItem(KEY_STORE) || ''; } catch { stored = ''; }
-  if (stored) { state.key = stored; load(); } else lock('');
+  load();
 }
 
 boot();
