@@ -17,6 +17,7 @@ Socials use @zoi_sports_gg. Kick is linked; X, YouTube, Twitch and TikTok stay "
 
 ## Layout
 - `public/` — static site (deployed output)
+- `playbook/` — [Kneczi's settings, sensitivity and strategy notes](playbook/README.md). In-game and player-side only; hardware and PC tuning live with Knexrig.
 - `functions/api/apply.js` — Pages Function: `POST /api/apply` validates + stores tryout applications (honeypot + 3/hour/IP rate limit)
 - `schema.sql` — D1 schema (database `zoi-tryouts`, binding `DB`)
 - `wrangler.toml` — Pages config + D1 binding
