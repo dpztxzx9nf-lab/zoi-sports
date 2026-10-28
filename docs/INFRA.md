@@ -26,7 +26,7 @@ Source: `notify-worker/` (`index.js`, `wrangler.toml`).
 
 ## 2. Email (zoisports.com)
 
-- **Inbound:** Cloudflare Email Routing. `hello@zoisports.com` forwards to Brock's Gmail hub (the kuziekey account). The destination address is not recorded here.
+- **Inbound:** Cloudflare Email Routing. `hello@zoisports.com` forwards to Brock's Google hub inbox (the ThinkCore Workspace account). The destination address is not recorded here.
 - **Outbound:** the notify Worker sends as `tryouts@zoisports.com` via Email Routing `send_email`.
 
 Public DNS records as they are now:
@@ -38,7 +38,7 @@ Public DNS records as they are now:
 | TXT (DKIM) | cf2024-1._domainkey.zoisports.com | `v=DKIM1; h=sha256; k=rsa; p=...` (Cloudflare-managed public key) |
 | TXT (DMARC) | _dmarc.zoisports.com | `v=DMARC1; p=none; rua=mailto:hello@zoisports.com` |
 
-**DMARC note:** policy is `p=none` (monitor only; spoofed mail is not rejected). The `rua` address means Google (and other receivers) send daily aggregate XML reports to hello@, which then land in the Gmail hub.
+**DMARC note:** policy is `p=none` (monitor only; spoofed mail is not rejected). The `rua` address means Google (and other receivers) send daily aggregate XML reports to hello@, which then land in the same Google hub inbox.
 
 **Recommended next steps (no DNS changed yet):**
 1. Add a Gmail filter to label/skip-inbox the aggregate reports (or point `rua` at a dedicated report mailbox or a DMARC report service) so they don't bury real mail.
