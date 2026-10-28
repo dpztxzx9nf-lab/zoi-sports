@@ -25,9 +25,14 @@ Required: game (Fortnite Zero Build or Call of Duty), Epic name, Discord usernam
 
 - Home / About / Roster / Tryouts / Events / Socials: https://zoisports.com/
 - Shop (preview, coming soon): https://zoisports.com/shop
+- Results: https://zoisports.com/results
 - Settings: https://zoisports.com/settings
 - Privacy: https://zoisports.com/privacy
 - Terms: https://zoisports.com/terms
+
+## Results
+
+Logged scrim and tournament match results, split into Fortnite Zero Build and Call of Duty tabs. Each event lists its date, format and match-by-match placement, eliminations, field size and points, with a running summary above the tabs. Nothing was logged as of 28 October 2026.
 
 ## Settings
 
