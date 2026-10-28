@@ -14,7 +14,7 @@
     {
       "name": "links",
       "result": "fail",
-      "details": "exit 2;  \ud83d\udd0d Total 30 ; \u2705 Successful 28 ; \ud83d\udc7b Excluded 0 ; \ud83d\udeab Errors 2 ;## Errors per input;### Errors in https://zoisports.com/; [404] <https://kick.com/zoi_sports_gg [404] <https://zoisports.com/cdn-cgi/l/email-protection#7018151c1c1f300a1f1903001f0204035e131f1d "
+      "details": "exit 2;  \ud83d\udd0d Total 30 ; \u2705 Successful 28 ; \ud83d\udc7b Excluded 0 ; \ud83d\udeab Errors 2 ;## Errors per input;### Errors in https://zoisports.com/; [404] <https://kick.com/zoi_sports_gg [404] <https://zoisports.com/cdn-cgi/l/email-protection#8ae2efe6e6e5caf0e5e3f9fae5f8fef9a4e9e5e7 "
     },
     {
       "name": "denylist",
@@ -39,11 +39,11 @@
   ],
   "passing": 2,
   "total": 5,
-  "run_url": "https://github.com/dpztxzx9nf-lab/zoi-sports/actions/runs/40787681768",
-  "commit": "e9312f77dfb4544aeaf80a282b637ace880eda0b",
+  "run_url": "https://github.com/dpztxzx9nf-lab/zoi-sports/actions/runs/40788101109",
+  "commit": "c66e6d47c502cfbd74a6d93c9ac7c7d86d9bf76c",
   "event": "push",
   "ref": "main",
   "pr": null,
   "mode": "report-only",
-  "updated_at": "2026-10-28T23:29:32Z"
+  "updated_at": "2026-10-28T23:33:09Z"
 }
