@@ -21,9 +21,9 @@ Last synced: **2026-10-28** (Fortnite last wrote the save file 2026-10-26 12:52)
 **ADS at 12 against hipfire at 43** is the headline. Aiming drops turn rate by about
 72%, so the speed he actually plays at is 12.
 
-**The scope multiplier at 1.12 is the odd one out.** A magnified optic needs less stick
-movement for the same on-screen result, not more, so a multiplier above 1.0 usually means
-it was never adjusted. First thing to test.
+**The scope multiplier sits at 1.12, set on purpose.** Above 1.0 means scoped turns run
+slightly quicker than the same value unscoped. Brock sets his own numbers and knows them, so
+treat every value here as chosen — offer tests, never corrections.
 
 ## Sticks and triggers
 
