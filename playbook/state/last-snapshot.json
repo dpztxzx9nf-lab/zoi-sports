@@ -1,0 +1,56 @@
+{
+    "takenAt":  "2026-10-28 12:47",
+    "iniMtime":  "2026-10-27 13:01",
+    "savMtime":  "2026-10-26 12:52",
+    "settings":  {
+                     "ResolutionSizeY":  "1440",
+                     "FullscreenMode":  "0",
+                     "bMotionBlur":  "False",
+                     "bShowGrass":  "False",
+                     "bShowFPS":  "False",
+                     "FortAntiAliasingMethod":  "DLSS",
+                     "bEnableDLSSFrameGeneration":  "False",
+                     "DLSSQuality":  "2",
+                     "PotentiallyUpscaledResolutionQuality":  "85.000000",
+                     "bUseNanite":  "False",
+                     "DesiredGlobalIlluminationQuality":  "1",
+                     "DesiredReflectionQuality":  "1",
+                     "bRayTracing":  "False",
+                     "bUseHeadphoneMode":  "True",
+                     "bDisableMouseAcceleration":  "False",
+                     "bUseVSync":  "False",
+                     "bUseDynamicResolution":  "False",
+                     "ResolutionSizeX":  "2560",
+                     "LastConfirmedFullscreenMode":  "0",
+                     "AudioQualityLevel":  "0",
+                     "FrameRateLimit":  "240.000000",
+                     "bUseHDRDisplayOutput":  "False"
+                 },
+    "scalability":  {
+                        "ResolutionQuality":  "100",
+                        "ViewDistanceQuality":  "1",
+                        "AntiAliasingQuality":  "0",
+                        "ShadowQuality":  "0",
+                        "GlobalIlluminationQuality":  "0",
+                        "ReflectionQuality":  "0",
+                        "PostProcessQuality":  "0",
+                        "TextureQuality":  "0",
+                        "EffectsQuality":  "0",
+                        "FoliageQuality":  "0",
+                        "ShadingQuality":  "1",
+                        "LandscapeQuality":  "2"
+                    },
+    "sensitivity":  {
+                        "MouseSensitivityX":  0.02075,
+                        "MouseSensitivityY":  0.02075,
+                        "ScopedSensitivityMultiplier":  1.12,
+                        "UpgradedMouseSensitivityX":  0.02075,
+                        "UpgradedMouseSensitivityY":  0.02075,
+                        "MouseSensitivity":  -1,
+                        "MouseSensitivityDefaultVersion":  0
+                    },
+    "inputs":  [
+                   "EHardwareDevicePrimaryType::Gamepad",
+                   "EHardwareDevicePrimaryType::KeyboardAndMouse"
+               ]
+}

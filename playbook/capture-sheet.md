@@ -1,43 +1,35 @@
-# Capture sheet
+# The short list of things only Kneczi can answer
 
-Print this, or copy the block into a note and fill it in at the settings screens. Once it's filled, the values go into [`sensitivity/current.md`](sensitivity/current.md) and [`settings/current.md`](settings/current.md), and this file goes back to being blank.
+Almost everything in this folder now reads itself off the PC — see [`tools/`](tools/). These are
+the leftovers: facts that live outside Fortnite's config files, so they get asked once and then
+they're known forever.
 
-Nothing here is a change, so nothing here gets a log row. This is just the baseline.
+Nothing here is a change, so nothing here gets a log row. This is baseline.
 
 ```
-MOUSE AND SENSITIVITY
+MOUSE
 
-Mouse:                          ________
-DPI:                            ________
-Sensitivity X:                  ________
-Sensitivity Y:                  ________
-Targeting sensitivity (ADS):    ________
-Scope sensitivity:              ________
-
-DISPLAY
-
-Display mode:                   ________
-Resolution:                     ________
-Frame rate cap:                 ________
-VSync:                          ________
-Motion blur:                    ________
-Shadows:                        ________
-View distance:                  ________
+Which mouse, model:      ____________________
+DPI (from its software): ____________________
 
 INPUT
 
-Sprint by default:              ________
-Auto-open doors:                ________
-Keybinds:                       ________
-
-AUDIO
-
-3D headphones:                  ________
-Visualize sound effects:        ________
+Mouse and keyboard, or controller?   ____________________
 ```
 
-## Two things to check while you're in there
+That's it. Everything else — resolution, frame cap, DLSS, every graphics slider, sensitivity,
+scope multiplier, audio — is read directly from the game files.
 
-**Mouse DPI.** Whatever the mouse's software says, not the in-game slider. Without it, eDPI can't be worked out and the sensitivity numbers can't be compared to anything.
+## Why DPI matters more than it looks
 
-**Input.** Mouse and keyboard, or controller? Everything in this folder assumes mouse, and if that's wrong, half of it needs rewriting.
+In-game sensitivity on its own is not a number you can compare to anything. 2.075% at 400 DPI
+and 2.075% at 1600 DPI are the same settings menu text and four times apart in how far the mouse
+travels for a full turn. DPI is the other half, so without it eDPI and cm/360 can't be worked
+out, and every future sensitivity change is a number with no scale behind it.
+
+## Why the input device matters
+
+The save file contains both a `KeyboardAndMouse` and a `Gamepad` profile, because Fortnite
+writes a profile for each input type it has ever seen. That's normal and it doesn't record which
+one gets used. If it's controller, the sensitivity section needs a different shape entirely —
+look speed, ADS multiplier and deadzone instead of DPI and eDPI.

@@ -33,6 +33,25 @@ A fourth field is what makes the whole thing worth keeping: **what changed in ai
 | [`settings/log.md`](settings/log.md) | Every in-game settings change, dated, with why and the verdict |
 | [`aim.md`](aim.md) | Aim notes: routine, warmup, what's actually being worked on |
 | [`strategy.md`](strategy.md) | Zero Build decisions: drop, loadout, rotation, endgame |
+| [`tools/`](tools/) | The scripts that read Fortnite's settings off the PC and diff two snapshots |
+
+## How this stays current without anyone typing
+
+Fortnite stores its settings as files on the PC, which means they can be read instead of copied
+off a menu screen by hand.
+
+1. [`tools/zoi-snapshot.ps1`](tools/zoi-snapshot.ps1) reads the game's config and writes a JSON
+   snapshot. Read-only — it never changes a setting.
+2. [`tools/diff.py`](tools/diff.py) compares that snapshot against
+   [`state/last-snapshot.json`](state/) and prints exactly what moved, in readable names.
+3. Each change becomes a log row with a `pending` verdict, and `current.md` gets updated.
+4. The reviewed snapshot becomes the new baseline.
+
+The first two steps are mechanical and can run on a schedule. The third needs a reason attached,
+and only Kneczi knows why he moved a number — that part stays human.
+
+What the files can't tell anyone: mouse DPI, which mouse, Windows-level mouse acceleration,
+monitor and driver state. Those are asked once and then known.
 
 ## How a change gets logged
 
