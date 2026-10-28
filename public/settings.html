@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Settings — Zoi</title>
+<meta name="description" content="Kneczi's live Fortnite Zero Build settings — controller, graphics and audio — read straight off the PC and kept current.">
+<meta name="theme-color" content="#050506">
+<link rel="icon" href="favicon.ico" sizes="any"><link rel="icon" type="image/png" href="favicon-32.png"><link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=9">
+<link rel="canonical" href="https://zoisports.com/settings">
+<link rel="stylesheet" href="styles.css?v=20">
+</head>
+<body>
+<header class="nav"><a href="/" class="brand"><img class="zw" src="/assets/zoi-wordmark-gold.png?v=10" alt="Zoi" width="600" height="320"></a>
+<button class="menu" aria-label="Menu" aria-expanded="false">☰</button>
+<nav><a href="/#about">About</a><a href="/#roster">Roster</a><a href="/#tryouts">Tryouts</a><a href="/#events">Events</a><a href="/#socials">Socials</a><a href="/settings">Settings</a><a href="/shop">Shop</a></nav></header>
+<main id="top">
+<section class="shop-hero"><h1 class="page-h1">Settings</h1><p class="tag">Kneczi's live Zero Build setup, read straight off the PC.</p><p class="read-date">Read 28 October 2026</p></section>
+<div class="stripes" aria-hidden="true"></div>
+<section>
+<div class="tabs" role="tablist" aria-label="Settings sections">
+ <button type="button" role="tab" id="tab-controller" aria-controls="panel-controller" aria-selected="true">Controller</button>
+ <button type="button" role="tab" id="tab-graphics" aria-controls="panel-graphics" aria-selected="false" tabindex="-1">Graphics</button>
+ <button type="button" role="tab" id="tab-audio" aria-controls="panel-audio" aria-selected="false" tabindex="-1">Audio</button>
+</div>
+
+<div class="tab-panel" role="tabpanel" id="panel-controller" aria-labelledby="tab-controller" tabindex="0">
+<h2 class="sub">Look settings</h2>
+<p>Brock plays on a <strong>Razer Wolverine V3 TE, wired</strong>. These are Fortnite's own numbers.</p>
+<table class="tbl stack">
+<thead><tr><th scope="col">Setting</th><th scope="col">Value</th><th scope="col">What it means</th></tr></thead>
+<tbody>
+<tr><td>Hipfire look speed</td><td class="v" data-label="Value">43</td><td class="why">How fast you turn with the stick fully pushed and sights down</td></tr>
+<tr><td>ADS look speed</td><td class="v" data-label="Value">12</td><td class="why">The same while aiming down sights — this is the number that decides most fights</td></tr>
+<tr><td>Scope multiplier</td><td class="v" data-label="Value">1.12</td><td class="why">Applied when scoping; above 1.0 means scoped turns faster than aimed</td></tr>
+<tr><td>Look boost speed</td><td class="v" data-label="Value">0</td><td class="why">No acceleration past the base turn rate</td></tr>
+<tr><td>Look boost ramp</td><td class="v" data-label="Value">0.0</td><td class="why">Time to reach boost speed — moot at zero boost</td></tr>
+<tr><td>Look ease time</td><td class="v" data-label="Value">0.0</td><td class="why">No smoothing on the stick</td></tr>
+<tr><td>Look deadzone</td><td class="v" data-label="Value">0.05</td><td class="why">How far the stick moves before anything registers</td></tr>
+<tr><td>Move deadzone</td><td class="v" data-label="Value">0.06</td><td class="why">The same for walking</td></tr>
+<tr><td>Trigger release</td><td class="v" data-label="Value">0.05</td><td class="why">How far a trigger must come back up to count as released</td></tr>
+</tbody>
+</table>
+
+<h2 class="sub">Turn speed</h2>
+<div class="turnbars" role="img" aria-label="Turn speed comparison. Hipfire 43. Aiming 12. Scoped 13.4.">
+ <div class="turnbar"><span class="lbl">Hipfire</span><span class="track"><span class="fill w100"></span></span><span class="val">43</span></div>
+ <div class="turnbar"><span class="lbl">Aiming</span><span class="track"><span class="fill w28"></span></span><span class="val">12</span></div>
+ <div class="turnbar"><span class="lbl">Scoped</span><span class="track"><span class="fill w31"></span></span><span class="val">13.4</span></div>
+</div>
+<p class="small muted">Turn speed in Fortnite's units. Aiming drops the turn rate by about 72%.</p>
+
+<div class="card note"><h3>The scope multiplier is the odd one out</h3><p>A magnified optic needs less stick movement for the same result, not more, so 1.12 usually means it was never adjusted. Worth testing below 1.0.</p></div>
+
+<h2 class="sub">Binds</h2>
+<table class="tbl stack">
+<thead><tr><th scope="col">Action</th><th scope="col">Button</th></tr></thead>
+<tbody>
+<tr><td>Jump</td><td class="v">A</td></tr>
+<tr><td>Crouch</td><td class="v">Right stick click</td></tr>
+<tr><td>Sprint</td><td class="v">Left stick click</td></tr>
+<tr><td>Fire</td><td class="v">Right trigger</td></tr>
+<tr><td>Aim</td><td class="v">Left trigger</td></tr>
+<tr><td>Use / reload</td><td class="v">X</td></tr>
+<tr><td>Next weapon</td><td class="v">RB</td></tr>
+<tr><td>Previous weapon</td><td class="v">LB</td></tr>
+<tr><td>Pickaxe</td><td class="v">Y</td></tr>
+<tr><td>Place marker</td><td class="v">D-pad left</td></tr>
+</tbody>
+</table>
+<div class="card note"><p>The Wolverine's extra buttons don't appear in Fortnite's config at all, because the controller remaps in hardware, so whether they're in use isn't visible here.</p><p>In Zero Build, with no building eating buttons, direct weapon-slot selection on those paddles is the clearest thing left on the table.</p></div>
+</div>
+
+<div class="tab-panel" role="tabpanel" id="panel-graphics" aria-labelledby="tab-graphics" tabindex="0" hidden>
+<h2 class="sub">Display</h2>
+<table class="tbl stack">
+<thead><tr><th scope="col">Setting</th><th scope="col">Value</th></tr></thead>
+<tbody>
+<tr><td>Resolution</td><td class="v">2560 × 1440</td></tr>
+<tr><td>Display mode</td><td class="v">Fullscreen</td></tr>
+<tr><td>Frame rate cap</td><td class="v">240</td></tr>
+<tr><td>VSync</td><td class="v">Off</td></tr>
+<tr><td>HDR</td><td class="v">Off</td></tr>
+</tbody>
+</table>
+
+<h2 class="sub">Rendering</h2>
+<table class="tbl stack">
+<thead><tr><th scope="col">Setting</th><th scope="col">Value</th></tr></thead>
+<tbody>
+<tr><td>Anti-aliasing</td><td class="v">DLSS (quality 2)</td></tr>
+<tr><td>DLSS frame generation</td><td class="v">Off</td></tr>
+<tr><td>Upscale quality</td><td class="v">85%</td></tr>
+<tr><td>3D resolution</td><td class="v">100%</td></tr>
+<tr><td>Nanite</td><td class="v">Off</td></tr>
+<tr><td>Ray tracing</td><td class="v">Off</td></tr>
+<tr><td>Global illumination</td><td class="v">1</td></tr>
+<tr><td>Reflections</td><td class="v">1</td></tr>
+<tr><td>Motion blur</td><td class="v">Off</td></tr>
+<tr><td>Show grass</td><td class="v">Off</td></tr>
+<tr><td>Dynamic resolution</td><td class="v">Off</td></tr>
+</tbody>
+</table>
+
+<h2 class="sub">Scalability</h2>
+<p>Fortnite's scale runs from 0 (Low) to 4 (Epic).</p>
+<table class="tbl stack">
+<thead><tr><th scope="col">Setting</th><th scope="col">Value</th></tr></thead>
+<tbody>
+<tr><td>View distance</td><td class="v">1</td></tr>
+<tr><td>Anti-aliasing</td><td class="v">0</td></tr>
+<tr><td>Shadows</td><td class="v">0</td></tr>
+<tr><td>Global illumination</td><td class="v">0</td></tr>
+<tr><td>Reflections</td><td class="v">0</td></tr>
+<tr><td>Post processing</td><td class="v">0</td></tr>
+<tr><td>Textures</td><td class="v">0</td></tr>
+<tr><td>Effects</td><td class="v">0</td></tr>
+<tr><td>Foliage</td><td class="v">0</td></tr>
+<tr><td>Shading</td><td class="v">1</td></tr>
+<tr><td>Landscape</td><td class="v">2</td></tr>
+</tbody>
+</table>
+<div class="card note"><p>Shadows at 0 also means losing the shadow that tells you someone's coming around a corner. That matters more in Zero Build, where cover is buildings and terrain.</p></div>
+</div>
+
+<div class="tab-panel" role="tabpanel" id="panel-audio" aria-labelledby="tab-audio" tabindex="0" hidden>
+<h2 class="sub">Audio</h2>
+<table class="tbl stack">
+<thead><tr><th scope="col">Setting</th><th scope="col">Value</th></tr></thead>
+<tbody>
+<tr><td>Headphone mode</td><td class="v">On</td></tr>
+<tr><td>Audio quality</td><td class="v">0</td></tr>
+</tbody>
+</table>
+<p>In Zero Build there are no structures to muffle footsteps and reloads, so audio carries further. That makes this the highest-value corner of the settings for hearing people first.</p>
+</div>
+</section>
+<div class="stripes" aria-hidden="true"></div>
+<section><h2>What to change, in order</h2>
+<div class="legal"><ol class="list">
+<li><strong>Fix the scope multiplier first.</strong> Take 1.12 below 1.0. One setting, most likely to be an accident, smallest thing to test.</li>
+<li><strong>Then raise ADS look speed, a few points at a time.</strong> From 12 upward, giving each step a real session before the next.</li>
+<li><strong>Then put the paddles on weapon slots.</strong> Hardware-side, so it doesn't touch the game's settings. Do it after the aim change settles.</li>
+<li><strong>Then leave it alone for two weeks.</strong> A sensitivity change takes days to stop feeling wrong and weeks to show in results.</li>
+</ol></div>
+</section>
+<div class="stripes" aria-hidden="true"></div>
+<section><h2>Change log</h2>
+<table class="tbl log">
+<thead><tr><th scope="col">Date</th><th scope="col">Setting</th><th scope="col">Change</th><th scope="col">Why</th><th scope="col">Verdict</th></tr></thead>
+<tbody><tr><td class="empty" colspan="5">Nothing logged yet. The 28 October read is the baseline, not a change.</td></tr></tbody>
+</table>
+</section>
+</main>
+<footer><div class="stripes" aria-hidden="true"></div><img src="assets/zoi-icon.png?v=9" alt="" width="48" height="48"><p>Zoi · ζωή · life</p><p class="small">Contact: <a href="mailto:hello@zoisports.com">hello@zoisports.com</a></p><p class="small">© 2026 Zoi. All rights reserved. · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p><p class="small">Zoi is not affiliated with or endorsed by Epic Games. Fortnite is a trademark of Epic Games, Inc.</p></footer>
+<script src="main.js" defer></script>
+<script src="settings.js" defer></script>
+</body>
+</html>
