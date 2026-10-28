@@ -39,13 +39,13 @@
     "LandscapeQuality": "2"
   },
   "controller": {
-    "LookHorizontalSpeed": 43,
-    "LookVerticalSpeed": 43,
+    "LookHorizontalSpeed": 42,
+    "LookVerticalSpeed": 42,
     "LookHorizontalSpeedAds": 12,
     "LookVerticalSpeedAds": 12,
     "LookHorizontalBoostSpeed": 0,
     "LookVerticalBoostSpeed": 0,
-    "ScopedSensitivityMultiplier": 1.12,
+    "ScopedSensitivityMultiplier": 0.95,
     "LookBoostAccelerationTime": 0.0,
     "LookBoostAccelerationTimeAds": 0.0,
     "LookEaseTime": 0.0,
@@ -62,7 +62,7 @@
     "MotionHarvestingToolSlow": 0.4
   },
   "sensitivity": {
-    "ScopedSensitivityMultiplier": 1.12,
+    "ScopedSensitivityMultiplier": 0.95,
     "MouseSensitivity": -1.0,
     "MouseSensitivityX": 0.02075,
     "MouseSensitivityY": 0.02075,

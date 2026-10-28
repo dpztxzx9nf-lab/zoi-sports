@@ -16,7 +16,7 @@ Last synced: **2026-10-28 12:47** (Fortnite config last written 2026-10-26 12:52
 |---|---|---|
 | Sensitivity X | `0.02075` | `MouseSensitivityX` |
 | Sensitivity Y | `0.02075` | `MouseSensitivityY` |
-| Scope sensitivity | `1.12` | `ScopedSensitivityMultiplier` — a multiplier on the above, not a separate percentage |
+| Scope sensitivity | `0.95` | `ScopedSensitivityMultiplier` — a multiplier on the above, not a separate percentage |
 | Legacy sensitivity | `-1` | `MouseSensitivity` — unset, which is correct. The X/Y pair above is what the game uses. |
 | Settings version | `0` | `MouseSensitivityDefaultVersion` |
 
