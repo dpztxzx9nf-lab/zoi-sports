@@ -9,20 +9,20 @@ Last synced: **2026-10-28** (Fortnite last wrote the save file 2026-10-26 12:52)
 
 | Setting | Value | Field | Notes |
 |---|---|---|---|
-| Hipfire look speed | `43` | `LookHorizontalSpeed` / `LookVerticalSpeed` | Equal on both axes, which is what you want |
+| Hipfire look speed | `42` | `LookHorizontalSpeed` / `LookVerticalSpeed` | Equal on both axes, which is what you want |
 | ADS look speed | `12` | `LookHorizontalSpeedAds` / `LookVerticalSpeedAds` | The number that matters — most fights happen with sights up |
-| Scope multiplier | `1.12` | `ScopedSensitivityMultiplier` | Above 1.0, so scoped turns *faster* than aimed |
+| Scope multiplier | `0.95` | `ScopedSensitivityMultiplier` | Below 1.0, so scoped turns *slower* than aimed |
 | Look boost speed | `0` | `LookHorizontalBoostSpeed` | No acceleration past the base rate |
 | Look boost ramp | `0.0` | `LookBoostAccelerationTime` | Time to reach boost speed; moot at zero boost |
 | Look ease time | `0.0` | `LookEaseTime` | No smoothing |
 | Targeting slowdown | `0.43` | `TargetingSlow` | Likely aim-assist slowdown rather than turn speed — unconfirmed |
 | Scoped slowdown | `0.43` | `ScopedSlow` | Same |
 
-**ADS at 12 against hipfire at 43** is the headline. Aiming drops turn rate by about
+**ADS at 12 against hipfire at 42** is the headline. Aiming drops turn rate by about
 72%, so the speed he actually plays at is 12.
 
-**The scope multiplier sits at 1.12, set on purpose.** Above 1.0 means scoped turns run
-slightly quicker than the same value unscoped. Brock sets his own numbers and knows them, so
+**The scope multiplier sits at 0.95, set on purpose.** Below 1.0 means scoped turns run
+slightly slower than the same value unscoped, which steadies a scoped shot. Brock sets his own numbers and knows them, so
 treat every value here as chosen — offer tests, never corrections.
 
 ## Sticks and triggers
