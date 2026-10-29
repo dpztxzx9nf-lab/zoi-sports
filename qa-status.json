@@ -14,7 +14,7 @@
     {
       "name": "links",
       "result": "fail",
-      "details": "exit 2;  \ud83d\udd0d Total 30 ; \u2705 Successful 28 ; \ud83d\udc7b Excluded 0 ; \ud83d\udeab Errors 2 ;## Errors per input;### Errors in https://zoisports.com/; [404] <https://kick.com/zoi_sports_gg [404] <https://zoisports.com/cdn-cgi/l/email-protection#f8909d949497b88297918b88978a8c8bd69b9795 "
+      "details": "exit 2;  \ud83d\udd0d Total 30 ; \u2705 Successful 28 ; \ud83d\udc7b Excluded 0 ; \ud83d\udeab Errors 2 ;## Errors per input;### Errors in https://zoisports.com/; [404] <https://kick.com/zoi_sports_gg [404] <https://zoisports.com/cdn-cgi/l/email-protection#dab2bfb6b6b59aa0b5b3a9aab5a8aea9f4b9b5b7 "
     },
     {
       "name": "denylist",
@@ -23,8 +23,8 @@
     },
     {
       "name": "icons",
-      "result": "pass",
-      "details": "no icon file changed in place"
+      "result": "fail",
+      "details": "changed in place (ship a new filename): public/assets/lab-icon-1024.png public/assets/lab-icon-180.png public/assets/lab-icon-192.png public/assets/lab-icon-512.png public/assets/lab-icon.svg "
     },
     {
       "name": "typecheck",
@@ -37,13 +37,13 @@
       "details": "no 'lint' script"
     }
   ],
-  "passing": 2,
+  "passing": 1,
   "total": 5,
-  "run_url": "https://github.com/dpztxzx9nf-lab/zoi-sports/actions/runs/40933688317",
-  "commit": "a127d6be9a27353096fc99667e55b425d3259935",
+  "run_url": "https://github.com/dpztxzx9nf-lab/zoi-sports/actions/runs/40938146409",
+  "commit": "526c43733f567c73b201d9983fbe8fb391ec080a",
   "event": "push",
   "ref": "main",
   "pr": null,
   "mode": "report-only",
-  "updated_at": "2026-10-29T18:45:09Z"
+  "updated_at": "2026-10-29T19:14:09Z"
 }
