@@ -1,9 +1,14 @@
 @echo off
-rem Runs the lab agent with no window of its own. Node is found at its usual
-rem install path first, because a scheduled task can start with a PATH that
-rem does not have nodejs on it; bare node is the fallback for a PATH install.
+rem Runs the Zoi lab agent. Safe to run from anywhere, including a copy of this
+rem file sitting in the Startup folder: it uses the agent beside itself when
+rem there is one, and otherwise the installed copy under Programs\zoi.
 setlocal
+set "DIR=%~dp0"
+if not exist "%DIR%zoi-lab-agent.mjs" set "DIR=%LOCALAPPDATA%\Programs\zoi\"
+if not exist "%DIR%zoi-lab-agent.mjs" exit /b 1
 set "NODE=%ProgramFiles%\nodejs\node.exe"
-if not exist "%NODE%" set "NODE=node"
-"%NODE%" "%~dp0zoi-lab-agent.mjs" %*
+if exist "%NODE%" goto run
+set "NODE=node"
+:run
+"%NODE%" "%DIR%zoi-lab-agent.mjs" %*
 exit /b %ERRORLEVEL%
