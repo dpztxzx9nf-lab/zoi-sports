@@ -126,6 +126,22 @@ counts all four (5 total, including one earlier crit on a different victim). Any
 collapse rule destroys a correct match in order to rescue two broken ones. The
 reconciliation check changes nothing about a good replay's count.
 
+### The one rescue that looks obvious and is not
+
+`m11` makes it tempting to rescue the count by picking the single guid that
+reconciles instead of refusing. Do not. On `m11` the union of the local player's
+guids is 1.94 and one guid alone is 1.02, so a per-guid pick would "work" - but
+the rule that pick implies breaks the good matches. On `m7`, `m13`, `m6` and
+`reload2` the local player's cues are spread across three or four guids, and no
+single one of them comes close to the match's damage total: on `reload2` the four
+guids carry 0.33, 0.45, 0.14 and 0.18 of it and only their sum is the match. A
+reader that insisted on one guid would throw away three quarters of a correct
+match to make `m11` pass. And it does not even rescue the broken ones: on `m9b`
+the biggest single guid reconciles at 1.03 by itself and would publish 23 where
+the screen said 25, which is a wrong number wearing the costume of a checked one.
+Refusing is the only answer that is right on all eight files, which is why it is
+the answer.
+
 ## Fixtures
 
 All of these must reproduce exactly. They are the regression test; the
@@ -140,16 +156,31 @@ JavaScript side runs them too.
 | `reload2.replay` | **8** | 1.091 | confirmed on the in-game end screen; the match the rule was settled on |
 | `m9b.replay` | **REFUSED** | 1.310 | screen said 25, the cue stream claims 37. Over-credited by construction |
 | `m8.replay` | **REFUSED** | 2.553 | screen said 1, the cue stream claims 4. Over-credited by construction |
+| `m11.replay` | **REFUSED** | 1.944 | screen said 0, the cue stream claims 4. Over-credited by construction |
 | `latest4.replay` | 4 | 1.009 | earlier fixture, still reproduces |
 | `latest1.replay` | 5 | 0.638 | earlier fixture, still reproduces |
 | `latest2.replay` | 0 | 1.038 | earlier fixture; a real match, a real zero |
 | `reload.replay` | **REFUSED** | 1.186 | earlier fixture, never screen-confirmed; now over the line |
 
-**`m9b` and `m8` are REFUSED ON PURPOSE.** Their cue streams over-credit the
-local player's damage badly — 5867 against 4478 recorded on `m9b`, 1415 against
-554 on `m8` — so the reader is demonstrably attributing other players' cues to
-Brock, and any headshot count taken from those streams would be wrong for the
-same reason. The refusal *is* the fix: the tool says so in one line and exits
+`m11` is the sharpest of the three. It is a ranked Zero Build match that ended
+with 0 headshots, 0 eliminations, 10 hits and 270 damage to players, and the cue
+stream reports 4 headshots and 525 damage for the local player. A zero on the
+screen against a four from the reader is not a rounding disagreement, it is the
+reader describing a different player. On that file the local name is attached to
+two actor guids: one that fires 36 cues between 24 and 38 seconds and carries all
+36 of the named hits, and one that fires 36 cues between 152 and 613 seconds and
+carries none. Ten of the second guid's cues are magnitude exactly 27 - ten hits at
+27 is the screen's 270 damage - so the quiet guid has the right total and the
+wrong attribution, and the loud one is somebody else's work wearing Brock's name.
+The reconciliation cannot pick the right guid for you, which is why it refuses
+rather than choosing; what it can do is notice that the sum does not fit the match
+and say so instead of printing four.
+
+**`m9b`, `m8` and `m11` are REFUSED ON PURPOSE.** Their cue streams over-credit
+the local player's damage badly — 5867 against 4478 recorded on `m9b`, 1415
+against 554 on `m8`, 525 against 270 on `m11` — so the reader is demonstrably
+attributing other players' cues to Brock, and any headshot count taken from those
+streams would be wrong for the same reason. The refusal *is* the fix: the tool says so in one line and exits
 non-zero, and the lab stores a null headshot with that reason. It is not a count,
 and it is not zero.
 
@@ -160,7 +191,7 @@ who never hit a headshot would look like a broken reader.
 `reload.replay` is the fixture the rule change moved. It was never confirmed
 against an end screen — the earlier table carried its count because it came out
 of the reader, not because anyone checked it — and at 1.186 it sits above the
-1.15 line. It is now refused for the same reason as `m9b` and `m8`. That is the
+1.15 line. It is now refused for the same reason as `m9b`, `m8` and `m11`. That is the
 check doing its job on a match nobody had verified, and it is recorded here
 rather than quietly special-cased.
 

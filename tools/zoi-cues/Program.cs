@@ -61,6 +61,7 @@
      reload2           8           8         1304           1195   1.091
      m9b              25          37         5867           4478   1.310  wrong
      m8                1           4         1415            554   2.553  wrong
+     m11               0           4          525            270   1.944  wrong
 
    "cue damage" is the sum of Magnitude over every cue the local player
    instigated that named a victim, critical and non-critical alike; structural
@@ -69,6 +70,10 @@
    within 9%. Where it is wrong they disagree by 31% and 155%. Every match with a
    screen-confirmed count sits at or below 1.091; every match where the reader
    is known to be wrong sits at or above 1.310. A line at 1.15 sits in that gap.
+   m11 is the one that shows the failure at its worst: the screen says zero
+   headshots and the reader finds four, because the local player's name is on two
+   different pawns in that file and all of the named hits belong to the one that
+   is not his.
    One further replay on this box, reload.replay, lands at 1.186 and is refused:
    it was never checked against an end screen, and the 7 it used to report came
    out of this reader rather than out of the game, so nothing measured says the
