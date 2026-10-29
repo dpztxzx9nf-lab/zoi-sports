@@ -703,6 +703,24 @@ let cuePendingNoted = new Set();
 const CUE_WAIT_POLLS = 5;
 const cueWaiting = new Map();
 
+/* How many polls a replay the game is still writing is given to finish. The game
+   keeps appending to the file for a minute or two after the match ends, so the
+   first poll after a match almost always finds it half written; ten polls is ten
+   minutes, which is several times what a replay needs and still short enough
+   that a file which never completes - a crash mid-match, a copy interrupted
+   halfway - gives up and stops holding the folder behind it. */
+const REPLAY_WAIT_POLLS = 10;
+/* path -> polls waited. Same shape and same purpose as cueWaiting above, and
+   separate from it because the two waits are answers to different questions: the
+   cue map says a readable replay is still being counted, this one says the replay
+   cannot be read at all yet. */
+const replayRetry = new Map();
+/* The "still being written, will retry" line, said once per file. Kept apart
+   from replayComplained because that set means "already had its one complaint"
+   and is also what suppresses the skip line - sharing it would make the retry
+   note either silent or double-spoken. */
+let replayRetrying = new Set();
+
 function cueCached(replayPath) {
   return cueCache.get(replayPath) || null;
 }
@@ -786,6 +804,11 @@ export async function readNewReplays() {
      the mark, so the next poll reads them again (the stats read is a file read,
      not a decompressor) and sends them the moment their number is in. */
   const waiting = [];
+  /* Files that could not be read yet because the game is still writing them.
+     They stay behind the mark for the same reason and by the same mechanism;
+     what differs is that there is no row to send at all until the read
+     succeeds. */
+  const retrying = [];
   for (const file of picked) {
     let result;
     try {
@@ -796,15 +819,55 @@ export async function readNewReplays() {
       result = { ok: false, reason: "the replay reader threw (" + (e && e.message ? e.message : e) + ")" };
     }
     if (!result.ok) {
+      /* A reader that says the failure is only true for a minute gets another
+         look. The game is still appending to the replay for a minute or two
+         after the match ends, so the first poll after a match almost always
+         finds it partial, and skipping on that first look is how a real match
+         used to disappear from the lab for good. */
+      if (result.retryable) {
+        const waited = (replayRetry.get(file.path) || 0) + 1;
+        replayRetry.set(file.path, waited);
+        if (waited > REPLAY_WAIT_POLLS) {
+          /* Held this long and still not readable, so something is wrong with
+             the file rather than with the moment it was read: a crash mid-match
+             leaves a replay the game never finishes, and waiting further would
+             hold every later replay behind it for the rest of the session. It
+             goes the way a file this reader cannot understand has always gone -
+             one line, and the mark moves past it. */
+          replayRetry.delete(file.path);
+          if (!replayComplained.has(file.name)) {
+            replayComplained.add(file.name);
+            log("Giving up on replay " + file.name + " after " + REPLAY_WAIT_POLLS + " polls: " +
+              (result.reason || "it could not be read") + ".");
+          }
+          continue;
+        }
+        if (!replayRetrying.has(file.name)) {
+          replayRetrying.add(file.name);
+          if (replayRetrying.size > 200) replayRetrying = new Set([file.name]);
+          log("Replay " + file.name + " is still being written (" + (result.reason || "it could not be read") +
+            ") - waiting for it rather than skipping it.");
+        }
+        retrying.push(file);
+        continue;
+      }
       /* One line, once. The file is still marked past below, so a file this
          reader cannot understand is looked at exactly once rather than on every
-         poll for the rest of the session. */
+         poll for the rest of the session. This is the permanent half of the
+         split above: an unencrypted replay, a header with the wrong key, a
+         Creative match's empty payload - none of those read differently on a
+         second look, and retrying one would cost a poll a minute for ever. */
       if (!replayComplained.has(file.name)) {
         replayComplained.add(file.name);
         log("Skipping replay " + file.name + ": " + (result.reason || "it could not be read") + ".");
       }
       continue;
     }
+    /* Read at last, so it is no longer waiting. Dropped here rather than left to
+       age out: a session is an evening of matches and the map is keyed by path,
+       so leaving every file that ever needed a second look in it would grow
+       without a bound. */
+    replayRetry.delete(file.path);
     /* Headshots come from a different reader, in a different process, so they
        are never read on this path. Only a match that recorded anything is worth
        counting - a Creative island has no match stats and its cues are hits on
@@ -856,18 +919,24 @@ export async function readNewReplays() {
       " - the numbers go up on the next send.");
   }
 
-  /* The mark covers every file that was LOOKED at, including the unreadable
-     ones, because those are exactly the files that must not come round again.
-     It stops short of the FIRST file still waiting for its count: the mark is a
-     single watermark, so a file it steps over is never read again. Everything
-     from there on comes back next poll - including files whose rows already went
-     up, which is harmless, because the endpoint keys a replay by its own window
-     and drops a repeat.
-     When the first file is the one waiting (the ordinary case: the newest replay
-     is the one just counted) this moves nothing, and the batch is re-read. */
+  /* The mark covers every file that was LOOKED at, including the ones this
+     reader gives up on, because those are exactly the files that must not come
+     round again. It stops short of the FIRST file that is still in play: one
+     waiting for its headshot count, or one the game is still writing. Either way
+     the mark is a single watermark, so a file it steps over is never read again,
+     and everything from there on comes back next poll - including files whose
+     rows already went up, which is harmless, because the endpoint keys a replay
+     by its own window and drops a repeat.
+     When the first file is the one in play (the ordinary case: the newest replay
+     is the one just counted, or the one just finished being written) this moves
+     nothing, and the batch is re-read.
+     A file that failed for a reason which will not change is deliberately not in
+     either list: it is marked past on the first look, as it always was, because
+     waiting cannot make an unencrypted replay readable and holding the folder
+     behind one would stop every later match too. */
   let settled = picked;
   for (let i = 0; i < picked.length; i++) {
-    if (waiting.includes(picked[i])) { settled = picked.slice(0, i); break; }
+    if (waiting.includes(picked[i]) || retrying.includes(picked[i])) { settled = picked.slice(0, i); break; }
   }
   const beyond = settled.length ? markPast(settled) : null;
   const commit = beyond && beyond.at > mark.at ? beyond
