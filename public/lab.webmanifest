@@ -1,0 +1,15 @@
+{
+  "name": "Zoi Settings Lab",
+  "short_name": "Zoi Lab",
+  "description": "Your settings, measured. Every change is compared against the games you played before it.",
+  "start_url": "/lab",
+  "scope": "/lab",
+  "display": "standalone",
+  "background_color": "#050506",
+  "theme_color": "#050506",
+  "icons": [
+    { "src": "/assets/lab-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/lab-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/lab-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -19,6 +19,35 @@ const sel=(t,focus)=>{tabs.forEach(x=>{const on=x===t;x.setAttribute('aria-selec
 tabs.forEach((t,i)=>{t.addEventListener('click',()=>sel(t));t.addEventListener('keydown',e=>{let j=null;if(e.key==='ArrowRight')j=(i+1)%tabs.length;else if(e.key==='ArrowLeft')j=(i-1+tabs.length)%tabs.length;else if(e.key==='Home')j=0;else if(e.key==='End')j=tabs.length-1;if(j!==null){e.preventDefault();sel(tabs[j],true)}})})})();
 document.querySelectorAll('.avatar[data-avatar]').forEach(a=>{const i=new Image();i.alt='';i.decoding='async';i.onload=()=>{a.textContent='';a.appendChild(i)};i.src=a.dataset.avatar});
 
+/* Live roster: the profiles people edit in the lab come from /api/roster and win
+   over the copy baked into roster.js. The baked-in data stays as the fallback, so
+   a roster card still has a name and a role if the request fails — a player never
+   disappears because one fetch did not land. */
+(()=>{if(!window.ROSTER)return;
+const paint=()=>document.querySelectorAll('.card[data-player]').forEach(card=>{
+ const p=ROSTER[card.dataset.player];if(!p)return;
+ const h=card.querySelector('h3');if(h&&p.gamertag)h.textContent=p.gamertag;
+ const r=card.querySelector('.role');if(r)r.textContent=p.role||'';
+ const meta=[p.region,p.platform].filter(Boolean).join(' \u00b7 ');
+ let m=card.querySelector('.meta');
+ if(meta){if(!m){m=document.createElement('p');m.className='meta';r?r.after(m):card.append(m)}m.textContent=meta}
+ else if(m)m.remove();
+ card.setAttribute('aria-label','View '+p.gamertag+' profile');
+});
+fetch('/api/roster',{headers:{accept:'application/json'}})
+ .then(r=>r.ok?r.json():null)
+ .then(j=>{const list=j&&Array.isArray(j.players)?j.players:null;if(!list)return;
+  let changed=false;
+  list.forEach(row=>{if(!row||!row.slug||!row.gamertag)return;
+   const before=ROSTER[row.slug]||{};
+   ROSTER[row.slug]=Object.assign({},before,{gamertag:row.gamertag,role:row.role||before.role||'',region:row.region||'',platform:row.platform||'',bio:row.bio||'',socials:row.socials&&typeof row.socials==='object'?row.socials:{},games:before.games||[]});
+   changed=true;
+  });
+  if(changed)paint();
+ })
+ .catch(()=>{});
+})();
+
 (()=>{const dlg=document.getElementById('profile');if(!dlg||!window.ROSTER)return;
 const NET={x:'X',tiktok:'TikTok',youtube:'YouTube',twitch:'Twitch',instagram:'Instagram',kick:'Kick'};
 const $=id=>document.getElementById(id);let opener=null;

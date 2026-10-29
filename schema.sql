@@ -19,6 +19,25 @@ CREATE TABLE IF NOT EXISTS applications (
 );
 CREATE INDEX IF NOT EXISTS idx_app_ip_time ON applications(ip_hash, created_at);
 
+-- The roster card each person can edit from the lab. Kept beside the lab tables
+-- because it is written from the lab and scoped by the same owner email; the
+-- public roster reads it through /api/roster, which serves published rows only.
+CREATE TABLE IF NOT EXISTS player_profiles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner TEXT NOT NULL UNIQUE,
+  slug TEXT NOT NULL UNIQUE,
+  gamertag TEXT NOT NULL,
+  role TEXT,
+  region TEXT,
+  platform TEXT,
+  bio TEXT,
+  socials TEXT,
+  published INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_player_profiles_public ON player_profiles(published, slug);
+
 -- The lab: one row per setting trial, per saved config, per Epic stats read, and
 -- per match the agent parsed out of the game log. Every one is scoped by owner,
 -- the signed-in email, so one person's lab never reads another's.
