@@ -223,8 +223,18 @@ function renderMode() {
 
 /* "Ranked · Zero Build · Solo". The three fields are the mode; a field the log did
    not name is left out rather than shown as a blank or a guess. The playlist name
-   is not shown: it is an internal identifier he did not ask to read. */
+   is not shown: it is an internal identifier he did not ask to read.
+
+   A Creative island is the one case with a name of its own. It has no rank, build
+   or team size the log ever states, so the three fields would render as nothing at
+   all and the line would disappear - which for an island is wrong, not cautious.
+   Its title is the mode. The title is shown exactly as the game wrote it, emoji
+   and all, because it is a name rather than a value to normalise. */
 function modeText(m) {
+  if (m.kind === 'creative') {
+    const title = typeof m.title === 'string' ? m.title.trim() : '';
+    return title;
+  }
   const ranked = modeWord(m.ranked, '');
   const build = modeWord(m.build_mode !== undefined ? m.build_mode : m.buildMode, '');
   const team = modeWord(m.team_size !== undefined ? m.team_size : m.teamSize, '');
@@ -573,6 +583,10 @@ function scopeNote(c) {
     const named = modeText({ ranked: c.scope === 'ranked' ? 'Ranked' : 'Unranked', build_mode: '', team_size: '' });
     return 'Compared in ' + named + ' only';
   }
+  /* An island is neither ranked nor unranked, and its games are not averaged in
+     with a battle royale's, so the note says which of the two narrower samples
+     this was rather than calling every narrowed sample "ranked". */
+  if (c.scope === 'creative') return 'Creative island games only';
   return 'All modes together';
 }
 

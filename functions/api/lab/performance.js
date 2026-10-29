@@ -20,6 +20,24 @@ const READING_COLUMNS = "taken_at,created_at,matches,wins,kills,deaths,kd,win_ra
    the player's log than this page uses. */
 const MATCH_COLUMNS = "playlist,playlist_type,ranked,build_mode,team_size,region,rank_type,rank,"
   + "players_left_low,players_left_first,players_left_readings,started_at,ended_at";
+/* The columns 0008 adds. Read separately, because a database that has not had
+   0008 applied does not have them and a SELECT naming a missing column throws -
+   which here would silently empty the match list and take the mode line with it.
+   The probe is the lab's own introspection statement, so the fake D1's guard
+   recognises it. */
+const KIND_COLUMNS = "kind,title";
+
+/* Whether lab_matches has a column. Same statement the sync handler probes with:
+   the fake D1 knows the shape, and a database without 0008 answers no. */
+async function hasColumn(env, table, column) {
+  try {
+    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM pragma_table_info(?) WHERE name = ?")
+      .bind(table, column).first();
+    return Boolean(row && Number(row.n) > 0);
+  } catch {
+    return false;
+  }
+}
 
 /* setting id -> the watch text from the catalog. Built once per request. */
 const watchLookup = () => {
@@ -31,6 +49,19 @@ const watchLookup = () => {
   }
   return map;
 };
+
+/* The most recent match, preferring one with a stated end: a row with a null end
+   sorts first under the read's ORDER BY, and it is not the most recent thing
+   played - it is the one the log stopped talking about. A Creative island's own
+   line is worth showing, so such a row still wins if it is the only kind there. */
+function lastMatchOf(matches) {
+  if (!Array.isArray(matches) || !matches.length) return null;
+  for (let i = matches.length - 1; i >= 0; i--) {
+    const m = matches[i];
+    if (m && m.ended_at !== null && m.ended_at !== undefined) return m;
+  }
+  return matches[matches.length - 1];
+}
 
 export async function onRequest({ request, env }) {
   if (request.method !== "GET") return json({ ok: false, error: "Method not allowed." }, 405);
@@ -74,16 +105,25 @@ export async function onRequest({ request, env }) {
        printing a guess. */
     let matches = [];
     try {
+      /* A row with no stated end cannot be placed on the timeline the sessions
+         walk, and datetime(NULL) >= datetime(?) is not true, so the windowed read
+         leaves it out on its own. The whole-table read keeps it, sorted first,
+         and labelSessions drops it for having no finite time. So neither read
+         needs a NULL branch: an island the log never finished is stored and
+         counted, but never used to label a session it cannot be placed in. */
+      const columns = (await hasColumn(env, "lab_matches", "kind"))
+        ? MATCH_COLUMNS + "," + KIND_COLUMNS
+        : MATCH_COLUMNS;
       const list = Array.isArray(readings.results) ? readings.results : [];
       const oldest = list.length ? String(list[0].created_at || "") : "";
       const rows = oldest
         ? await env.DB.prepare(
-          `SELECT ${MATCH_COLUMNS} FROM lab_matches
+          `SELECT ${columns} FROM lab_matches
             WHERE owner = ? AND datetime(ended_at) >= datetime(?)
             ORDER BY datetime(ended_at) ASC, id ASC LIMIT 400`
         ).bind(who.id, oldest).all()
         : await env.DB.prepare(
-          `SELECT ${MATCH_COLUMNS} FROM lab_matches
+          `SELECT ${columns} FROM lab_matches
             WHERE owner = ? ORDER BY datetime(ended_at) ASC, id ASC LIMIT 400`
         ).bind(who.id).all();
       matches = (rows && Array.isArray(rows.results)) ? rows.results : [];
@@ -106,7 +146,7 @@ export async function onRequest({ request, env }) {
       /* The single most recent match row, or null. The page renders one line from
          it and nothing else; the full history is not sent, because a page that
          is about settings does not need it. */
-      lastMatch: matches.length ? matches[matches.length - 1] : null,
+      lastMatch: lastMatchOf(matches),
       current: currentOf(snapshot),
     });
   } catch (e) {

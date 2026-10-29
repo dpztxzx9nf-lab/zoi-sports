@@ -55,6 +55,11 @@ export const MAX_MATCHES = 400;    /* matches read for labelling; a window never
    than inlined so a caller can test against them without copying the strings. */
 export const MODE_MIXED = "mixed";
 export const MODE_UNKNOWN = "unknown";
+/* The prefix a Creative island's mode key carries. An island is its own kind of
+   game: no ladder, no build mode, no team size, and a title instead. Its key can
+   therefore never be mistaken for a battle-royale one, which is what stops an
+   island's games being pooled with the ladder's. */
+export const CREATIVE_KEY = "creative";
 
 /* Why MIN_GAMES is 25 rather than a round 10.
    A verdict needs the two kills-per-match intervals to separate. At this
@@ -330,6 +335,15 @@ export function judge(before, after) {
    hence both spellings. */
 export function modeKeyOf(match) {
   if (!match || typeof match !== "object") return null;
+  /* An island is keyed by its title and by nothing else. It has no rank, build or
+     team size - the log never states them for one - so keying it on those would
+     make every island the same empty key, and then two unrelated islands would
+     be "one mode" and their games pooled. */
+  if (match.kind === "creative") {
+    const title = typeof match.title === "string" ? match.title.trim() : "";
+    if (!title) return CREATIVE_KEY + "|";
+    return CREATIVE_KEY + "|" + title;
+  }
   const ranked = match.ranked;
   const build = match.buildMode !== undefined ? match.buildMode : match.build_mode;
   const team = match.teamSize !== undefined ? match.teamSize : match.team_size;
@@ -345,6 +359,11 @@ function scopeOfMode(key) {
   if (typeof key !== "string") return null;
   if (key.startsWith("Ranked|")) return "ranked";
   if (key.startsWith("Unranked|")) return "unranked";
+  /* An island is its own scope. It is not ranked and not unranked, so filing it
+     under either would be a claim the log never made; and it is not a battle
+     royale, so letting it into a blended sample with one is the averaging this
+     whole distinction exists to prevent. */
+  if (key === CREATIVE_KEY + "|" || key.startsWith(CREATIVE_KEY + "|")) return "creative";
   return null;
 }
 
