@@ -176,33 +176,41 @@ function identityFrom(claims) {
   return null;
 }
 
-/* Verifies the Access JWT and says who is signed in:
-   { ok: true, id, email, name } or { ok: false, response }, where response is
-   the thing to send instead of the handler's own reply. */
-export async function identity(request, env) {
+/* Verifies a raw Access JWT string against the team's published keys and
+   returns what it claims, or says why it could not be trusted:
+
+     { ok: true, claims }
+     { ok: false, reason: "config" }      // no team or audience configured
+     { ok: false, reason: "unavailable" } // the certs endpoint would not answer
+     { ok: false, reason: "invalid" }     // everything else: no claim is read
+
+   This is the ONE verifier. identity() below reads the Cf-Access-Jwt-Assertion
+   header and goes through it; /api/me reads the CF_Authorization cookie and goes
+   through it too, so the cookie path cannot drift from the header path in what
+   it accepts. Nothing about the caller is trusted before the signature checks
+   out; every claim is read only after that line. */
+export async function verifyAccessToken(token, env) {
   const team = str(env && env.LAB_ACCESS_TEAM, 200);
   const auds = listOf(env && env.LAB_ACCESS_AUD);
-  if (!team || !auds.length) {
-    return { ok: false, response: json({ ok: false, error: "Sign-in is not configured." }, 500) };
-  }
+  if (!team || !auds.length) return { ok: false, reason: "config" };
 
-  const token = (request.headers.get(JWT_HEADER) || "").trim();
-  if (!token) return { ok: false, response: unauthorized() };
+  const raw = str(token, 8192);
+  if (!raw) return { ok: false, reason: "invalid" };
 
-  const parts = token.split(".");
-  if (parts.length !== 3) return { ok: false, response: unauthorized() };
+  const parts = raw.split(".");
+  if (parts.length !== 3) return { ok: false, reason: "invalid" };
 
   const headerBytes = b64urlBytes(parts[0]);
   const payloadBytes = b64urlBytes(parts[1]);
   const signature = b64urlBytes(parts[2]);
-  if (!headerBytes || !payloadBytes || !signature || !signature.length) return { ok: false, response: unauthorized() };
+  if (!headerBytes || !payloadBytes || !signature || !signature.length) return { ok: false, reason: "invalid" };
 
   /* alg goes first: none and the symmetric HS* family are refused before any key
      is imported, so a token cannot talk us into a different kind of check. */
   let header;
-  try { header = JSON.parse(decoder.decode(headerBytes)); } catch { return { ok: false, response: unauthorized() }; }
-  if (!header || typeof header !== "object" || header.alg !== "RS256") return { ok: false, response: unauthorized() };
-  if (typeof header.kid !== "string" || !header.kid) return { ok: false, response: unauthorized() };
+  try { header = JSON.parse(decoder.decode(headerBytes)); } catch { return { ok: false, reason: "invalid" }; }
+  if (!header || typeof header !== "object" || header.alg !== "RS256") return { ok: false, reason: "invalid" };
+  if (typeof header.kid !== "string" || !header.kid) return { ok: false, reason: "invalid" };
 
   let keys = keyCache.get(team);
   let key = keys && keys.get(header.kid);
@@ -214,11 +222,11 @@ export async function identity(request, env) {
       keys = await keysFor(team);
     } catch (e) {
       console.error("access certs unavailable", e);
-      return { ok: false, response: json({ ok: false, error: "Couldn't check your sign-in just now. Try again in a moment." }, 503) };
+      return { ok: false, reason: "unavailable" };
     }
     key = keys.get(header.kid);
   }
-  if (!key) return { ok: false, response: unauthorized() };
+  if (!key) return { ok: false, reason: "invalid" };
 
   let valid = false;
   try {
@@ -229,30 +237,71 @@ export async function identity(request, env) {
       encoder.encode(parts[0] + "." + parts[1]),
     );
   } catch { valid = false; }
-  if (!valid) return { ok: false, response: unauthorized() };
+  if (!valid) return { ok: false, reason: "invalid" };
 
   /* Past this line the token was signed by Access, so its claims can be read. */
   let claims;
-  try { claims = JSON.parse(decoder.decode(payloadBytes)); } catch { return { ok: false, response: unauthorized() }; }
-  if (!claims || typeof claims !== "object") return { ok: false, response: unauthorized() };
+  try { claims = JSON.parse(decoder.decode(payloadBytes)); } catch { return { ok: false, reason: "invalid" }; }
+  if (!claims || typeof claims !== "object") return { ok: false, reason: "invalid" };
 
   const now = Math.floor(Date.now() / 1000);
   const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
   const exp = num(claims.exp);
-  if (exp === null || exp <= now) return { ok: false, response: unauthorized() };
+  if (exp === null || exp <= now) return { ok: false, reason: "invalid" };
 
   for (const field of ["nbf", "iat"]) {
     const at = num(claims[field]);
-    if (at !== null && at > now + CLOCK_SKEW) return { ok: false, response: unauthorized() };
+    if (at !== null && at > now + CLOCK_SKEW) return { ok: false, reason: "invalid" };
   }
 
-  if (claims.iss !== "https://" + team) return { ok: false, response: unauthorized() };
+  if (claims.iss !== "https://" + team) return { ok: false, reason: "invalid" };
 
   const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
-  if (!audiences.some((a) => typeof a === "string" && auds.includes(a))) return { ok: false, response: unauthorized() };
+  if (!audiences.some((a) => typeof a === "string" && auds.includes(a))) return { ok: false, reason: "invalid" };
 
-  const who = identityFrom(claims);
+  return { ok: true, claims };
+}
+
+/* The Access cookie. On the apex, Access puts the same JWT it asserts in this
+   cookie as well as in the header; a page read on a hostname where the header is
+   not attached can still say who is signed in if the cookie came along. Named
+   here so the one place that reads a cookie and the tests agree on the name. */
+export const ACCESS_COOKIE = "CF_Authorization";
+
+/* One Set-Cookie header value to one token: the pieces before the first ";" are
+   name=value, and only the named cookie is returned. A malformed percent escape
+   is a cookie that cannot be read, not something to guess around. */
+export function cookieValue(header, name) {
+  if (typeof header !== "string" || !header) return "";
+  for (const piece of header.split(";")) {
+    const eq = piece.indexOf("=");
+    if (eq < 0) continue;
+    if (piece.slice(0, eq).trim() !== name) continue;
+    let raw = piece.slice(eq + 1).trim();
+    if (raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"')) raw = raw.slice(1, -1);
+    try { return decodeURIComponent(raw).trim(); } catch { return ""; }
+  }
+  return "";
+}
+
+/* Verifies the Access JWT and says who is signed in:
+   { ok: true, id, email, name } or { ok: false, response }, where response is
+   the thing to send instead of the handler's own reply. */
+export async function identity(request, env) {
+  const token = (request.headers.get(JWT_HEADER) || "").trim();
+  const checked = await verifyAccessToken(token, env);
+  if (!checked.ok) {
+    if (checked.reason === "config") {
+      return { ok: false, response: json({ ok: false, error: "Sign-in is not configured." }, 500) };
+    }
+    if (checked.reason === "unavailable") {
+      return { ok: false, response: json({ ok: false, error: "Couldn't check your sign-in just now. Try again in a moment." }, 503) };
+    }
+    return { ok: false, response: unauthorized() };
+  }
+
+  const who = identityFrom(checked.claims);
   if (!who) return { ok: false, response: unauthorized() };
   return { ok: true, ...who };
 }
