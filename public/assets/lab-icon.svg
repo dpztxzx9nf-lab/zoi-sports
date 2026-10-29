@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+ <defs>
+  <linearGradient id="g" x1="0" y1="0" x2=".35" y2="1">
+   <stop offset="0" stop-color="#fff6d6"/>
+   <stop offset=".35" stop-color="#e9d7a6"/>
+   <stop offset=".72" stop-color="#c0a266"/>
+   <stop offset="1" stop-color="#8a7136"/>
+  </linearGradient>
+  <radialGradient id="f" cx=".5" cy=".32" r=".8">
+   <stop offset="0" stop-color="#232017"/>
+   <stop offset=".65" stop-color="#0b0b0d"/>
+   <stop offset="1" stop-color="#050506"/>
+  </radialGradient>
+  <clipPath id="clip"><circle cx="512" cy="512" r="376"/></clipPath>
+ </defs>
+ <rect width="1024" height="1024" fill="#050506"/>
+ <path d="M 900.0 512.0 L 1009.8 559.1 L 1008.8 568.4 L 881.0 631.9 L 970.9 710.6 L 967.1 719.2 L 825.9 740.1 L 887.1 842.7 L 880.8 849.7 L 740.1 825.9 L 766.5 942.4 L 758.4 947.1 L 631.9 881.0 L 621.1 1000.0 L 611.9 1001.9 L 512.0 900.0 L 464.9 1009.8 L 455.6 1008.8 L 392.1 881.0 L 313.4 970.9 L 304.8 967.1 L 283.9 825.9 L 181.3 887.1 L 174.3 880.8 L 198.1 740.1 L 81.6 766.5 L 76.9 758.4 L 143.0 631.9 L 24.0 621.1 L 22.1 611.9 L 124.0 512.0 L 14.2 464.9 L 15.2 455.6 L 143.0 392.1 L 53.1 313.4 L 56.9 304.8 L 198.1 283.9 L 136.9 181.3 L 143.2 174.3 L 283.9 198.1 L 257.5 81.6 L 265.6 76.9 L 392.1 143.0 L 402.9 24.0 L 412.1 22.1 L 512.0 124.0 L 559.1 14.2 L 568.4 15.2 L 631.9 143.0 L 710.6 53.1 L 719.2 56.9 L 740.1 198.1 L 842.7 136.9 L 849.7 143.2 L 825.9 283.9 L 942.4 257.5 L 947.1 265.6 L 881.0 392.1 L 1000.0 402.9 L 1001.9 412.1 Z" fill="url(#g)"/>
+ <circle cx="512" cy="512" r="376" fill="url(#f)"/>
+ <circle cx="512" cy="512" r="372" fill="none" stroke="#e6d3a0" stroke-width="6" opacity=".45"/>
+ <g clip-path="url(#clip)" opacity="1.0">
+  <path d="M 574 226 L 372 556 L 486 556 L 434 798 L 668 452 L 550 452 Z" fill="url(#g)"/>
+  <path d="M 574 226 L 372 556 L 486 556 L 434 798 L 668 452 L 550 452 Z" fill="none" stroke="#ffe08a" stroke-width="5" opacity=".5"/>
+ </g>
+</svg>

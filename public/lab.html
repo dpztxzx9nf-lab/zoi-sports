@@ -6,7 +6,17 @@
 <meta name="description" content="Your settings, measured. Every change is compared against the games you played before it.">
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#050506">
-<link rel="icon" href="favicon.ico" sizes="any"><link rel="icon" type="image/png" href="favicon-32.png">
+<!-- The lab has its own mark: a serrated badge, not the site bolt, so it reads as
+     its own app when it is saved to a home screen. The SVG is what a browser
+     tab uses; the PNGs are the fallback and the iOS home-screen icon, which
+     cannot take an SVG and cannot take transparency. -->
+<link rel="icon" href="assets/lab-icon.svg" type="image/svg+xml">
+<link rel="icon" type="image/png" sizes="192x192" href="assets/lab-icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/lab-icon-180.png">
+<link rel="manifest" href="lab.webmanifest">
+<meta name="apple-mobile-web-app-title" content="Zoi Lab">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="styles.css?v=31">
 </head>
 <body class="lab-page">
