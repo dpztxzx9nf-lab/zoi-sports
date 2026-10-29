@@ -50,6 +50,19 @@ const watchLookup = () => {
   return map;
 };
 
+/* Whether a table exists. The same pragma the column probe uses, because a
+   column cannot exist on a table that does not, and the fake D1 in the suite
+   already recognises this statement. */
+async function hasTable(env, table) {
+  try {
+    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM pragma_table_info(?) WHERE name = ?")
+      .bind(table, "id").first();
+    return Boolean(row && Number(row.n) > 0);
+  } catch {
+    return false;
+  }
+}
+
 /* The most recent match, preferring one with a stated end: a row with a null end
    sorts first under the read's ORDER BY, and it is not the most recent thing
    played - it is the one the log stopped talking about. A Creative island's own
@@ -143,11 +156,37 @@ export async function onRequest({ request, env }) {
       matches = [];
     }
 
+    /* The replay rows: one per match this machine recorded, each carrying its
+       own end time and its own kills. Read as their own query with their own
+       try/catch, because a database that has not had 0010 applied does not have
+       the table and a page that dies for want of a second opinion would be
+       trading the whole lab for a refinement.
+
+       Null means the source is not available; an empty array means it is
+       available and empty. The page says different things for those, so the
+       difference is preserved all the way out rather than flattened to []. */
+    let replays = null;
+    try {
+      if (await hasTable(env, "lab_replay_stats")) {
+        const rows = await env.DB.prepare(
+          `SELECT ended_at, recorded, creative, eliminations, placement, total_players, match_id
+             FROM lab_replay_stats
+            WHERE owner = ? AND ended_at IS NOT NULL
+            ORDER BY datetime(ended_at) DESC LIMIT 400`
+        ).bind(who.id).all();
+        replays = (rows && Array.isArray(rows.results)) ? rows.results.reverse() : [];
+      }
+    } catch (e) {
+      console.error("lab replay stats read failed", e);
+      replays = null;
+    }
+
     const payload = performance({
       rows: readings.results || [],
       tests: tests.results || [],
       watch: watchLookup(),
       matches,
+      replays,
     });
 
     return json({
@@ -158,6 +197,10 @@ export async function onRequest({ request, env }) {
          it and nothing else; the full history is not sent, because a page that
          is about settings does not need it. */
       lastMatch: lastMatchOf(matches),
+      /* Whether the per-match source answered at all. False is a statement about
+         this database, not about the evening: the page uses it to explain why no
+         per-match reading is shown instead of implying there were no games. */
+      replays_available: Array.isArray(replays),
       current: currentOf(snapshot),
     });
   } catch (e) {
