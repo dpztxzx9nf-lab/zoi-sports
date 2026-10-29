@@ -249,6 +249,12 @@ const LINK_TITLE_WINDOW = 16;
 /* A settings block is a few dozen lines. Past this the block is taken to be
    truncated and the scan gives up on it rather than eating the file. */
 const SETTINGS_MAX_LINES = 400;
+/* How many polls a half-written block is carried before it is let go. Fortnite
+   writes a block in a fraction of a second, so the rest of it is in the very
+   next poll or the file was cut for good; three is generous enough for a slow
+   disk and short enough that a rotated log does not leave a dead block being
+   re-read forever. */
+const CARRY_TRIES = 3;
 /* How long after the NEXT assignment a match's own end-of-match burst can still
    land. This is measured, not guessed: in his log the burst for match N arrives
    3 and 4 seconds after the assignment that started match N+1, because the
@@ -412,6 +418,29 @@ function cleanState(state) {
       .filter((x) => x && typeof x.linkId === "string" && typeof x.title === "string" && x.title.trim())
       .map((x) => ({ linkId: x.linkId, title: x.title }))
       .slice(-LINK_KEEP),
+    /* A block the last poll saw the start of but not the end of. The game writes
+       a settings block and an island block a line at a time, and a poll only
+       ever consumes whole lines, so a poll can end halfway through one. Those
+       lines are useless on their own - a settings block is recognised by its
+       opening line and read up to its closing bracket, and its MatchmakingId
+       comes after that - and they are gone from the file as far as the next poll
+       is concerned, because its offset has already moved past them. Holding the
+       lines is what lets the next pass read the block whole. It is bounded by
+       the same line cap the scan itself uses, so it cannot grow with the file. */
+    carry: (() => {
+      const c = s.carry;
+      if (!c || typeof c !== "object") return null;
+      if (c.kind !== "settings" && c.kind !== "island") return null;
+      const lines = Array.isArray(c.lines) ? c.lines.filter((x) => typeof x === "string") : [];
+      if (!lines.length) return null;
+      const tries = Number(c.tries);
+      if (Number.isFinite(tries) && tries >= CARRY_TRIES) return null;
+      /* An island block is three lines and the title above it makes four; the
+         window is the widest it can be read across, so nothing past that is
+         ever part of one. */
+      const cap = c.kind === "island" ? LINK_TITLE_WINDOW + 2 : SETTINGS_MAX_LINES;
+      return { kind: c.kind, lines: lines.slice(0, cap), tries: Number.isFinite(tries) ? tries : 0 };
+    })(),
   };
 }
 
@@ -444,6 +473,23 @@ export function modeKeyOf(match) {
   return parts.length ? parts.join("|") : null;
 }
 
+/* Whether a carried fragment still starts the block it said it started. A poll
+   boundary is one thing; the file being rotated, truncated or replaced between
+   two polls is another, and in that case the saved lines belong to a log that no
+   longer exists. Reading them anyway would splice an old fragment onto a new
+   file, so the shape is checked and a fragment that no longer opens anything is
+   dropped. */
+function stillOpens(carry) {
+  const lines = carry.lines;
+  if (carry.kind === "settings") {
+    return typeof lines[0] === "string" && SETTINGS_FORM(lines[0]) !== null;
+  }
+  /* An island carry can hold one line in front of its opener - the title that
+     stood immediately above it - so the opener is looked for rather than
+     assumed to be first. */
+  return lines.some((l) => typeof l === "string" && (ISLAND_OPEN.test(l) || ISLAND_INLINE.test(l)));
+}
+
 /* One pass over the lines. Returns the matches this pass can close, plus the
    state the next pass needs.
 
@@ -454,8 +500,16 @@ export function modeKeyOf(match) {
    because inserts deliberately do not overwrite. A one-shot read of a whole file
    leaves it off, since everything that match will ever say is already there. */
 export function scanLog(lines, opts = {}) {
-  const arr = Array.isArray(lines) ? lines : [];
   const prior = cleanState(opts.state);
+  /* A block the last poll was handed the start of goes back in front of this
+     poll's lines, so the two halves are read as the one block they are. It is a
+     copy, not a splice into the caller's array, and the opening line is checked
+     against the shape it was carried as: a log that was rotated or rewritten
+     between the two polls can leave a fragment that matches nothing, and a
+     fragment is dropped rather than spliced into an unrelated log. */
+  const carried = prior.carry && stillOpens(prior.carry) ? prior.carry : null;
+  const arr = carried ? carried.lines.concat(Array.isArray(lines) ? lines : []) : (Array.isArray(lines) ? lines : []);
+  let carry = null;
   const settle = opts.settle === true;
   const out = [];
   const held = prior.hold.map((m) => ({ ...m }));
@@ -728,14 +782,28 @@ export function scanLog(lines, opts = {}) {
       const body = [];
       let depth = brackets(text);
       let j = i + 1;
+      let cut = false;
       for (; j < arr.length && depth > 0 && j - i <= SETTINGS_MAX_LINES; j++) {
         const line = textOf(arr[j]);
         /* A second block opening before this one closed means this one was cut
            short. Stop here rather than reading two blocks as one. */
-        if (SETTINGS_FORM(line)) { j -= 1; break; }
+        if (SETTINGS_FORM(line)) { j -= 1; cut = true; break; }
         depth += brackets(line);
         if (depth <= 0) break;
         body.push(arr[j]);
+      }
+      /* The poll ended inside the block: the brackets never came back to zero
+         and the input ran out first. The lines from the opening bracket to the
+         end of this poll are one unfinished block, and every one of them is
+         about to be thrown away by an offset that moves past them. Holding them
+         is what makes the next poll able to read the block whole - without it
+         the block's mode is simply lost, because a settings block is recognised
+         only by the line it starts with. The scan then stops: the lines after
+         this point in the poll are part of the same unfinished block, and
+         reading them on their own is exactly the mistake being avoided. */
+      if (depth > 0 && !cut && j >= arr.length) {
+        carry = { kind: "settings", lines: arr.slice(i), tries: carried ? carried.tries + 1 : 0 };
+        break;
       }
       /* A V1 block belongs to a Creative island: no rank, no team size, no build
          mode. It is skipped rather than read, and its MatchmakingId is not kept,
@@ -782,7 +850,42 @@ export function scanLog(lines, opts = {}) {
        lets a Creative match be found again from its own start. The title is
        bound to the LinkId nearest it; his log has exactly one title per LinkId,
        so the first one seen is the one that stands. */
-    if (ISLAND_OPEN.test(text)) { island = { i }; continue; }
+    if (ISLAND_OPEN.test(text)) {
+      /* The block runs opener, LinkId, Session, and only the Session line binds
+         the island to the match about to be assigned. A poll that ends before
+         that line has nothing but the opener, and the next poll begins after it:
+         the block is never recognised again because it is recognised only by the
+         line it starts with, so the island vanishes and its Creative match is
+         left unproved. Looking ahead within the same window the title binding
+         already uses is enough to tell a block that finishes in this input from
+         one that does not. The bare opener is the only shape carried: an inline
+         "Island: <title>" is complete on its own line, and his log writes one of
+         those with no Session line after it at all. */
+      let complete = false;
+      for (let k = i + 1; k < arr.length && k - i <= LINK_TITLE_WINDOW; k++) {
+        const next = textOf(arr[k]);
+        if (ISLAND_SESSION.test(next)) { complete = true; break; }
+        if (ISLAND_OPEN.test(next)) break;
+      }
+      /* Only a poll that ran out of lines can be carrying half a block. One that
+         reached the end of the window with no Session line in it has read as far
+         as this block could ever reach, so there is no block to wait for and the
+         opener is left to the ordinary path. That keeps the carry bounded by the
+         window rather than by how much of the file one poll was handed. */
+      if (!complete && i + LINK_TITLE_WINDOW >= arr.length) {
+        /* His log names an island on the line just above its block as often as
+           inside it, and a title only binds to a LinkId when the two are near
+           each other. Carrying the opener alone would leave that title behind in
+           a poll whose state is dropped, and the island would come back named
+           but nameless. One line of lookbehind, only when it is the line
+           immediately before, keeps the pair together. */
+        const from = lastTitle && lastTitle.i === i - 1 ? lastTitle.i : i;
+        carry = { kind: "island", lines: arr.slice(from), tries: carried ? carried.tries + 1 : 0 };
+        break;
+      }
+      island = { i };
+      continue;
+    }
     const inlineIsland = ISLAND_INLINE.exec(text);
     if (inlineIsland) {
       /* "Island: <title>" on one line: the title is the island's own,
@@ -1065,6 +1168,7 @@ export function scanLog(lines, opts = {}) {
       inflight: settle ? inflight.slice(-INFLIGHT_MAX) : [],
       islands: keptIslands,
       links: keptLinks,
+      carry,
     },
   };
 }

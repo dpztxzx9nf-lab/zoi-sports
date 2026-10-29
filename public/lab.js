@@ -754,7 +754,14 @@ function renderRanked() {
     const li = el('li', 'lab-rank-row');
     const name = el('span', 'lab-rank-name', g.label || g.setting);
     const d = el('span', 'lab-rank-d', isNum(g.kills_delta) ? signed(g.kills_delta, 2) + ' a match' : '\u2014');
-    const meta = el('span', 'lab-rank-meta', g.better + ' of ' + g.changes + ' better \u00b7 ' + matchesWord(g.matches) + (isNum(g.delta) ? ' \u00b7 ' + points(g.delta) + ' pts win rate' : ''));
+    /* A setting that made things worse used to be visible only as the gap
+       between "better" and "changes": 0 of 3 better reads as three games that
+       taught nothing, when all three went the other way. The count is the one
+       thing worth saying twice, so it goes in the same line. */
+    const worse = isNum(g.worse) ? g.worse : 0;
+    const meta = el('span', 'lab-rank-meta', g.better + ' of ' + g.changes + ' better'
+      + (worse > 0 ? ', ' + worse + ' worse' : '')
+      + ' \u00b7 ' + matchesWord(g.matches) + (isNum(g.delta) ? ' \u00b7 ' + points(g.delta) + ' pts win rate' : ''));
     const line = el('div', 'lab-rank-head');
     line.append(name, d);
     li.append(line, meta);

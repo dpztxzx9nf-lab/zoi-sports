@@ -305,6 +305,16 @@ export const SNAPSHOT_MAX_BYTES = 200 * 1024;
 export const SNAPSHOT_MAX_SETTINGS = 2000;
 export const SNAPSHOT_KEEP = 200;         // newest N kept per person
 export const MIN_SETTINGS = 5;            // below this it is not a config
+/* Five names tells a config from a handful of bytes, but it does not tell this
+   lab's config from any other object with five keys in it: the endpoint skips
+   names it does not recognise, so a blob of nonsense met the count, was stored
+   as a snapshot, and became the diff baseline the next real read was measured
+   against. These are the names the catalog reads. A real save carries thirteen
+   of the fourteen, so requiring three still admits a save that is missing one
+   or two, and refuses anything that is not a settings file. MIN_SETTINGS stays
+   as the floor on the number of names; this is the separate question of whether
+   any of them are ours. */
+export const MIN_TRACKED = 3;
 
 /* SHA-256, lowercase hex. Tokens are only ever stored this way, so a copy of the
    database cannot be turned back into a working token. */
