@@ -2,16 +2,18 @@
    any tracked change into an open lab test.
 
    Auth is a per-person bearer token, not the Access JWT: a PC cannot sit
-   through a Google sign-in, so /api/lab/sync is the one lab path Access lets
-   through (see _middleware.js). The token is checked here by hashing what the
-   request carried and looking that hash up in lab_tokens. An unknown token, a
-   revoked one and a missing one all answer 401 with the same body, so nothing
-   can be learned by trying. */
+   through a Google sign-in. This handler sits at /api/lab-sync, outside the
+   Access-protected /api/lab/ tree on purpose: Access has no way to exclude a
+   path inside an app it protects, so the one path a PC uses lives beside them
+   instead. The bearer token is the only thing protecting it. The token is
+   checked here by hashing what the request carried and looking that hash up in
+   lab_tokens. An unknown token, a revoked one and a missing one all answer 401
+   with the same body, so nothing can be learned by trying. */
 import {
   CATALOG, MIN_SETTINGS, PROPERTY_MAP, SNAPSHOT_KEEP, SNAPSHOT_MAX_BYTES,
   SNAPSHOT_MAX_SETTINGS, canonicalJson, json, sameValue, sha256Hex, str, valueText,
-} from "../../_lib/lab.js";
-import { epicIdOf, fetchStats, recordStats, summarize, updateGamesPlayed } from "../../_lib/lab-stats.js";
+} from "../_lib/lab.js";
+import { epicIdOf, fetchStats, recordStats, summarize, updateGamesPlayed } from "../_lib/lab-stats.js";
 
 const TAKEN_AT_MAX = 40;
 const SOURCE_MAX = 40;

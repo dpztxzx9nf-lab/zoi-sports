@@ -12,12 +12,18 @@
    read out of it. If the folder name is not 32 lowercase hex characters it is
    left out and the settings still go up.
 
+   Watching sends when a config file changes and settles, and also once an hour
+   when nothing changed at all. The hourly send is a duplicate snapshot, so the
+   server opens no tests for it, but it still reads the account's match numbers:
+   forty matches played without touching a setting would otherwise never reach
+   the lab, and games_played would sit still.
+
    Usage:
      node tools/zoi-lab-agent.mjs           watch and send when the config changes
      node tools/zoi-lab-agent.mjs --once    send one snapshot and exit
 
    The token and address live in tools/zoi-lab-agent.json:
-     { "endpoint": "https://zoisports.com/api/lab/sync", "token": "..." }
+     { "endpoint": "https://zoisports.com/api/lab-sync", "token": "..." }
 
    Register it at logon (PowerShell, one line; --once is what the task runs):
      schtasks /Create /SC ONLOGON /TN "Zoi Lab Agent" /TR "\"%LOCALAPPDATA%\Programs\zoi\zoi-lab-agent.cmd\" --once" /F
@@ -40,6 +46,7 @@ const QUIET_CHECK_MS = 4_000;
 const QUIET_MAX_MS = 5 * 60_000;
 const SEND_TRIES = 4;          // one try and three retries
 const BACKOFF_MS = [5_000, 15_000, 45_000];
+const HEARTBEAT_MS = 60 * 60_000;  // send anyway this often, even with no change
 
 /* --------------------------------------------------------------- INI ----
    Same key list as parse.py's INI_FIELDS. Duplicates there are harmless. */
@@ -300,7 +307,7 @@ async function loadConfig() {
     process.exit(1);
   }
   if (!endpoint) {
-    console.log("The config file at " + CONFIG_PATH + " has no endpoint - use https://zoisports.com/api/lab/sync.");
+    console.log("The config file at " + CONFIG_PATH + " has no endpoint - use https://zoisports.com/api/lab-sync.");
     process.exit(1);
   }
   return { token, endpoint };
@@ -374,18 +381,51 @@ async function waitQuiet() {
   return false;
 }
 
-async function watch(cfg) {
-  console.log("Watching Fortnite's config. Sending when it changes and settles.");
+/* The watch loop. Timings, the clock, the send and the quiet wait are all
+   optional so a harness can run an hour of watching in a moment; with nothing
+   passed in it is the loop above, unchanged. */
+export async function watch(cfg, opts = {}) {
+  const pollMs = opts.pollMs ?? POLL_MS;
+  const heartbeatMs = opts.heartbeatMs ?? HEARTBEAT_MS;
+  const clock = opts.now ?? Date.now;
+  const sleepFor = opts.sleep ?? sleep;
+  const waitForQuiet = opts.quiet ?? waitQuiet;
+  const sendNow = opts.send ?? send;
+  const ticks = opts.ticks ?? Infinity;     // harness only: stop after N polls
+
+  console.log("Watching Fortnite's config. Sending when it changes and settles, and once an hour regardless.");
   let last = await signature();
   if (!last) console.log("No config found yet under " + savedDir + " - waiting for the game to run.");
-  for (;;) {
-    await sleep(POLL_MS);
-    const now = await signature();
-    if (now === last) continue;              // nothing changed: say nothing
-    last = now;
-    await waitQuiet();
-    await send(cfg);
-    last = await signature();               // whatever the send did, watch from here
+
+  /* A fresh start counts as just sent: the logon task runs --once, so nothing is
+     due until a full heartbeat has gone by. */
+  let lastSentAt = clock();
+
+  for (let i = 0; i < ticks; i++) {
+    await sleepFor(pollMs);
+    const sig = await signature();
+    const changed = sig !== last;
+    const due = clock() - lastSentAt >= heartbeatMs;
+    if (!changed && !due) continue;          // nothing changed and not due: say nothing
+
+    if (changed) {
+      last = sig;
+      await waitForQuiet();
+    } else {
+      /* Nothing moved. The snapshot is identical to the last one, so the lab
+         dedupes it and opens no tests - but the stats read still runs, which is
+         the only thing that moves games_played on a long session that never
+         touched a setting. Said out loud so a send with no change is not a
+         mystery in the log. */
+      console.log("Nothing changed in the last " + Math.round(heartbeatMs / 60_000) +
+        " minutes - sending anyway so the match numbers stay current.");
+    }
+
+    await sendNow(cfg);
+    /* Any attempt restarts the clock, so a refused token or a dropped connection
+       costs one line a heartbeat rather than one a poll. */
+    lastSentAt = clock();
+    last = await signature();                // whatever the send did, watch from here
   }
 }
 

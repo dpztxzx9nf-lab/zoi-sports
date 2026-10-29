@@ -34,7 +34,7 @@ Add `--dry-run` to validate and print the JSON without writing, or `--list` for 
 
 - `tools/zoi-lab-agent.mjs` reads `GameUserSettings.ini` and `ClientSettings.Sav` and posts a snapshot. It never writes to a Fortnite file. Token and endpoint live in `tools/zoi-lab-agent.json`, which is gitignored.
 - The agent also reports the Epic account id it finds in the newest `%LOCALAPPDATA%\FortniteGame\Saved\Cloud\<id>\` folder, and the lab uses it to read that account's lifetime match numbers. `GET /api/lab/stats` serves them to the page.
-- `POST /api/lab/sync` is the one lab path without an Access check: the agent authenticates with its own token instead. Cloudflare Access has to leave that path open as well, and that is a dashboard setting.
+- `POST /api/lab-sync` is the one lab path without an Access check: the agent authenticates with its own token instead. It deliberately sits outside `/api/lab/`, because Access protects a prefix and cannot exclude one path inside it, so the token is the only thing in front of the endpoint.
 - Migrations `0005_lab_sync.sql` and `0006_lab_stats.sql` create the tables. The stats read needs the Pages secret `FORTNITE_API_KEY`; with no secret set, syncs still work and simply store no numbers.
 
 ## Deploy
