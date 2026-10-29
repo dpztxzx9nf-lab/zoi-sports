@@ -15,7 +15,6 @@ const hide = n => { n.hidden = true; };
 
 const state = { perf: null, tokens: [] };
 const nodes = {
-  who: $('who'),
   loadError: $('load-error'), loadErrorText: $('load-error-text'), retry: $('retry'),
   app: $('app'), figures: $('figures'), figuresNote: $('figures-note'),
   now: $('now'), nowBlock: $('now-block'),
@@ -25,7 +24,6 @@ const nodes = {
   chartWin: $('chart-win'), chartWinBox: $('chart-win-box'),
   chartKey: $('chart-key'), chartEmpty: $('chart-empty'),
   progress: $('progress'), changes: $('changes'), ranked: $('ranked'),
-  startBlock: $('start-block'),
   changesBlock: $('changes-block'), rankedBlock: $('ranked-block'),
   pcConnect: $('pc-connect'), pcLabel: $('pc-label'), pcAdd: $('pc-add'),
   pcErrors: $('pc-errors'), pcToken: $('pc-token'), pcTokenValue: $('pc-token-value'),
@@ -140,7 +138,6 @@ function failLoad(message) {
 
 function needSignIn() {
   signInNeeded = true;
-  hide(nodes.who);
   failLoad('Your sign-in expired. Reload the page to sign in again.');
 }
 
@@ -159,18 +156,11 @@ async function load() {
     return false;
   }
   state.perf = r.data || {};
-  showWho(r.data && r.data.me);
   signInNeeded = false;
   hide(nodes.loadError);
   show(nodes.app);
   render();
   return true;
-}
-
-function showWho(me) {
-  const seen = me && typeof me === 'object' ? String(me.email || me.name || '').trim() : '';
-  nodes.who.textContent = seen ? 'Signed in as ' + seen + '.' : '';
-  if (seen) show(nodes.who); else hide(nodes.who);
 }
 
 /* ---------- lifetime figures ---------- */
@@ -186,7 +176,7 @@ function renderFigures() {
   const L = state.perf && state.perf.lifetime;
   nodes.figures.replaceChildren();
   if (!L || !(L.matches > 0)) {
-    nodes.figures.append(el('p', 'lab-empty', 'No numbers yet. They arrive with the first sync from your PC.'));
+    nodes.figures.append(el('p', 'lab-empty', 'No numbers yet.'));
     hide(nodes.figuresNote);
     return;
   }
@@ -199,10 +189,9 @@ function renderFigures() {
   );
 
   const sessions = state.perf.sessions || 0;
-  const note = sessions
-    ? 'Split into ' + sessions + (sessions === 1 ? ' session' : ' sessions') + ' so far, one per gap between syncs.'
-    : 'Still one reading. Play a few games and it splits into sessions.';
-  nodes.figuresNote.textContent = note;
+  /* One session is not worth a sentence: the figures above already say so. */
+  if (!sessions) { hide(nodes.figuresNote); return; }
+  nodes.figuresNote.textContent = 'Split into ' + sessions + (sessions === 1 ? ' session' : ' sessions') + ' so far, one per gap between syncs.';
   show(nodes.figuresNote);
 }
 
@@ -255,7 +244,7 @@ function renderCurrent() {
   nodes.current.replaceChildren();
   renderMode();
   if (!c || !Array.isArray(c.settings) || !c.settings.length) {
-    nodes.current.append(el('p', 'lab-empty', 'Nothing yet. Your PC sends the whole config with every sync, so this fills in on its own.'));
+    nodes.current.append(el('p', 'lab-empty', 'Nothing yet.'));
     hide(nodes.currentNote);
     return;
   }
@@ -472,7 +461,7 @@ function matchReading(c) {
   if (m.verdict === 'too-soon') {
     const floor = m.min_games || 25;
     if (m.reason === 'after-thin' && m.after === 0) {
-      box.append(el('p', 'lab-c-fine', 'No recorded matches since the change yet. A replay is written at the end of a match this PC played, so this fills in after the next one.'));
+      box.append(el('p', 'lab-c-fine', 'No recorded matches since the change yet.'));
     } else {
       box.append(el('p', 'lab-c-fine', 'Under ' + floor + ' recorded matches a side, so this is the start of the sample rather than a verdict.'));
     }
@@ -605,7 +594,7 @@ function renderNow() {
 
     const need = isNum(c.games_target) ? c.games_target : null;
     if (need === null) {
-      card.append(el('p', 'lab-c-note', 'No kill rate to size a target from yet. Play a few games and this will fill in.'));
+      card.append(el('p', 'lab-c-note', 'No kill rate to size a target from yet.'));
     } else if (need > UNREACHABLE) {
       card.append(el('p', 'lab-c-note', 'A move of one kill a match would take about ' + group(need) + ' games on each side at your rate, which is more than one setting is worth. Play it and trust how it feels.'));
     } else {
@@ -693,8 +682,7 @@ function renderWindow() {
   if (w.unplaced > 0) {
     bits.push(matchesWord(w.unplaced) + (w.unplaced === 1 ? ' was' : ' were') + ' played across the change and cannot be placed on either side, so ' + (w.unplaced === 1 ? 'it is' : 'they are') + ' in neither figure.');
   }
-  if (!bits.length) bits.push('These are the games since your last settings change.');
-  card.append(el('p', 'lab-c-fine', bits.join(' ')));
+  if (bits.length) card.append(el('p', 'lab-c-fine', bits.join(' ')));
 
   nodes.window.append(card);
 }
@@ -856,7 +844,7 @@ function renderCharts() {
   if (!chart.length) {
     hide(nodes.chartKpm);
     hide(nodes.chartWin);
-    nodes.chartEmpty.textContent = 'No sessions yet. A session appears once two syncs show different match counts, which means you played in between.';
+    nodes.chartEmpty.textContent = 'No sessions yet.';
     show(nodes.chartEmpty);
     hide(nodes.chartKey);
     return;
@@ -1339,15 +1327,12 @@ function render() {
 }
 
 /* ---------- what to show before there is anything ----------
-   A first-time reader has no changes, no open tests and nothing ranked, which
-   used to render three separate dashed "nothing here yet" boxes in a row. That
-   reads as a broken page. One sentence that says what to do instead, and the
-   three sections stay out of the way until each has something real in it. */
+   A first-time reader has no changes and nothing ranked, which used to render
+   two separate dashed "nothing here yet" boxes in a row. That reads as a broken
+   page, so both sections stay out of the way until each has something real. */
 function renderEmptiness() {
   const list = (state.perf && Array.isArray(state.perf.changes)) ? state.perf.changes : [];
   const ranked = (state.perf && Array.isArray(state.perf.ranked)) ? state.perf.ranked : [];
-  const empty = !list.length && !ranked.length;
-  if (empty) show(nodes.startBlock); else hide(nodes.startBlock);
 
   /* The open-test block is owned by renderNow, which hides it when there is
      nothing open. This one only decides the history sections. */

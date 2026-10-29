@@ -19,7 +19,7 @@
 <meta name="apple-mobile-web-app-title" content="Zoi Lab">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="styles.css?v=36">
+<link rel="stylesheet" href="styles.css?v=37">
 </head>
 <body class="lab-page">
 <header class="nav"><a href="/" class="brand"><img class="zw" src="/assets/zoi-wordmark-gold.png?v=10" alt="Zoi" width="600" height="320"></a>
@@ -27,8 +27,6 @@
 <div class="nav-end"><button class="menu" aria-label="Menu" aria-expanded="false">☰</button><button class="acct-btn" type="button" id="acct-btn" aria-haspopup="dialog" aria-expanded="false" aria-label="Your account" hidden><span class="acct-initial" id="acct-initial">?</span></button></div></header>
 <main class="lab">
 <h1 class="lab-h1">Settings Lab</h1>
-<p class="lab-who" id="who" hidden></p>
-<p class="lab-lede">Your settings, measured. Change one, play, and this page compares the games after it with the ones before.</p>
 
 <div class="lab-error" id="load-error" hidden>
  <p id="load-error-text">Couldn't reach the log. It may be the connection.</p>
@@ -80,11 +78,6 @@
  <div id="ranked"></div>
 </section>
 
-<section class="lab-block" id="start-block" hidden>
- <h2 class="lab-h2">Nothing tested yet</h2>
- <p class="lab-start">Change one setting in Fortnite and play a session. The next sync logs the change by itself and starts measuring it, and this page fills in from there.</p>
-</section>
-
 <!-- 6. The setup and the reference material. Real, but not what he opens the
      page to read, so it sits below everything that is about the games. -->
 <section class="lab-block">
@@ -107,6 +100,6 @@
 
 <script src="main.js" defer></script>
 <script src="account.js?v=3" defer></script>
-<script src="lab.js?v=14" defer></script>
+<script src="lab.js?v=15" defer></script>
 </body>
 </html>
