@@ -32,19 +32,6 @@ h2::after{content:"";display:block;width:min(220px,56vw);height:10px;margin:.85r
 .hero h1{font-size:clamp(2.8rem,10vw,5rem);letter-spacing:.12em;margin-top:1rem;background:linear-gradient(180deg,#fff 0,#f3ead0 55%,var(--g));-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-stroke:0;filter:drop-shadow(0 0 18px #ffd63c22)}
 .hero h1 .pron{-webkit-text-stroke:0;-webkit-text-fill-color:var(--g)}
 .pron{font-size:.35em;letter-spacing:.1em;color:var(--g);font-family:system-ui}
-.greek{color:var(--g);font-size:1.3rem;margin:0}
-
-/* ---------- the chapter designation ----------
-   ΖΩΗ set between two rules, the way a plaque over a doorway is set, with the
-   chapter's year beside it. Greek capitals are not in Graduate, so the letters
-   fall to Georgia - which has had a Greek range since forever and is a serif, so
-   the switch is invisible rather than a different typeface arriving. */
-.chapter{display:flex;align-items:baseline;justify-content:center;gap:.75rem;margin:1.05rem auto .55rem;max-width:460px;padding:0 1rem}
-.chapter::before,.chapter::after{content:"";flex:1 1 0;min-width:18px;height:1px;background:linear-gradient(90deg,transparent,#e6d3a0a6);align-self:center}
-.chapter::after{background:linear-gradient(270deg,transparent,#e6d3a0a6)}
-.chapter .gr{font:400 clamp(1.5rem,6vw,1.95rem)/1 Georgia,"Times New Roman",serif;letter-spacing:.3em;padding-left:.3em;color:var(--gold);text-shadow:0 0 22px #ffd63c24}
-.chapter .chapter-k{font:400 .64rem/1.4 Graduate,Georgia,serif;letter-spacing:.32em;text-transform:uppercase;color:var(--g);white-space:nowrap}
-.chapter .chapter-k .dot{color:#e6d3a080;margin:0 .35em}
 
 /* the same designation, quietly, at the top of an inner page */
 .legal .page-chapter{text-align:center}
@@ -98,7 +85,7 @@ footer{text-align:center;padding:0 1rem 2rem;color:var(--m)}footer .stripes{marg
 #status{margin:0;min-height:1.4em}#status.ok{color:#5cf2a0}#status.err{color:#ff6b8b}
 @media(min-width:700px){.form .grid{grid-template-columns:1fr 1fr}}
 .legal{max-width:760px;margin:0 auto;text-align:left}.legal h3{margin-top:1.6rem}.legal ul{padding-left:1.3rem}.legal li{margin:.25rem 0}
-.shop-hero{text-align:center;padding-top:3rem}.shop-hero .est{position:static;display:inline-block;color:var(--g);letter-spacing:.3em;font-size:.8rem}.products{gap:1.2rem}.product{text-align:center;display:flex;flex-direction:column;align-items:stretch;min-width:0}.product img,.teaser img{display:block;width:100%;max-width:100%;height:auto;aspect-ratio:16/9;object-fit:cover;border-radius:10px;border:1px solid #e6d3a033}.product p{margin:.3rem 0}.price{color:var(--g);font-family:Graduate,Georgia,serif;letter-spacing:.1em;font-size:.85rem}.product .btn{margin-top:auto}.btn[disabled]{opacity:.55;cursor:not-allowed;filter:grayscale(.3)}.notify{text-align:center;margin-top:2rem}.muted{color:var(--m);text-align:center}.teaser{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem;margin:1rem 0}
+.shop-hero{text-align:center;padding-top:3rem}.products{gap:1.2rem}.product{text-align:center;display:flex;flex-direction:column;align-items:stretch;min-width:0}.product img,.teaser img{display:block;width:100%;max-width:100%;height:auto;aspect-ratio:16/9;object-fit:cover;border-radius:10px;border:1px solid #e6d3a033}.product p{margin:.3rem 0}.price{color:var(--g);font-family:Graduate,Georgia,serif;letter-spacing:.1em;font-size:.85rem}.product .btn{margin-top:auto}.btn[disabled]{opacity:.55;cursor:not-allowed;filter:grayscale(.3)}.notify{text-align:center;margin-top:2rem}.muted{color:var(--m);text-align:center}.teaser{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem;margin:1rem 0}
 .product .btn{border:0;font:inherit;font-weight:700;font-size:.85rem}
 @media(min-width:760px){.cards.products{grid-template-columns:repeat(3,1fr)}}
 .flagship{grid-column:1/-1;border-top-width:4px;box-shadow:0 0 40px #ffd63c22}.flagship .badge{display:inline-block;border:1px solid var(--g);color:var(--g);font:400 .75rem Graduate,Georgia,serif;letter-spacing:.25em;text-transform:uppercase;padding:.2rem .7rem;border-radius:3px;margin-bottom:.4rem}.flagship h3{font-size:1.6rem}@media(min-width:760px){.flagship{flex-direction:row;gap:2rem;text-align:left;align-items:center}.flagship img{width:48%}.flagship .info{flex:1}.flagship .btn{margin-top:.6rem}}
