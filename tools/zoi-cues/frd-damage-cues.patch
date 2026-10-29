@@ -1,0 +1,623 @@
+diff --git a/src/FortniteReplayReader/FortniteReplayBuilder.cs b/src/FortniteReplayReader/FortniteReplayBuilder.cs
+index 46b999d..8dffcea 100644
+--- a/src/FortniteReplayReader/FortniteReplayBuilder.cs
++++ b/src/FortniteReplayReader/FortniteReplayBuilder.cs
+@@ -1,6 +1,7 @@
+ ﻿using System.Diagnostics.CodeAnalysis;
+ using FortniteReplayReader.Models;
+ using FortniteReplayReader.Models.NetFieldExports;
++using FortniteReplayReader.Models.NetFieldExports.RPC;
+ using FortniteReplayReader.Models.NetFieldExports.Weapons;
+ 
+ namespace FortniteReplayReader;
+@@ -17,6 +18,9 @@ public class FortniteReplayBuilder
+     private readonly Dictionary<uint, uint> _actorToChannel = new();
+     private readonly Dictionary<uint, uint> _channelToActor = new();
+     private readonly Dictionary<uint, uint> _pawnChannelToStateChannel = new();
++    // EXPERIMENT HOOK: pawn ACTOR GUID -> PlayerState channel. Keyed by guid, not by channel,
++    // so it survives channel reuse (a channel is recycled when a pawn dies and respawns).
++    private readonly Dictionary<uint, uint> _pawnActorToStateChannel = new();
+ 
+     /// <summary>
+     /// Sometimes we receive a PlayerPawn but we havent received the PlayerState yet, so we dont want to processes these yet.
+@@ -37,6 +41,58 @@ public class FortniteReplayBuilder
+     private float? ReplicatedWorldTimeSeconds = 0;
+     private double? ReplicatedWorldTimeSecondsDouble = 0;
+ 
++    // ==== EXPERIMENT HOOK (added for the /tmp/probe3 research harness) ===============
++    // Live views of the channel<->actor<->playerstate maps, so an out-of-tree harness can
++    // attribute a damage RPC (which arrives on a pawn channel) to a display name.
++    public IReadOnlyDictionary<uint, uint> ExperimentChannelToActor => _channelToActor;
++    public IReadOnlyDictionary<uint, uint> ExperimentPawnChannelToStateChannel => _pawnChannelToStateChannel;
++    public IReadOnlyDictionary<uint, PlayerData> ExperimentPlayers => _players;
++    public IReadOnlyDictionary<uint, WeaponData> ExperimentWeapons => _weapons;
++    public uint? ExperimentRecorderId => GameData.RecorderId;
++    public IReadOnlyDictionary<uint, uint> ExperimentActorToChannel => _actorToChannel;
++    public IReadOnlyDictionary<uint, uint> ExperimentPawnActorToStateChannel => _pawnActorToStateChannel;
++    /// <summary>Resolve a HitActor actor-guid to a player, immune to channel reuse.</summary>
++    public bool ExperimentResolveActorGuid(uint actorGuid, out string? name)
++    {
++        if (_pawnActorToStateChannel.TryGetValue(actorGuid, out var sc) && _players.TryGetValue(sc, out var pd))
++        { name = pd.PlayerName; return true; }
++        name = null; return false;
++    }
++    /// <summary>Same resolution path the production <see cref="UpdateBatchedDamage"/> uses.</summary>
++    public bool ExperimentResolveActor(uint actorGuid, out string? name)
++    {
++        if (TryGetPlayerDataFromActor(actorGuid, out var pd)) { name = pd.PlayerName; return true; }
++        name = null; return false;
++    }
++    /// <summary>All three maps, as CSV blocks, for out-of-tree joins.</summary>
++    public string ExperimentDumpMaps()
++    {
++        var sb = new System.Text.StringBuilder();
++        sb.AppendLine("=== ACTOR_TO_CHANNEL ===");
++        sb.AppendLine("actorGuid,channel");
++        foreach (var kv in _actorToChannel) sb.AppendLine($"{kv.Key},{kv.Value}");
++        sb.AppendLine("=== PAWN_CHANNEL_TO_STATE_CHANNEL ===");
++        sb.AppendLine("pawnChannel,stateChannel");
++        foreach (var kv in _pawnChannelToStateChannel) sb.AppendLine($"{kv.Key},{kv.Value}");
++        sb.AppendLine("=== PLAYERS ===");
++        sb.AppendLine("stateChannel,name,kills,placement,team,isBot,playerId,epicId,platformId");
++        foreach (var kv in _players) sb.AppendLine($"{kv.Key},{kv.Value.PlayerName},{kv.Value.Kills},{kv.Value.Placement},{kv.Value.TeamIndex},{kv.Value.IsBot},{kv.Value.PlayerId},{kv.Value.EpicId},{kv.Value.PlatformUniqueNetId}");
++        sb.AppendLine("=== PAWN_ACTOR_TO_STATE_CHANNEL ===");
++        sb.AppendLine("pawnActorGuid,stateChannel");
++        foreach (var kv in _pawnActorToStateChannel) sb.AppendLine($"{kv.Key},{kv.Value}");
++        sb.AppendLine("=== CHANNEL_TO_ACTOR ===");
++        sb.AppendLine("channel,actorGuid");
++        foreach (var kv in _channelToActor) sb.AppendLine($"{kv.Key},{kv.Value}");
++        return sb.ToString();
++    }
++    public bool ExperimentResolvePawn(uint pawnChannel, out string? name, out uint stateChannel)
++    {
++        if (_pawnChannelToStateChannel.TryGetValue(pawnChannel, out stateChannel) &&
++            _players.TryGetValue(stateChannel, out var pd)) { name = pd.PlayerName; return true; }
++        name = null; stateChannel = 0; return false;
++    }
++    // ================================================================================
++
+     public void AddActorChannel(uint channelIndex, uint guid)
+     {
+         _actorToChannel[guid] = channelIndex;
+@@ -54,6 +110,53 @@ public class FortniteReplayBuilder
+     /// </summary>
+     /// <param name="replay"></param>
+     /// <returns>FortniteReplay</returns>
++    // ==== EXPERIMENT HOOK (added for the /tmp/probe3 research harness) ===============
++    private readonly List<BatchedDamageEvent> BatchedDamageEvents = new();
++
++    /// <summary>
++    /// Attribute a <c>NetMulticast_Athena_BatchedDamageCues</c> RPC to the pawn whose channel
++    /// carried it. Mirrors the 2022 fork's <c>GameInformation.UpdateBatchedDamage</c>: the RPC is
++    /// broadcast from the *shooter's* pawn, so <paramref name="channelIndex"/> identifies the attacker.
++    /// </summary>
++    public void UpdateBatchedDamage(uint channelIndex, BatchedDamageCues cues)
++    {
++        TryGetPlayerDataFromPawn(channelIndex, out var shooter);
++
++        string? victimName = null;
++        if (cues.HitActor is uint hitActor && hitActor > 0)
++        {
++            TryGetPlayerDataFromActor(hitActor, out var victim);
++            victimName = victim?.PlayerName;
++        }
++
++        BatchedDamageEvents.Add(new BatchedDamageEvent
++        {
++            ChannelIndex = channelIndex,
++            TimeSeconds = ReplicatedWorldTimeSeconds ?? -1f,
++            ReplayDataIndex = -1,
++            InstigatorName = shooter?.PlayerName,
++            InstigatorIsReplayOwner = shooter?.IsReplayOwner,
++            VictimName = victimName,
++            HitActor = cues.HitActor,
++            NonPlayerHitActor = cues.NonPlayerHitActor,
++            Location = cues.Location,
++            Normal = cues.Normal,
++            Magnitude = cues.Magnitude,
++            NonPlayerMagnitude = cues.NonPlayerMagnitude,
++            bWeaponActivate = cues.bWeaponActivate,
++            bIsFatal = cues.bIsFatal,
++            bIsCritical = cues.bIsCritical,
++            bIsShield = cues.bIsShield,
++            bIsShieldDestroyed = cues.bIsShieldDestroyed,
++            bIsShieldApplied = cues.bIsShieldApplied,
++            bIsBallistic = cues.bIsBallistic,
++            bIsValid = cues.bIsValid,
++            NonPlayerbIsFatal = cues.NonPlayerbIsFatal,
++            NonPlayerbIsCritical = cues.NonPlayerbIsCritical,
++        });
++    }
++    // ================================================================================
++
+     public FortniteReplay Build(FortniteReplay replay)
+     {
+         UpdateTeamData();
+@@ -62,6 +165,7 @@ public class FortniteReplayBuilder
+         replay.KillFeed = KillFeed;
+         replay.TeamData = _teams.Values;
+         replay.PlayerData = _players.Values;
++        replay.BatchedDamageEvents = BatchedDamageEvents; // EXPERIMENT HOOK
+         return replay;
+     }
+ 
+@@ -309,6 +413,11 @@ public class FortniteReplayBuilder
+             if (_actorToChannel.TryGetValue(actorId, out var stateChannelIndex))
+             {
+                 _pawnChannelToStateChannel[channelIndex] = stateChannelIndex;
++                // EXPERIMENT HOOK: also key by the pawn's OWN actor guid (valid at this instant).
++                if (_channelToActor.TryGetValue(channelIndex, out var pawnGuid))
++                {
++                    _pawnActorToStateChannel[pawnGuid] = stateChannelIndex;
++                }
+             }
+             else
+             {
+@@ -443,6 +552,10 @@ public class FortniteReplayBuilder
+         inventory.Items.Add(inventoryItem);
+     }
+ 
++    // EXPERIMENT HOOK: current weapon actor guid for a pawn channel, if tracked.
++    public bool ExperimentTryGetWeapon(uint pawnChannel, out WeaponData weapon)
++        => _weapons.TryGetValue(pawnChannel, out weapon);
++
+     public void UpdateWeapon(uint channelIndex, BaseWeapon weapon)
+     {
+         if (!_weapons.TryGetValue(channelIndex, out var newWeapon))
+diff --git a/src/FortniteReplayReader/FortniteReplayReader.cs b/src/FortniteReplayReader/FortniteReplayReader.cs
+index 4777400..b9962bc 100644
+--- a/src/FortniteReplayReader/FortniteReplayReader.cs
++++ b/src/FortniteReplayReader/FortniteReplayReader.cs
+@@ -6,6 +6,7 @@ using FortniteReplayReader.Models;
+ using FortniteReplayReader.Models.Enums;
+ using FortniteReplayReader.Models.Events;
+ using FortniteReplayReader.Models.NetFieldExports;
++using FortniteReplayReader.Models.NetFieldExports.RPC;
+ using FortniteReplayReader.Models.NetFieldExports.Weapons;
+ using Microsoft.Extensions.Logging;
+ using Unreal.Core;
+@@ -143,6 +144,12 @@ public class ReplayReader : Unreal.Core.ReplayReader<FortniteReplay>
+             case BaseWeapon weapon:
+                 Builder.UpdateWeapon(channelIndex, weapon);
+                 break;
++            // EXPERIMENT HOOK: the group was already registered at ParseMode.Full and the class
++            // net cache already mapped the RPC, but nothing consumed the result. This is the
++            // dispatch that upstream dropped.
++            case BatchedDamageCues damageCues:
++                Builder.UpdateBatchedDamage(channelIndex, damageCues);
++                break;
+         }
+     }
+ 
+diff --git a/src/FortniteReplayReader/Models/BatchedDamageEvent.cs b/src/FortniteReplayReader/Models/BatchedDamageEvent.cs
+new file mode 100644
+index 0000000..345c72f
+--- /dev/null
++++ b/src/FortniteReplayReader/Models/BatchedDamageEvent.cs
+@@ -0,0 +1,46 @@
++using Unreal.Core.Models;
++
++namespace FortniteReplayReader.Models;
++
++/// <summary>
++/// One <c>NetMulticast_Athena_BatchedDamageCues</c> RPC, attributed to the player whose pawn
++/// channel carried it (that pawn is the instigator/shooter, exactly as in the 2022 fork's
++/// <c>GameInformation.UpdateBatchedDamage</c>).
++/// </summary>
++/// <remarks>
++/// IMPORTANT: this object holds the state left over after the RPC payload has been consumed.
++/// The v7 wire format may pack several cues into a single RPC (repeated handle sequences);
++/// because <see cref="Unreal.Core.NetFieldParser.CreateType"/> hands out one shared, reset
++/// instance per group, only the LAST cue of such a batch survives here. Use the raw header
++/// stream (<c>ReplayReader.OnNetFieldHeader</c>) when per-cue counts are required.
++/// </remarks>
++public class BatchedDamageEvent
++{
++    public uint ChannelIndex { get; init; }
++    public float TimeSeconds { get; init; }
++    public int ReplayDataIndex { get; init; }
++
++    /// <summary>Player that fired, when the pawn channel could be resolved to a PlayerState.</summary>
++    public string? InstigatorName { get; init; }
++    public bool? InstigatorIsReplayOwner { get; init; }
++
++    /// <summary>Player that was hit, when <see cref="HitActor"/> resolved to a known player pawn.</summary>
++    public string? VictimName { get; init; }
++
++    public uint? HitActor { get; init; }
++    public uint? NonPlayerHitActor { get; init; }
++    public FVector Location { get; init; }
++    public FVector Normal { get; init; }
++    public float? Magnitude { get; init; }
++    public float? NonPlayerMagnitude { get; init; }
++    public bool? bWeaponActivate { get; init; }
++    public bool? bIsFatal { get; init; }
++    public bool? bIsCritical { get; init; }
++    public bool? bIsShield { get; init; }
++    public bool? bIsShieldDestroyed { get; init; }
++    public bool? bIsShieldApplied { get; init; }
++    public bool? bIsBallistic { get; init; }
++    public bool? bIsValid { get; init; }
++    public bool? NonPlayerbIsFatal { get; init; }
++    public bool? NonPlayerbIsCritical { get; init; }
++}
+diff --git a/src/FortniteReplayReader/Models/FortniteReplay.cs b/src/FortniteReplayReader/Models/FortniteReplay.cs
+index ce55745..dbce3d9 100644
+--- a/src/FortniteReplayReader/Models/FortniteReplay.cs
++++ b/src/FortniteReplayReader/Models/FortniteReplay.cs
+@@ -44,4 +44,12 @@ public class FortniteReplay : Replay
+     /// Map information
+     /// </summary>
+     public MapData MapData { get; internal set; } = new MapData();
++
++    // ==== EXPERIMENT HOOK (added for the /tmp/probe3 research harness) ===============
++    /// <summary>
++    /// Every <c>NetMulticast_Athena_BatchedDamageCues</c> RPC that was dispatched, in arrival order.
++    /// NOTE: one entry per RPC, not per cue — see <see cref="BatchedDamageEvent"/> for the caveat.
++    /// </summary>
++    public IList<BatchedDamageEvent> BatchedDamageEvents { get; internal set; } = new List<BatchedDamageEvent>();
++    // ================================================================================
+ }
+diff --git a/src/FortniteReplayReader/Models/NetFieldExports/FortClientObservedStat.cs b/src/FortniteReplayReader/Models/NetFieldExports/FortClientObservedStat.cs
+index cfdf3d4..eed42af 100644
+--- a/src/FortniteReplayReader/Models/NetFieldExports/FortClientObservedStat.cs
++++ b/src/FortniteReplayReader/Models/NetFieldExports/FortClientObservedStat.cs
+@@ -4,7 +4,9 @@ using Unreal.Core.Models.Enums;
+ 
+ namespace FortniteReplayReader.Models.NetFieldExports;
+ 
+-[NetFieldExportGroup("/Script/FortniteGame.FortClientObservedStat", minimalParseMode: ParseMode.Debug)]
++// EXPERIMENT HOOK (patched by /tmp/probe2 harness): was ParseMode.Debug, lowered to Full
++// so the group is registered and parsed in a plain ParseMode.Full run.
++[NetFieldExportGroup("/Script/FortniteGame.FortClientObservedStat", minimalParseMode: ParseMode.Full)]
+ public class FortClientObservedStat : INetFieldExportGroup
+ {
+     [NetFieldExport("StatName", RepLayoutCmdType.PropertyName)]
+diff --git a/src/Unreal.Core/Models/NetFieldHeaderEvent.cs b/src/Unreal.Core/Models/NetFieldHeaderEvent.cs
+new file mode 100644
+index 0000000..c8a389d
+--- /dev/null
++++ b/src/Unreal.Core/Models/NetFieldHeaderEvent.cs
+@@ -0,0 +1,44 @@
++namespace Unreal.Core.Models;
++
++/// <summary>
++/// EXPERIMENT HOOK (added for the /tmp/probe3 research harness).
++/// Describes one property header observed inside a single <c>ReceiveProperties</c> call.
++/// A batched RPC payload is a sequence of these (handle, numBits, payload) triples, so
++/// recording the raw header stream is enough to reconstruct per-cue structure without
++/// depending on any particular field being modelled correctly.
++/// </summary>
++public readonly struct NetFieldHeaderEvent
++{
++    /// <summary>PathName of the netfield export group whose payload is being read.</summary>
++    public string GroupPath { get; init; }
++
++    /// <summary>Monotonic id of the enclosing ReceiveProperties call. All headers of one RPC share it.</summary>
++    public long CallId { get; init; }
++
++    /// <summary>True when the enclosing ReceiveProperties call was made from ReceivedRPC (an RPC payload).</summary>
++    public bool IsRpc { get; init; }
++
++    /// <summary>Channel the bunch arrived on. For a NetMulticast damage RPC this is the shooter's pawn channel.</summary>
++    public uint ChannelIndex { get; init; }
++
++    /// <summary>Position in the source archive immediately before the handle was read.</summary>
++    public int HeaderBitOffset { get; init; }
++
++    /// <summary>Zero-based handle (the wire value minus one), i.e. the index into <c>NetFieldExportGroup.NetFieldExports</c>.</summary>
++    public uint Handle { get; init; }
++
++    /// <summary>Export name from the netfield export group, or null when the handle has no export.</summary>
++    public string? ExportName { get; init; }
++
++    /// <summary>Bit length of this property's payload as written on the wire.</summary>
++    public uint NumBits { get; init; }
++
++    /// <summary>Position in the source archive where the payload starts (== HeaderBitOffset + handle/numBits bits).</summary>
++    public int PayloadBitOffset { get; init; }
++
++    /// <summary>True when the payload was skipped rather than parsed (unknown handle or export flagged incompatible).</summary>
++    public bool Skipped { get; init; }
++
++    /// <summary>True when the export is flagged incompatible (either pre-existing or because a previous read failed).</summary>
++    public bool Incompatible { get; init; }
++}
+diff --git a/src/Unreal.Core/Models/NetFieldValueEvent.cs b/src/Unreal.Core/Models/NetFieldValueEvent.cs
+new file mode 100644
+index 0000000..e600c89
+--- /dev/null
++++ b/src/Unreal.Core/Models/NetFieldValueEvent.cs
+@@ -0,0 +1,23 @@
++namespace Unreal.Core.Models;
++
++/// <summary>
++/// EXPERIMENT HOOK (added for the /tmp/probe3 research harness).
++/// Emitted immediately after a property payload was parsed. Pairs 1:1, in order, with the
++/// non-skipped <see cref="NetFieldHeaderEvent"/>s of the same ReceiveProperties call.
++/// </summary>
++public readonly struct NetFieldValueEvent
++{
++    public string GroupPath { get; init; }
++    public uint ChannelIndex { get; init; }
++    public long CallId { get; init; }
++    public bool IsRpc { get; init; }
++    public uint Handle { get; init; }
++    public string? ExportName { get; init; }
++    public uint NumBits { get; init; }
++    public int BitsConsumed { get; init; }
++    public bool Ok { get; init; }
++    public bool ReaderError { get; init; }
++    public bool PayloadFullyConsumed { get; init; }
++    /// <summary>Reflected value of the property, as a string (null when unavailable).</summary>
++    public string? Value { get; init; }
++}
+diff --git a/src/Unreal.Core/NetFieldParser.cs b/src/Unreal.Core/NetFieldParser.cs
+index 20d08d3..5b4c93a 100644
+--- a/src/Unreal.Core/NetFieldParser.cs
++++ b/src/Unreal.Core/NetFieldParser.cs
+@@ -17,6 +17,21 @@ public class NetFieldParser
+     private readonly NetGuidCache GuidCache;
+     public HashSet<string> PlayerControllerGroups { get; private set; } = new();
+ 
++    // ==== EXPERIMENT HOOK (added by /tmp/probe2 research harness) ==================
++    // Bit offset, within the current decompressed replay chunk archive, at which the
++    // payload for the field currently being parsed starts; and that payload's bit count.
++    // Set by Unreal.Core.ReplayReader.ReceiveProperties immediately before it copies the
++    // payload into its _cmdReader. -1 when unknown.
++    public int CurrentPayloadBitOffset { get; set; } = -1;
++    public int CurrentPayloadBitCount { get; set; } = -1;
++    // Bits left in an RPC payload right after ReceiveProperties returned, and the payload's
++    // total bit count. Used by the harness to prove each RPC payload was consumed exactly
++    // (leftover == 0), i.e. no properties were silently skipped.
++    public int LastRpcBitsLeft { get; set; } = -1;
++    public int LastRpcBitsTotal { get; set; } = -1;
++    public string? LastRpcPath { get; set; }
++    // ================================================================================
++
+     //private readonly Dictionary<string, NetFieldGroupInfo> _netFieldGroups = new();
+     private readonly KeyList<string, NetFieldGroupInfo> NetFieldGroups = new();
+     private readonly SingleInstanceExport[] _objects;
+@@ -275,7 +290,7 @@ public class NetFieldParser
+     /// <param name="handle"></param>
+     /// <param name="exportGroup"></param>
+     /// <param name="netBitReader"></param>
+-    public bool ReadField(INetFieldExportGroup obj, NetFieldExport export, uint handle, NetFieldExportGroup exportGroup, NetBitReader netBitReader, bool singleInstance = true)
++    public virtual bool ReadField(INetFieldExportGroup obj, NetFieldExport export, uint handle, NetFieldExportGroup exportGroup, NetBitReader netBitReader, bool singleInstance = true)
+     {
+         if (export.PropertyId == -2 || exportGroup.GroupId == -2)
+         {
+diff --git a/src/Unreal.Core/ReplayReader.cs b/src/Unreal.Core/ReplayReader.cs
+index a125f76..e9a0ffc 100644
+--- a/src/Unreal.Core/ReplayReader.cs
++++ b/src/Unreal.Core/ReplayReader.cs
+@@ -58,6 +58,26 @@ public abstract class ReplayReader<T> where T : Replay, new()
+     protected NetGuidCache _netGuidCache;
+     protected NetFieldParser _netFieldParser;
+ 
++    // ==== EXPERIMENT HOOK (added by /tmp/probe2 research harness) ==================
++    /// <summary>Archive currently being parsed (deepest decompressed chunk archive).</summary>
++    public FArchive CurrentArchive { get; private set; }
++    /// <summary>Float timestamp (seconds) of the demo frame currently being processed.</summary>
++    public float CurrentTimeSeconds { get; private set; } = -1f;
++    /// <summary>Channel index of the bunch currently being processed.</summary>
++    public uint CurrentChannelIndex { get; private set; }
++    /// <summary>Replay-data chunk index currently being parsed.</summary>
++    public int CurrentReplayDataIndex => replayDataIndex;
++    /// <summary>Checkpoint index currently being parsed.</summary>
++    public int CurrentCheckpointIndex => checkpointIndex;
++    /// <summary>Monotonic id of the ReceiveProperties call currently being executed.</summary>
++    public long CurrentPropertiesCallId => _propertiesCallId;
++    /// <summary>True while the current ReceiveProperties call is an RPC payload (from ReceivedRPC).</summary>
++    public bool InRpc => _inRpc;
++    // ================================================================================
++
++    private long _propertiesCallId = 0;
++    private bool _inRpc = false;
++
+     private int replayDataIndex = 0;
+     private int checkpointIndex = 0;
+     private int packetIndex = 0;
+@@ -813,6 +833,8 @@ public abstract class ReplayReader<T> where T : Replay, new()
+ 
+         var timeSeconds = archive.ReadSingle();
+         _logger?.LogDebug("ReadDemoFrameIntoPlaybackPackets at {}", timeSeconds);
++        CurrentArchive = archive;       // EXPERIMENT HOOK
++        CurrentTimeSeconds = timeSeconds; // EXPERIMENT HOOK
+ 
+         if (archive.NetworkVersion >= NetworkVersionHistory.HISTORY_LEVEL_STREAMING_FIXES)
+         {
+@@ -1348,6 +1370,7 @@ public abstract class ReplayReader<T> where T : Replay, new()
+     /// </summary>
+     public virtual bool ReceivedReplicatorBunch(DataBunch bunch, FBitArchive archive, uint? repObject, bool bHasRepLayout)
+     {
++        CurrentChannelIndex = bunch.ChIndex; // EXPERIMENT HOOK
+         var netFieldExportGroup = _netGuidCache.GetNetFieldExportGroup(repObject);
+ 
+         if (netFieldExportGroup is null)
+@@ -1509,7 +1532,23 @@ public abstract class ReplayReader<T> where T : Replay, new()
+             return false;
+         }
+ 
+-        ReceiveProperties(reader, netFieldExportGroup, channelIndex, out _);
++        // EXPERIMENT HOOK: mark this ReceiveProperties call as an RPC payload and give it a fresh id.
++        _propertiesCallId++;
++        _inRpc = true;
++        try
++        {
++            ReceiveProperties(reader, netFieldExportGroup, channelIndex, out _);
++        }
++        finally
++        {
++            _inRpc = false;
++        }
++
++        // EXPERIMENT HOOK (added by /tmp/probe2 research harness): expose whether the RPC payload
++        // was consumed exactly, to prove no properties were silently left unread.
++        _netFieldParser.LastRpcBitsLeft = reader.GetBitsLeft();
++        _netFieldParser.LastRpcBitsTotal = reader.Position + reader.GetBitsLeft();
++        _netFieldParser.LastRpcPath = netFieldExportGroup.PathName;
+ 
+         if (reader.IsError)
+         {
+@@ -1705,8 +1744,12 @@ public abstract class ReplayReader<T> where T : Replay, new()
+ 
+         var hasdata = false;
+ 
++        // EXPERIMENT HOOK: capture the full raw header stream of this payload.
++        var headerStartBit = archive.Position;
++
+         while (true)
+         {
++            var headerBitOffset = archive.Position;
+             var handle = archive.ReadIntPacked();
+ 
+             if (handle == 0)
+@@ -1729,12 +1772,29 @@ public abstract class ReplayReader<T> where T : Replay, new()
+ 
+             if (numBits == 0)
+             {
++                // EXPERIMENT HOOK
++                OnNetFieldHeader(new NetFieldHeaderEvent
++                {
++                    GroupPath = group.PathName, ChannelIndex = channelIndex, CallId = _propertiesCallId, IsRpc = _inRpc,
++                    HeaderBitOffset = headerBitOffset, Handle = handle,
++                    ExportName = export?.Name, NumBits = numBits,
++                    PayloadBitOffset = archive.Position, Skipped = true,
++                    Incompatible = export?.Incompatible ?? true,
++                });
+                 continue;
+             }
+ 
+             if (export is null)
+             {
+                 _logger?.LogWarning("Couldnt find handle {handle} for group {pathname}, numbits is {numBits}", handle, group.PathName, numBits);
++                // EXPERIMENT HOOK
++                OnNetFieldHeader(new NetFieldHeaderEvent
++                {
++                    GroupPath = group.PathName, ChannelIndex = channelIndex, CallId = _propertiesCallId, IsRpc = _inRpc,
++                    HeaderBitOffset = headerBitOffset, Handle = handle,
++                    ExportName = null, NumBits = numBits,
++                    PayloadBitOffset = archive.Position, Skipped = true, Incompatible = true,
++                });
+                 archive.SkipBits(numBits);
+                 continue;
+             }
+@@ -1742,14 +1802,33 @@ public abstract class ReplayReader<T> where T : Replay, new()
+             if (export.Incompatible)
+             {
+                 _logger?.LogDebug("Incompatible export {name} for group {pathName}, numbits is {numBits}", export.Name, group.PathName, numBits);
++                // EXPERIMENT HOOK
++                OnNetFieldHeader(new NetFieldHeaderEvent
++                {
++                    GroupPath = group.PathName, ChannelIndex = channelIndex, CallId = _propertiesCallId, IsRpc = _inRpc,
++                    HeaderBitOffset = headerBitOffset, Handle = handle,
++                    ExportName = export.Name, NumBits = numBits,
++                    PayloadBitOffset = archive.Position, Skipped = true, Incompatible = true,
++                });
+                 archive.SkipBits(numBits);
+                 // We've already warned that this property doesn't load anymore
+                 continue;
+             }
+ 
+             hasdata = true;
++            // EXPERIMENT HOOK
++            OnNetFieldHeader(new NetFieldHeaderEvent
++            {
++                GroupPath = group.PathName, ChannelIndex = channelIndex, CallId = _propertiesCallId, IsRpc = _inRpc,
++                HeaderBitOffset = headerBitOffset, Handle = handle,
++                ExportName = export.Name, NumBits = numBits,
++                PayloadBitOffset = archive.Position, Skipped = false, Incompatible = false,
++            });
+             try
+             {
++                // EXPERIMENT HOOK: publish where in the archive this payload begins.
++                _netFieldParser.CurrentPayloadBitOffset = archive.Position;
++                _netFieldParser.CurrentPayloadBitCount = (int)numBits;
+                 _cmdReader.FillBitsFrom(archive, (int)numBits);
+                 if (!_netFieldParser.ReadField(exportGroup, export, handle, group, _cmdReader))
+                 {
+@@ -1758,6 +1837,23 @@ public abstract class ReplayReader<T> where T : Replay, new()
+                 }
+ 
+ 
++                if (CaptureFieldValues)
++                {
++                    // EXPERIMENT HOOK: publish the parsed value for this property.
++                    var valueText = TryReflect(exportGroup, export.Name);
++                    OnNetFieldValue(new NetFieldValueEvent
++                    {
++                        GroupPath = group.PathName, ChannelIndex = channelIndex,
++                        CallId = _propertiesCallId, IsRpc = _inRpc,
++                        Handle = handle, ExportName = export.Name, NumBits = numBits,
++                        BitsConsumed = _cmdReader.Position,
++                        Ok = true,
++                        ReaderError = _cmdReader.IsError,
++                        PayloadFullyConsumed = _cmdReader.AtEnd(),
++                        Value = valueText,
++                    });
++                }
++
+                 if (_cmdReader.IsError)
+                 {
+                     _logger?.LogWarning("Property {name} (handle: {handle}, path: {pathName}) caused error when reading (bits: {numBits})", export.Name, handle, group.PathName, numBits);
+@@ -2268,6 +2364,59 @@ public abstract class ReplayReader<T> where T : Replay, new()
+     /// </summary>
+     protected abstract void OnNetDeltaRead(uint channelIndex, NetDeltaUpdate update);
+ 
++    // ==== EXPERIMENT HOOK (added for the /tmp/probe3 research harness) ===============
++    /// <summary>
++    /// Called for every property header encountered inside a <c>ReceiveProperties</c> payload,
++    /// including headers whose payload is skipped (unknown handle / incompatible export).
++    /// A batched RPC writes one header per element, so this stream is the ground truth for
++    /// reconstructing cue boundaries without relying on the modelled field set.
++    /// </summary>
++    protected virtual void OnNetFieldHeader(NetFieldHeaderEvent header) { }
++
++    /// <summary>
++    /// When true, <see cref="OnNetFieldValue"/> is invoked after every property is parsed.
++    /// Off by default: the reflection needed to render a value is not free.
++    /// </summary>
++    public bool CaptureFieldValues { get; set; } = false;
++
++    /// <summary>Called after a property payload has been parsed, when <see cref="CaptureFieldValues"/> is set.</summary>
++    protected virtual void OnNetFieldValue(NetFieldValueEvent value) { }
++
++    private static string? TryReflect(object? instance, string? propertyName)
++    {
++        if (instance is null || propertyName is null)
++        {
++            return null;
++        }
++
++        var property = instance.GetType().GetProperty(propertyName,
++            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
++        if (property is null)
++        {
++            return null;
++        }
++
++        try
++        {
++            var value = property.GetValue(instance);
++            return value switch
++            {
++                null => null,
++                string s => s,
++                bool b => b ? "true" : "false",
++                float f => f.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
++                double d => d.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
++                IFormattable formattable => formattable.ToString(null, System.Globalization.CultureInfo.InvariantCulture),
++                _ => value.ToString(),
++            };
++        }
++        catch
++        {
++            return null;
++        }
++    }
++    // ================================================================================
++
+     /// <summary>
+     /// After receiving propteries for this <paramref name="exportGroup"/> indicate wheter it can be ignored for the rest of the replay (on the given channel)
+     /// or if it can be ignored for the rest of the replay.

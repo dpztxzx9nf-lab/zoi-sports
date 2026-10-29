@@ -50,7 +50,8 @@ import { appendFileSync, existsSync, readFileSync, realpathSync, statSync, write
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { scanLog } from "./zoi-lab-mode.mjs";
-import { readReplayStats, replayRow } from "./zoi-replay.mjs";
+import { readReplayStats, replayRow, HEADSHOTS_REASON } from "./zoi-replay.mjs";
+import { readHeadshots, cueReaderInstalled, CUE_MISSING_REASON } from "./zoi-cues.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = path.join(HERE, "zoi-lab-agent.json");
@@ -593,6 +594,12 @@ const REPLAY_SEND_MAX = 20;
    because the two move at different times and a failed send must roll back only
    the one it was carrying. */
 let replayComplained = new Set();
+/* Whether the cue reader itself is gone, which is one machine-wide fact rather
+   than one per replay. Kept apart from replayComplained so the "not installed"
+   line is said once for the whole session instead of once per match: a missing
+   dist/ folder is not a property of any match, and saying it ten times an
+   evening is how a real warning gets scrolled past. */
+let cueComplained = false;
 
 /* The replay mark from the state file, or null when nothing has ever been read. */
 async function loadReplayMark() {
@@ -641,6 +648,97 @@ function markPast(files) {
   return { at, names: files.filter((f) => f.mtimeMs === at).map((f) => f.name) };
 }
 
+/* One replay's headshot count, with the two whole-machine failures collapsed to
+   one line for the session.
+
+   The difference worth keeping straight: "no reader on this PC" is a deployment
+   problem that will be true for every match until someone fixes it, and it is
+   said once. "This file could not be read" is about one match and is said once
+   per file, the same way the stats reader complains. */
+async function cueReadFor(replayPath) {
+  if (!cueReaderInstalled()) return noteCueMissing();
+  const answer = await readHeadshots(replayPath);
+  if (!answer.ok && answer.reason === CUE_MISSING_REASON) return noteCueMissing();
+  return answer;
+}
+
+function noteCueMissing() {
+  if (!cueComplained) {
+    cueComplained = true;
+    log("Not counting headshots: " + CUE_MISSING_REASON + ". Every other replay number still goes up.");
+  }
+  return { ok: false, reason: CUE_MISSING_REASON };
+}
+
+/* ------------------------------------------------------- the cue reader ----
+   Headshots are read out of band, on purpose.
+
+   Counting them means running a .NET process that decompresses a whole match -
+   about two seconds for one replay, and a batch after a gap is a batch of
+   matches. That is far too long to stand in front of the settings send, which is
+   the one thing this agent exists to do and which must go up the moment a
+   setting changes. So a replay that needs counting is STARTED here and the poll
+   returns without it: the row goes up on a later poll, carrying the real number,
+   and nothing about the settings path ever waits on a decompressor.
+
+   The cost of that choice is one poll - up to a minute - between a replay landing
+   and its row going up. A replay is already written fifteen to ninety seconds
+   after its match ends, so a minute more is not a delay anyone can see, while a
+   blocked settings send is one they would.
+
+   A read that has finished is cached, keyed by the file's own path, so a batch
+   that has to be re-read after a refused send costs nothing the second time.
+   Bounded to the last CUE_CACHE_MAX replays: a season of matches is a few
+   hundred tiny objects and this must not become a leak in a process that runs
+   for a whole session. */
+const CUE_CACHE_MAX = 400;
+const cueCache = new Map();      // path -> { ok, headshots, reason, ... }
+const cueInFlight = new Map();   // path -> Promise
+/* Batches held back for their numbers, so the log says so once per batch rather
+   than once per poll. */
+let cuePendingNoted = new Set();
+/* How many polls each held-back replay has waited. A read takes a couple of
+   seconds and gives up after a minute, so anything past a few polls is wedged,
+   and CUE_WAIT_POLLS is where the row stops waiting and says so. */
+const CUE_WAIT_POLLS = 5;
+const cueWaiting = new Map();
+
+function cueCached(replayPath) {
+  return cueCache.get(replayPath) || null;
+}
+
+/* Start (or join) the read for one replay. Returns nothing: the caller looks at
+   the cache on a later poll. Never rejects - the failure is cached as an answer,
+   because a file that cannot be counted must produce a row with a reason, not a
+   missing row. */
+function cueStart(replayPath) {
+  if (cueCache.has(replayPath) || cueInFlight.has(replayPath)) return;
+  const run = (async () => {
+    let answer;
+    try {
+      answer = await cueReadFor(replayPath);
+    } catch (e) {
+      /* readHeadshots promises not to throw; this is here so a future change to
+         that promise cannot stop a row from going up. */
+      answer = { ok: false, reason: "the cue reader threw (" + (e && e.message ? e.message : e) + ")" };
+    }
+    /* An answer of "the reader is not installed" is not about this file, so it
+       is not cached: installing the reader mid-session should start working
+       without a restart, and there is nothing here worth remembering. */
+    if (!(answer && answer.ok === false && answer.reason === CUE_MISSING_REASON)) {
+      cueCache.set(replayPath, answer);
+      if (cueCache.size > CUE_CACHE_MAX) {
+        /* Oldest out first. Map preserves insertion order, and an entry is only
+           ever inserted once per file. */
+        const oldest = cueCache.keys().next();
+        if (!oldest.done) cueCache.delete(oldest.value);
+      }
+    }
+    cueInFlight.delete(replayPath);
+  })();
+  cueInFlight.set(replayPath, run);
+}
+
 /* Replays newer than the mark, read, plus the mark to commit once the lab has
    taken them.
 
@@ -684,6 +782,10 @@ export async function readNewReplays() {
   const dropped = fresh.length - picked.length;
 
   const rows = [];
+  /* Files that were read but are waiting for a headshot count. They stay behind
+     the mark, so the next poll reads them again (the stats read is a file read,
+     not a decompressor) and sends them the moment their number is in. */
+  const waiting = [];
   for (const file of picked) {
     let result;
     try {
@@ -703,18 +805,79 @@ export async function readNewReplays() {
       }
       continue;
     }
-    /* The file's own name, not its path: the path carries the Windows account
-       name and the lab has no use for it. */
-    rows.push(replayRow(result, file.name));
+    /* Headshots come from a different reader, in a different process, so they
+       are never read on this path. Only a match that recorded anything is worth
+       counting - a Creative island has no match stats and its cues are hits on
+       real players, so a count there would be a number about the wrong game.
+       That row goes up now, without a count, carrying the reason. */
+    if (!result.ok || result.stats === null) {
+      rows.push(replayRow(result, file.name, null));
+      continue;
+    }
+
+    const cached = cueCached(file.path);
+    if (cached) {
+      rows.push(replayRow(result, file.name, cached));
+      continue;
+    }
+
+    /* No reader on this PC is not something waiting can fix within a poll, and
+       holding the row back would mean the match's kills and damage never go up
+       at all. It goes now, with the reason, and the headshot column stays null
+       and honest. */
+    if (!cueReaderInstalled()) {
+      rows.push(replayRow(result, file.name, noteCueMissing()));
+      cueWaiting.delete(file.path);
+      continue;
+    }
+
+    /* Not counted yet: start it, and hold the row back rather than send a
+       number that does not exist. The next poll finds it in the cache. */
+    const waited = (cueWaiting.get(file.path) || 0) + 1;
+    cueWaiting.set(file.path, waited);
+    cueStart(file.path);
+    if (waited > CUE_WAIT_POLLS) {
+      /* Counted for longer than any read should take. Something is wedged, and
+         a row that never arrives is worse than a row saying so. */
+      rows.push(replayRow(result, file.name, {
+        ok: false,
+        reason: "the cue reader did not finish in " + CUE_WAIT_POLLS + " polls",
+      }));
+      cueWaiting.delete(file.path);
+      continue;
+    }
+    waiting.push(file);
+  }
+
+  if (waiting.length && !cuePendingNoted.has(waiting[0].name)) {
+    cuePendingNoted.add(waiting[0].name);
+    if (cuePendingNoted.size > 200) cuePendingNoted = new Set([waiting[0].name]);
+    log("Counting headshots in " + waiting.length + " replay" + (waiting.length === 1 ? "" : "s") +
+      " - the numbers go up on the next send.");
   }
 
   /* The mark covers every file that was LOOKED at, including the unreadable
-     ones, because those are exactly the files that must not come round again. */
-  const beyond = markPast(picked);
+     ones, because those are exactly the files that must not come round again.
+     It stops short of the FIRST file still waiting for its count: the mark is a
+     single watermark, so a file it steps over is never read again. Everything
+     from there on comes back next poll - including files whose rows already went
+     up, which is harmless, because the endpoint keys a replay by its own window
+     and drops a repeat.
+     When the first file is the one waiting (the ordinary case: the newest replay
+     is the one just counted) this moves nothing, and the batch is re-read. */
+  let settled = picked;
+  for (let i = 0; i < picked.length; i++) {
+    if (waiting.includes(picked[i])) { settled = picked.slice(0, i); break; }
+  }
+  const beyond = settled.length ? markPast(settled) : null;
   const commit = beyond && beyond.at > mark.at ? beyond
-    : { at: mark.at, names: Array.from(new Set([...mark.names, ...(beyond ? beyond.names : [])])) };
+    : beyond
+      ? { at: mark.at, names: Array.from(new Set([...mark.names, ...beyond.names])) }
+      : null;
 
-  return { replays: rows, dropped, commit };
+  /* `picked` keeps its newest-last order and rows keep the order they were read
+     in, so the endpoint's "newest twenty" keeps meaning what it did. */
+  return { replays: rows, dropped, commit, waiting: waiting.length };
 }
 
 /* Remember how far the replay folder has been read. Called only after the lab

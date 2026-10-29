@@ -616,6 +616,9 @@ html,body{overflow-x:clip}img{max-width:100%}
 .lab-bymatch-figs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem;margin:.5rem 0 .1rem}
 .lab-bymatch-fig{display:flex;flex-direction:column;gap:.1rem;min-width:0}
 .lab-bymatch-fig .lab-fig-v{font-size:.95rem}
+/* The headshot line. Set a shade quieter than the kill figures above it: it is
+   the same sample seen a second way, not a second verdict. */
+.lab-bymatch-hs{margin:.45rem 0 0;font-size:.72rem;line-height:1.5;color:#8d8a83}
 @media (max-width:520px){
  .lab-bymatch{padding-left:.6rem}
  .lab-bymatch-figs{gap:.35rem}

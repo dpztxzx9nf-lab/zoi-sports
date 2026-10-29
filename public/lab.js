@@ -397,6 +397,44 @@ function unplacedNote(c) {
    say - no replays yet, or too few games a side - it says that in one line and
    claims nothing. */
 
+/* Headshots beside the kill figures.
+   They are counted by a separate reader from the replay itself, so a match can
+   carry a real kill count and still have no headshot number: the reader was not
+   installed that evening, or the file would not open. Two rules follow. The line
+   is drawn only when at least one of the games beside it carried a count, and it
+   names how many did, so a reader never mistakes a partial count for a match
+   where he hit nobody in the head. And a zero that was measured stays a zero:
+   `headshots_games_*` is what tells the two apart, not the figure. */
+function headshotLine(m) {
+  const b = isNum(m.headshots_before) ? m.headshots_before : null;
+  const a = isNum(m.headshots_after) ? m.headshots_after : null;
+  const bg = isNum(m.headshots_games_before) ? m.headshots_games_before : 0;
+  const ag = isNum(m.headshots_games_after) ? m.headshots_games_after : 0;
+  const games = bg + ag;
+  if (!games) return null;
+
+  const total = (b === null ? 0 : b) + (a === null ? 0 : a);
+  const placed = (isNum(m.before) ? m.before : 0) + (isNum(m.after) ? m.after : 0);
+  const missing = isNum(m.headshots_missing) ? m.headshots_missing : 0;
+
+  /* Said as "24 of the 190 games" only where the two differ. Where every game
+     carried a count the qualifier would be noise. */
+  const counted = missing > 0 && placed > games
+    ? group(games) + ' of the ' + matchesWord(placed)
+    : matchesWord(games);
+
+  let sides;
+  if (bg && ag) {
+    sides = kpm(b / bg) + ' before the change, ' + kpm(a / ag) + ' after';
+  } else if (bg) {
+    sides = 'all of it before the change, since no match after it has been counted yet';
+  } else {
+    sides = 'all of it since the change, since no match before it was counted';
+  }
+
+  return group(total) + ' over ' + counted + ', ' + kpm(total / games) + ' a match (' + sides + ').';
+}
+
 /* Whether there is a per-match reading worth drawing for this change. */
 function hasMatchReading(c) {
   const m = c && c.by_match;
@@ -435,6 +473,12 @@ function matchReading(c) {
     fig('Move', isNum(m.kills_delta) ? signed(m.kills_delta, 2) : '\u2014'),
   );
   box.append(row);
+
+  /* Only where there is something to count. Nothing is drawn at all when no
+     replay carried a headshot number: an empty line or a zero would both read as
+     "he hit nobody in the head", which is a claim this page cannot make. */
+  const shots = headshotLine(m);
+  if (shots) box.append(el('p', 'lab-bymatch-hs', 'Headshots: ' + shots));
 
   /* Why it is not a verdict yet, in the reader's own terms. The two reasons are
      different situations and a card that blurred them would be telling a reader

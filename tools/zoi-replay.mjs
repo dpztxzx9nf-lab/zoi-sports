@@ -672,8 +672,20 @@ export function readReplayBuffer(buf, path = "(in memory)") {
 
 /* The shape the sync endpoint and the agent both carry: the row without the
    fields that describe the reader's own work. `recorded` is the one a reader
-   looks at first, and it is true only when there are numbers to look at. */
-export function replayRow(result, source) {
+   looks at first, and it is true only when there are numbers to look at.
+
+   `cues` is the cue reader's answer for this replay, as
+   tools/zoi-cues.mjs returns it: { ok: true, headshots } or { ok: false, reason }.
+   It is a third argument because headshots come from a different reader than
+   everything else on the row, and the two fail independently - a replay whose
+   stats read perfectly can still fail its cue read, and the row has to say so
+   rather than drop the match. Omitted, it behaves exactly as it always did:
+   null with the reason, because nothing was measured.
+
+   A measured zero is a number and travels as one. Only a failed or absent read
+   is null, and it always carries the reason, so no caller can mistake a reader
+   that did not run for a match with no headshots. */
+export function replayRow(result, source, cues) {
   const r = result || {};
   const recorded = Boolean(r.ok && r.stats !== null);
   return {
@@ -699,12 +711,16 @@ export function replayRow(result, source) {
     totalTraveled: recorded ? r.totalTraveled : null,
     placement: recorded ? r.placement : null,
     totalPlayers: recorded ? r.totalPlayers : null,
-    /* Null on every row today, and null even on a recorded one: the count needs
-       the damage-cue reader, which this module does not have. The reason travels
-       with it so a stored row says why, instead of looking like a match in which
-       nobody was shot in the head. */
-    headshots: null,
-    headshotsReason: HEADSHOTS_REASON,
+    /* The measured count when the cue reader ran, null with the reason when it
+       did not. The reason travels with the null so a stored row says why,
+       instead of looking like a match in which nobody was shot in the head.
+       Only a recorded match carries a count: a Creative island's cues are real
+       hits on real players, so counting them would report headshots from a
+       match that has no match stats at all. */
+    headshots: recorded && cues && cues.ok === true && Number.isFinite(cues.headshots) ? cues.headshots : null,
+    headshotsReason: recorded && cues && cues.ok === true && Number.isFinite(cues.headshots)
+      ? null
+      : (cues && typeof cues.reason === "string" && cues.reason ? cues.reason : HEADSHOTS_REASON),
   };
 }
 
