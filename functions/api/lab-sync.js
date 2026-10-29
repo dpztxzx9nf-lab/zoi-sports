@@ -10,7 +10,7 @@
    lab_tokens. An unknown token, a revoked one and a missing one all answer 401
    with the same body, so nothing can be learned by trying. */
 import {
-  CATALOG, MIN_SETTINGS, PROPERTY_MAP, SNAPSHOT_KEEP, SNAPSHOT_MAX_BYTES,
+  CATALOG, MIN_SETTINGS, MIN_TRACKED, PROPERTY_MAP, SNAPSHOT_KEEP, SNAPSHOT_MAX_BYTES,
   SNAPSHOT_MAX_SETTINGS, canonicalJson, json, sameValue, sha256Hex, str, valueText,
 } from "../_lib/lab.js";
 import { epicIdOf, fetchStats, recordStats, summarize, updateGamesPlayed } from "../_lib/lab-stats.js";
@@ -156,6 +156,21 @@ export async function onRequest({ request, env }) {
     return json({
       ok: false,
       errors: ["That snapshot has no settings from ClientSettings.Sav \u2014 was the save locked?"],
+    }, 422);
+  }
+
+  /* The count above only says the payload is big enough to be a config. This
+     says it is this config. Anything the catalog does not read is skipped by
+     the diff, so a five-key object of names nobody tracks used to pass every
+     check, get stored, and become the baseline: the next real read then
+     "changed" nothing it could attribute, and an open test could be closed as
+     inconclusive against settings the lab never looked at. Refused before any
+     row is written, so nothing is stored and no test moves. */
+  const tracked = Object.keys(flat).filter((name) => PROPERTY_MAP[name]).length;
+  if (tracked < MIN_TRACKED) {
+    return json({
+      ok: false,
+      errors: [`That snapshot carries ${tracked} of the ${Object.keys(PROPERTY_MAP).length} settings this lab tracks, so it is not a Fortnite settings read.`],
     }, 422);
   }
 
@@ -434,15 +449,48 @@ async function hasColumn(env, table, column) {
   }
 }
 
+/* The instant a match ended, as a number, or null when the log never said. It
+   is parsed rather than compared as text because the fraction of a second is
+   written with one to three digits: "…:00.1Z" is the earlier instant but the
+   later string, so a text sort would call them the wrong way round once a
+   second. A match with no end time is one still in play, which counts as newer
+   than anything already finished. */
+function matchEnd(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const at = raw.endedAt;
+  if (typeof at !== "string" || !ISO.test(at)) return null;
+  const ms = Date.parse(at);
+  return Number.isFinite(ms) ? ms : null;
+}
+
 async function storeMatches(env, owner, rawMatches) {
   if (rawMatches === undefined || rawMatches === null) return { stored: 0, seen: 0, dropped: [] };
   if (!Array.isArray(rawMatches)) return { stored: 0, seen: 0, dropped: ["matches has to be a list"] };
 
-  const seen = rawMatches.slice(0, MATCH_MAX).length;
+  const seen = Math.min(rawMatches.length, MATCH_MAX);
   const dropped = [];
   if (rawMatches.length > MATCH_MAX) {
     dropped.push("only the newest " + MATCH_MAX + " matches were read");
   }
+
+  /* The agent sends a full read of its log, oldest first, so the front of the
+     list is the oldest evening it still remembers. Taking a prefix of that
+     would keep the oldest matches and throw the newest ones away - the exact
+     opposite of what the reply promises - so the list is ordered by end time
+     and the tail is kept. The sort is on a copy because a caller that reuses
+     its array (a suite, or the agent building a second request) should not see
+     it rearranged underneath it. Matches with no end time are ones still being
+     played, and they sort last so they are kept rather than dropped; the
+     comparator falls back to the original position, which keeps the order
+     stable for two matches that ended in the same second. */
+  const ordered = rawMatches.map((raw, at) => ({ raw, at })).sort((a, b) => {
+    const ea = matchEnd(a.raw), eb = matchEnd(b.raw);
+    if (ea === eb) return a.at - b.at;
+    if (ea === null) return 1;
+    if (eb === null) return -1;
+    return ea < eb ? -1 : 1;
+  }).map((x) => x.raw);
+  const newest = ordered.slice(Math.max(0, ordered.length - MATCH_MAX));
 
   /* Newest last in, but the order does not matter: each row stands alone. A row
      that cannot be read is counted and skipped, never guessed at. */
@@ -451,7 +499,7 @@ async function storeMatches(env, owner, rawMatches) {
 
   let stored = 0;
   let bad = 0;
-  for (const raw of rawMatches.slice(0, MATCH_MAX)) {
+  for (const raw of newest) {
     const m = matchRecord(raw);
     if (!m) { bad++; continue; }
 
