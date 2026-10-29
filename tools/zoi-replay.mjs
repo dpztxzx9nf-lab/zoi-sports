@@ -521,10 +521,17 @@ const zero = (stats) => MEASURED.every((k) => !stats[k]);
      13:57:42 and 14:05:54 - all read their real lengths once they had finished
      being written.
 
-   A caller told `retryable: true` should hold the file and look again. That
-   third one cost three real matches before it was found: the reader knew a
-   half-written file when it saw a truncated chunk stream and did not recognise
-   the same thing said in the header.
+   A caller told `retryable: true` should hold the file and look again.
+
+   What the third one actually cost, measured rather than assumed: nothing was
+   lost, only delayed. All three of those replays reached the lab about twelve
+   minutes after their matches - the file keeps growing, so its timestamp moves
+   forward, and the next poll after it settles reads it on the ordinary path.
+   The retry turns that twelve-minute delay into a prompt read. It is worth having
+   because the delay depends on the game touching the file again, which is not
+   something the reader should rely on, but it is not a rescue and should not be
+   written up as one. An earlier version of this comment claimed three matches
+   had been lost; the database said otherwise when it was checked.
 
    Everything else that comes back as a failure is a property of the file, and
    waiting changes nothing: an unencrypted replay will never grow a key, a
