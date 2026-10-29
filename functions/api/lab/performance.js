@@ -14,6 +14,12 @@ import { CATALOG, SELECT_TEST, identity, json, currentOf } from "../../_lib/lab.
 import { performance } from "../../_lib/lab-perf.js";
 
 const READING_COLUMNS = "taken_at,created_at,matches,wins,kills,deaths,kd,win_rate";
+/* Everything a session label or the page's mode line needs, and nothing else. The
+   per-match rank and player count are deliberately not read here: they are for a
+   match view that does not exist yet, and carrying them would be reading more of
+   the player's log than this page uses. */
+const MATCH_COLUMNS = "playlist,playlist_type,ranked,build_mode,team_size,region,rank_type,rank,"
+  + "players_left_low,players_left_first,players_left_readings,started_at,ended_at";
 
 /* setting id -> the watch text from the catalog. Built once per request. */
 const watchLookup = () => {
@@ -58,13 +64,51 @@ export async function onRequest({ request, env }) {
       "SELECT taken_at,payload FROM lab_snapshots WHERE owner = ? ORDER BY id DESC LIMIT 1"
     ).bind(who.id).first();
 
+    /* The matches, oldest first, for two jobs: the session labels the comparison
+       runs on, and the page's one line about the mode last seen playing. Bounded
+       to the window the readings cover, since a match that ended before the
+       oldest reading cannot label any session here.
+
+       A lab_matches read that fails must not take the page down: everything below
+       works without it, and the page then omits the mode line rather than
+       printing a guess. */
+    let matches = [];
+    try {
+      const list = Array.isArray(readings.results) ? readings.results : [];
+      const oldest = list.length ? String(list[0].created_at || "") : "";
+      const rows = oldest
+        ? await env.DB.prepare(
+          `SELECT ${MATCH_COLUMNS} FROM lab_matches
+            WHERE owner = ? AND datetime(ended_at) >= datetime(?)
+            ORDER BY datetime(ended_at) ASC, id ASC LIMIT 400`
+        ).bind(who.id, oldest).all()
+        : await env.DB.prepare(
+          `SELECT ${MATCH_COLUMNS} FROM lab_matches
+            WHERE owner = ? ORDER BY datetime(ended_at) ASC, id ASC LIMIT 400`
+        ).bind(who.id).all();
+      matches = (rows && Array.isArray(rows.results)) ? rows.results : [];
+    } catch (e) {
+      console.error("lab matches read failed", e);
+      matches = [];
+    }
+
     const payload = performance({
       rows: readings.results || [],
       tests: tests.results || [],
       watch: watchLookup(),
+      matches,
     });
 
-    return json({ ok: true, me: { email: who.email, name: who.name }, ...payload, current: currentOf(snapshot) });
+    return json({
+      ok: true,
+      me: { email: who.email, name: who.name },
+      ...payload,
+      /* The single most recent match row, or null. The page renders one line from
+         it and nothing else; the full history is not sent, because a page that
+         is about settings does not need it. */
+      lastMatch: matches.length ? matches[matches.length - 1] : null,
+      current: currentOf(snapshot),
+    });
   } catch (e) {
     console.error("lab performance failed", e);
     return json({ ok: false, error: "Couldn't work out the numbers just now." }, 500);

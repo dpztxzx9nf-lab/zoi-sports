@@ -469,6 +469,7 @@ html,body{overflow-x:clip}img{max-width:100%}
 .lab-change-meta{display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap;margin:.25rem 0 0}
 .lab-change-meta .lab-change-when{margin:0}
 .lab-change-primary-name{font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:#8d8a83;line-height:1.4}
+.lab-change-scope{font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:#8d8a83;line-height:1.4;border-left:1px solid #e6d3a033;padding-left:.6rem}
 .lab-primary{margin:.7rem 0 0;padding:.65rem 0 0;border-top:1px solid #ffffff0f}
 .lab-primary-head{display:flex;align-items:baseline;gap:.45rem;flex-wrap:wrap;font-size:.8rem}
 .lab-primary-k{font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--g);line-height:1.3}
@@ -489,6 +490,10 @@ html,body{overflow-x:clip}img{max-width:100%}
 .lab-secondary-d{margin-left:auto;font-size:.72rem;color:#8d8a83;white-space:nowrap}
 .lab-c-fine{margin:.35rem 0 0;font-size:.72rem;line-height:1.5;color:#8d8a83}
 .lab-tag-testing{border-color:#e6d3a066;color:#c9c5bb}
+
+/* the mode the last match was played in, one line above the settings. Quiet on
+   purpose: it is a fact the log proves, not a headline. */
+.lab-mode{margin:0 0 .7rem;font:400 .86rem/1.4 Graduate,Georgia,serif;letter-spacing:.05em;text-transform:uppercase;color:var(--g);word-break:break-word}
 
 /* what the tracked settings are set to right now: two columns of label and
    value, read down. Fourteen rows fit without a scroll on a phone. */
