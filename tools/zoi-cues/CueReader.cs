@@ -135,6 +135,19 @@ public class DamageReader : FortniteReplayReader.ReplayReader
         var b = BuilderForExperiment;
         if (b is null || actorGuid == 0) return null;
         if (b.ExperimentResolveActorGuid(actorGuid, out var name)) return name;
+        /* The guid map does not know every actor in every replay - it is built as
+           the stream names them, and a pawn that was never named there is still
+           a real player. So the same question is asked the long way round: guid
+           to its live channel, channel to player state, state to name. It is the
+           identical lookup, not a second opinion, and it is what the research
+           harness did when these damage totals were measured. */
+        foreach (var kv in b.ExperimentChannelToActor)
+        {
+            if (kv.Value != actorGuid) continue;
+            if (b.ExperimentPawnChannelToStateChannel.TryGetValue(kv.Key, out var stateChannel) &&
+                b.ExperimentPlayers.TryGetValue(stateChannel, out var player))
+                return player.PlayerName;
+        }
         return null;
     }
 
@@ -165,6 +178,12 @@ public static class CueBuilder
         public string VictimName;
         public string HitActor;
         public bool? IsCritical;
+        /* How much damage the cue carried, in the game's own units. Not part of
+           the headshot count; it is what lets the count be checked against the
+           match's recorded damageToPlayers before it is published. Null when the
+           cue did not carry the property, which is a cue whose weight is
+           unknown rather than zero. */
+        public float? Magnitude;
     }
 
     public static List<Cue> Build(DamageReader reader, string localName)
@@ -236,6 +255,13 @@ public static class CueBuilder
         {
             case "HitActor": cue.HitActor = value; break;
             case "bIsCritical": cue.IsCritical = value switch { "true" => true, "false" => false, _ => null }; break;
+            /* The same parse the research harness used when the damage sums were
+               measured: invariant culture, and anything unparseable is absent
+               rather than a zero that would quietly shrink the total. */
+            case "Magnitude": cue.Magnitude = ParseFloat(value); break;
         }
     }
+
+    static float? ParseFloat(string s)
+        => s != null && float.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var f) ? f : (float?)null;
 }

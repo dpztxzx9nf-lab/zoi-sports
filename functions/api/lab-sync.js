@@ -36,6 +36,12 @@ const TITLE_MAX = 80;
    evening's play; the agent caps its own batch at the same number. */
 const REPLAY_MAX = 20;
 const REPLAY_TEXT_MAX = 80;
+/* A reader that refuses says why in a sentence, and that sentence has to survive
+   the trip or the lab shows a generic reason instead of the real one. The
+   refusal for a mis-attributed replay is 137 characters. This cap is still a
+   cap - a sender cannot write a paragraph into the row - but it fits a sentence
+   rather than a tag. */
+const REPLAY_REASON_MAX = 240;
 /* Two numbers that a wrong reader would produce and a right one cannot: a match
    no longer than six hours, and a per-match damage total that is not a season's. */
 const REPLAY_MAX_MS = 6 * 60 * 60 * 1000;
@@ -659,7 +665,13 @@ function replayRecord(raw) {
      here for the reader that will fill it. A number is taken as sent, and its
      reason with it, so that reader needs no migration. */
   const headshots = recorded ? count(raw.headshots) : null;
-  const headshotsReason = headshots === null ? (text(raw.headshotsReason) || HEADSHOTS_REASON) : null;
+  /* The one text field on this row that is prose, so it gets the longer cap: a
+     refusal reason that is cut down to nothing is a refusal the lab cannot
+     explain, and text() answers null rather than a truncated string, which would
+     have quietly swapped the real reason for the generic one. */
+  const headshotsReason = headshots === null
+    ? (text(raw.headshotsReason, REPLAY_REASON_MAX) || HEADSHOTS_REASON)
+    : null;
 
   const weaponDamage = recorded ? count(raw.weaponDamage) : null;
   const otherDamage = recorded ? count(raw.otherDamage) : null;
