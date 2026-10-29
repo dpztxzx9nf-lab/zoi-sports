@@ -116,15 +116,26 @@ export async function onRequest({ request, env }) {
         : MATCH_COLUMNS;
       const list = Array.isArray(readings.results) ? readings.results : [];
       const oldest = list.length ? String(list[0].created_at || "") : "";
+      /* Newest 400, then flipped back into the ascending order the session
+         labelling walks, exactly as the readings read above is written. ASC with
+         a LIMIT would keep the OLDEST 400 in the window instead: once a window
+         holds more than 400 matches the recent ones fall off the end, the page's
+         "last match" line names a match from weeks ago, and the recent sessions
+         lose their labels and stop being provable as one mode. */
       const rows = oldest
         ? await env.DB.prepare(
-          `SELECT ${columns} FROM lab_matches
-            WHERE owner = ? AND datetime(ended_at) >= datetime(?)
-            ORDER BY datetime(ended_at) ASC, id ASC LIMIT 400`
+          `SELECT ${columns} FROM (
+             SELECT id,${columns} FROM lab_matches
+             WHERE owner = ? AND datetime(ended_at) >= datetime(?)
+             ORDER BY datetime(ended_at) DESC, id DESC LIMIT 400
+           ) ORDER BY datetime(ended_at) ASC, id ASC`
         ).bind(who.id, oldest).all()
         : await env.DB.prepare(
-          `SELECT ${columns} FROM lab_matches
-            WHERE owner = ? ORDER BY datetime(ended_at) ASC, id ASC LIMIT 400`
+          `SELECT ${columns} FROM (
+             SELECT id,${columns} FROM lab_matches
+             WHERE owner = ?
+             ORDER BY datetime(ended_at) DESC, id DESC LIMIT 400
+           ) ORDER BY datetime(ended_at) ASC, id ASC`
         ).bind(who.id).all();
       matches = (rows && Array.isArray(rows.results)) ? rows.results : [];
     } catch (e) {

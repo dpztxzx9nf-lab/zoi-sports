@@ -131,6 +131,32 @@ export async function onRequest({ request, env }) {
       flat[name] = v;
     }
   }
+  /* A complete read always carries the save's own property names. The agent
+     sends them bare, and prefixes the two files it parses separately: "ini." for
+     GameUserSettings.ini and "sg." for the scalability block inside it. So a
+     payload with settings but not one bare name is the ini on its own - which is
+     what a locked ClientSettings.Sav looks like, since the agent logs the failed
+     read and sends what it could still get.
+
+     Storing that would be worse than refusing it. It carries 34 of the 91
+     settings a real read has, none of the tracked ones, and no bindings; it
+     became the diff baseline, so the next complete read compared against a
+     half-read and a real move (sensitivity 39 to 55) looked like a setting
+     appearing from nowhere instead of changing. A 422 is the one answer the
+     agent can act on: it retries, and nothing half-read is ever stored.
+
+     Only the total absence of save properties is refused. A save that genuinely
+     holds nothing beyond the ini is not for this check to imagine - the real
+     payloads are the evidence, and every one of them has 57 bare names against
+     this payload's zero. */
+  const bareNames = Object.keys(flat || {}).filter((name) => !name.startsWith("ini.") && !name.startsWith("sg."));
+  if (!bareNames.length) {
+    return json({
+      ok: false,
+      errors: ["That snapshot has no settings from ClientSettings.Sav \u2014 was the save locked?"],
+    }, 422);
+  }
+
   const bindings = (body.bindings && typeof body.bindings === "object" && !Array.isArray(body.bindings))
     ? body.bindings : null;
   const source = str(body.source, SOURCE_MAX);
@@ -142,6 +168,10 @@ export async function onRequest({ request, env }) {
   const payloadHash = await sha256Hex(payload);
 
   let created = [];
+  /* Kept in the reply for the agent's sake, but nothing goes in it any more:
+     every tracked setting that moves now either opens a test or closes the stale
+     one and opens its own. It stays in the shape so an older agent reading this
+     response does not see a field vanish under it. */
   const skipped = [];
   const closed = [];
   let duplicate = false;
@@ -187,23 +217,25 @@ export async function onRequest({ request, env }) {
         const toValue = valueText(flat[name]);
         if (!fromValue || !toValue || sameValue(fromValue, toValue)) continue;
 
-        /* One open test per setting. A test already ending where this change
-           starts is the same test still running, so it is left as it is. */
+        /* One open test per setting. */
         const open = await env.DB.prepare(
           `SELECT id,to_value FROM lab_tests WHERE owner = ? AND setting = ? AND status = 'testing'
            ORDER BY id DESC LIMIT 1`
         ).bind(owner, setting).first();
 
-        if (open && sameValue(open.to_value, fromValue)) {
-          skipped.push({ setting, reason: "already testing" });
-          continue;
-        }
+        /* Any open test here is stale, and it used to be possible to leave one
+           open for ever. There was a branch above this that read "the open test
+           already ends where this change starts, so it is the same test still
+           running" and skipped. It could not be reached for that reason: this
+           change only gets here when fromValue and toValue differ, so an open
+           test whose to_value equals fromValue is a setting moving OFF the value
+           under test - a revert, or a change on past it. Skipping meant the test
+           stayed open, kept counting games played on a value nobody was running,
+           and the revert itself was never recorded.
 
-        /* Anything else means this setting moved somewhere the open test was not
-           watching, so that test can never finish: it would keep collecting
-           games played on a value nobody is running. Close it with the one
-           honest label there is for a test that ended without an answer, and
-           say why in its note, rather than guessing better or worse. */
+           It can never finish, either way. Close it with the one honest label
+           there is for a test that ended without an answer, and say why in its
+           note, rather than guessing better or worse. */
         if (open) {
           const done = await env.DB.prepare(
             `UPDATE lab_tests

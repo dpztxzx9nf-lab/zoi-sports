@@ -653,10 +653,41 @@ async function send(cfg, prepared) {
 
 /* -------------------------------------------------------------- watch ---- */
 
-/* Something that changes whenever either config file is touched. */
+/* Something that changes whenever either config file is touched. Cheap - two
+   stats - so it can run every poll, but it is only a hint that something might
+   have happened, never the thing that decides a send. */
 async function signature() {
   const list = await candidates();
   return list.map((f) => f.path + ":" + f.size + ":" + Math.round(f.mtimeMs)).sort().join("|");
+}
+
+/* What would actually go up, as one string: the settings and the bindings, with
+   keys sorted so the order the game happens to write them in does not count.
+
+   This, not the file's mtime, is what decides whether a send is due. Fortnite
+   rewrites GameUserSettings.ini about every two minutes while it is running, and
+   the bytes that move are keys this agent does not read
+   (LastSelectedPrivateMatchOptions reordering, HasSeenAboutItemModalTypes), so
+   the extracted values come out identical. Watching the mtime sent all of that
+   churn to the lab - a post every 142 seconds against a heartbeat of an hour.
+   The timestamp is deliberately not in the key: it comes from the newest file's
+   mtime, so including it would put the churn straight back in. */
+function payloadKey(snap) {
+  if (!snap) return null;
+  const flat = (map) => Object.keys(map || {}).sort()
+    .map((k) => k + "=" + String(map[k])).join("\u001f");
+  return [
+    "settings\u001f" + flat(snap.settings),
+    "bindings\u001f" + flat(snap.bindings),
+    "account\u001f" + (snap.epicAccountId || ""),
+  ].join("\u001e");
+}
+
+/* Read the config the same way a send would, and reduce it to that key. Called
+   only when a file's stat has moved, so the expensive half of this (inflating
+   and walking the save) runs when something happened, not every minute. */
+export async function currentPayloadKey() {
+  return payloadKey(await snapshot());
 }
 
 /* Wait until no candidate file has changed size or mtime for QUIET_MS. The game
@@ -690,6 +721,10 @@ export async function watch(cfg, opts = {}) {
 
   log("Watching Fortnite's config and log. Sending when the config changes and settles, when a match finishes, and once an hour regardless.");
   let last = await signature();
+  /* What was last sent, in values rather than bytes. A file the game rewrote
+     without changing any setting it sends must not produce a post. */
+  let lastKey = opts.key ? await opts.key() : await currentPayloadKey();
+  let churnNotedAt = -Infinity;
   if (!last) log("No config found yet under " + savedDir + " - waiting for the game to run.");
 
   /* A fresh start counts as just sent: the logon task runs --once, so nothing is
@@ -699,7 +734,28 @@ export async function watch(cfg, opts = {}) {
   for (let i = 0; i < ticks; i++) {
     await sleepFor(pollMs);
     const sig = await signature();
-    const changed = sig !== last;
+
+    /* The stat says a file moved; that is not the same as a setting changing.
+       Settle first - the save is only whole once the game has stopped writing -
+       then read the values and see whether what would be sent is actually
+       different. A touch with identical values falls through to the heartbeat,
+       which is the only thing that should post during ordinary play. */
+    let changed = false;
+    let keyNow = null;
+    if (sig !== last) {
+      last = sig;
+      await waitForQuiet();
+      last = await signature();
+      keyNow = opts.key ? await opts.key() : await currentPayloadKey();
+      changed = keyNow !== lastKey;
+      /* Said once an hour at most. The game rewrites its config every couple of
+         minutes, so a line per rewrite would bury everything else in the log for
+         a thing that is working as intended. */
+      if (!changed && clock() - churnNotedAt >= heartbeatMs) {
+        churnNotedAt = clock();
+        log("The game rewrote its config, but every setting it sends is the same, so nothing went up.");
+      }
+    }
 
     /* The log is read on every poll, not only when a send is due: that is how a
        finished match is noticed at all, since playing a match does not touch the
@@ -717,8 +773,7 @@ export async function watch(cfg, opts = {}) {
     if (!changed && !due && !played) continue;   // nothing happened: say nothing
 
     if (changed) {
-      last = sig;
-      await waitForQuiet();
+      /* fall through to the send: a real value moved */
     } else if (played) {
       /* A match ended. There is no settings change in this, so no test is opened
          and nothing is deduped away - the matches are additive and the lab files
@@ -735,11 +790,23 @@ export async function watch(cfg, opts = {}) {
         " minutes - sending anyway so the match numbers stay current.");
     }
 
-    await sendNow(cfg, read);
+    const delivered = await sendNow(cfg, read);
     /* Any attempt restarts the clock, so a refused token or a dropped connection
        costs one line a heartbeat rather than one a poll. */
     lastSentAt = clock();
     last = await signature();                // whatever the send did, watch from here
+    /* The key only moves forward when the lab actually took the snapshot. A
+       refused send leaves it alone, so the change is still different from what
+       was last delivered and goes up with the next heartbeat rather than being
+       recorded as already known.
+
+       What it moves to is keyNow when there was one: that is the exact key the
+       send carried. Re-reading here instead could pick up a value written while
+       the send was in flight, record it as delivered when it was not, and lose
+       that change until something else moved. */
+    if (delivered || keyNow === null) {
+      lastKey = keyNow !== null ? keyNow : (opts.key ? await opts.key() : await currentPayloadKey());
+    }
   }
 }
 
