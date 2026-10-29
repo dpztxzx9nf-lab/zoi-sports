@@ -4,11 +4,26 @@
 
    Two reads, both already owned by the request's identity: every counter
    reading in lab_stats, and every test in lab_tests. The work happens in
-   _lib/lab-perf.js so it can be tested without a database. */
-import { SELECT_TEST, identity, json } from "../../_lib/lab.js";
+   _lib/lab-perf.js so it can be tested without a database.
+
+   The catalog comes in here rather than inside lab-perf.js: the maths file stays
+   free of imports, and this handler is the only place that knows both the test
+   rows and the plain-language note about what to watch for. */
+import { CATALOG, SELECT_TEST, identity, json } from "../../_lib/lab.js";
 import { performance } from "../../_lib/lab-perf.js";
 
 const READING_COLUMNS = "taken_at,created_at,matches,wins,kills,deaths,kd,win_rate";
+
+/* setting id -> the watch text from the catalog. Built once per request. */
+const watchLookup = () => {
+  const map = new Map();
+  for (const entry of CATALOG) {
+    if (entry && typeof entry.id === "string" && typeof entry.watch === "string" && entry.watch.trim()) {
+      map.set(entry.id, entry.watch.trim());
+    }
+  }
+  return map;
+};
 
 export async function onRequest({ request, env }) {
   if (request.method !== "GET") return json({ ok: false, error: "Method not allowed." }, 405);
@@ -33,6 +48,7 @@ export async function onRequest({ request, env }) {
     const payload = performance({
       rows: readings.results || [],
       tests: tests.results || [],
+      watch: watchLookup(),
     });
 
     return json({ ok: true, me: { email: who.email, name: who.name }, ...payload });
