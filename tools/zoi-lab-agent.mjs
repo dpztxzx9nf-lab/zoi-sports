@@ -38,6 +38,7 @@
    reference. Same tag layout, same 4-byte values, same float rounding, so both
    read a save to the same numbers. Nothing here is new logic. */
 
+import { inflateSync } from "node:zlib";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { appendFileSync, existsSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -131,6 +132,37 @@ export function fstring(b, at) {
 }
 
 const round6 = (n) => Math.round(n * 1e6) / 1e6;
+
+/* The cloud copy is not the raw save: it is an "ECFD" container with a zlib
+   stream starting at byte 16, and the inflated body is byte-for-byte the same
+   save the game writes locally. Reading it without inflating finds no
+   properties at all, which looks exactly like a save with nothing in it - the
+   settings silently go up empty instead of failing. So every save is inflated
+   when it is a container, and a plain save passes through untouched.
+
+   inflateSync is used rather than a stream because the whole file is 500 KB at
+   most and this runs once a minute at worst. A container that will not inflate
+   is returned as the bytes that were there, so the parser still has a chance
+   at anything readable and nothing is lost by trying. */
+export function inflateSav(b) {
+  if (b.length < 24 || b.subarray(0, 4).toString("ascii") !== "ECFD") return b;
+  /* Find the stream by its own header rather than trusting an offset: zlib
+     starts with 78 01, 78 9c, 78 da or 78 5e, and the header above is fixed in
+     practice but not documented anywhere worth relying on. */
+  for (const head of [[0x78, 0x01], [0x78, 0x9c], [0x78, 0xda], [0x78, 0x5e]]) {
+    let at = 4;
+    while (at < 64) {
+      at = b.indexOf(Buffer.from(head), at);
+      if (at < 0) break;
+      try {
+        const out = inflateSync(b.subarray(at));
+        if (out.length > 0) return out;
+      } catch { /* a false start inside the header is expected */ }
+      at += 1;
+    }
+  }
+  return b;
+}
 
 export function readSav(b) {
   const out = {};
@@ -313,7 +345,8 @@ export async function snapshot() {
   let bindings = null;
   if (savFile) {
     try {
-      const b = await readFile(savFile.path);
+      const raw = await readFile(savFile.path);
+      const b = inflateSav(raw);
       Object.assign(settings, readSav(b));
       bindings = parseBindings(b);
     } catch (e) {
