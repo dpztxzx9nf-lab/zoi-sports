@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#050506">
 <link rel="icon" href="favicon.ico" sizes="any"><link rel="icon" type="image/png" href="favicon-32.png">
-<link rel="stylesheet" href="styles.css?v=29">
+<link rel="stylesheet" href="styles.css?v=30">
 </head>
 <body class="lab-page">
 <header class="nav"><a href="/" class="brand"><img class="zw" src="/assets/zoi-wordmark-gold.png?v=10" alt="Zoi" width="600" height="320"></a>
@@ -29,11 +29,12 @@
  <h2 class="lab-h2">Lifetime</h2>
  <div class="lab-figures" id="figures"></div>
  <p class="lab-fine" id="figures-note" hidden></p>
- <div class="lab-recent" id="recent">
-  <p class="lab-recent-k">Recent form</p>
-  <div class="lab-recent-grid" id="recent-grid"></div>
-  <p class="lab-recent-note" id="recent-note" hidden></p>
- </div>
+</section>
+
+<section class="lab-block">
+ <h2 class="lab-h2">Right now</h2>
+ <div id="current"></div>
+ <p class="lab-fine" id="current-note" hidden></p>
 </section>
 
 <section class="lab-block">
@@ -45,10 +46,6 @@
  <div class="lab-chart" id="chart-win">
   <p class="lab-chart-k">Win rate</p>
   <div class="lab-chart-box" id="chart-win-box"></div>
- </div>
- <div class="lab-chart" id="chart-kd">
-  <p class="lab-chart-k">Kills per death</p>
-  <div class="lab-chart-box" id="chart-kd-box"></div>
  </div>
  <p class="lab-chart-key" id="chart-key" hidden></p>
  <p class="lab-empty" id="chart-empty" hidden></p>
@@ -67,14 +64,6 @@
 <section class="lab-block">
  <h2 class="lab-h2">What's worked</h2>
  <div id="ranked"></div>
-</section>
-
-<section class="lab-block">
- <h2 class="lab-h2">What this can tell you</h2>
- <div class="lab-note" id="note">
-  <p>A setting nudge is small next to the noise of a few nights of Fortnite. Win rate is the worst of it: at around eleven percent, a hundred games can only pin it down to within about six points either way, so a two-point move is not a finding, it is the same number twice. Settling a three-point win-rate move would take roughly one thousand seven hundred games on each side. That is months of play for one setting, and it is not going to happen.</p>
-  <p>Kills a match moves fast enough to read. One kill a match of change settles in about one hundred and ninety games a side at a lifetime rate near five, so that is what the verdicts go on now, and win rate sits underneath as a slow second opinion that never decides on its own. A setting worth testing is one where you expect about a kill a match to move. Anything finer than that is a feeling, and a feeling is fine to act on, as long as the lab is not pretending it measured it.</p>
- </div>
 </section>
 
 <section class="lab-block">
@@ -105,6 +94,13 @@
 
   <ul class="lab-pc-list" id="pc-list"></ul>
   <p class="lab-empty" id="pc-empty" hidden>No PC connected yet.</p>
+ </div>
+</section>
+
+<section class="lab-block">
+ <h2 class="lab-h2">How to read this</h2>
+ <div class="lab-note" id="note">
+  <p>A setting nudge is small next to the noise of a few nights. So the verdicts go on kills a match, which moves fast enough to read: about one hundred and ninety games a side for a move of one. Win rate sits underneath as a slow second opinion that almost never settles at this volume.</p>
  </div>
 </section>
 

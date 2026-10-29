@@ -2,14 +2,15 @@
    Owner-scoped like everything else under /api/lab. Nothing stored yet answers
    {ok:true, ...empty} rather than an error, because an empty lab is normal.
 
-   Two reads, both already owned by the request's identity: every counter
-   reading in lab_stats, and every test in lab_tests. The work happens in
-   _lib/lab-perf.js so it can be tested without a database.
+   Three reads, all owned by the request's identity: every counter reading in
+   lab_stats, every test in lab_tests, and the newest config snapshot in
+   lab_snapshots. The arithmetic happens in _lib/lab-perf.js so it can be tested
+   without a database.
 
    The catalog comes in here rather than inside lab-perf.js: the maths file stays
    free of imports, and this handler is the only place that knows both the test
    rows and the plain-language note about what to watch for. */
-import { CATALOG, SELECT_TEST, identity, json } from "../../_lib/lab.js";
+import { CATALOG, SELECT_TEST, identity, json, currentOf } from "../../_lib/lab.js";
 import { performance } from "../../_lib/lab-perf.js";
 
 const READING_COLUMNS = "taken_at,created_at,matches,wins,kills,deaths,kd,win_rate";
@@ -34,10 +35,15 @@ export async function onRequest({ request, env }) {
   try {
     /* created_at is what the maths needs: it is the moment a count was first
        read, and a repeat read only moves taken_at. Newest 400 is plenty of
-       history for a per-session chart and keeps the read cheap. */
+       history for a per-session chart and keeps the read cheap.
+
+       id has to be carried through the subquery: the outer ORDER BY sorts by it
+       to put the newest 400 back into reading order, and a column the subquery
+       does not select is not visible outside it. Without it the whole handler
+       throws and the page shows the sorry message. */
     const readings = await env.DB.prepare(
       `SELECT ${READING_COLUMNS} FROM (
-         SELECT ${READING_COLUMNS} FROM lab_stats WHERE owner = ? ORDER BY id DESC LIMIT 400
+         SELECT id,${READING_COLUMNS} FROM lab_stats WHERE owner = ? ORDER BY id DESC LIMIT 400
        ) ORDER BY id ASC`
     ).bind(who.id).all();
 
@@ -45,13 +51,20 @@ export async function onRequest({ request, env }) {
       `${SELECT_TEST} WHERE owner = ? ORDER BY started_at ASC, id ASC`
     ).bind(who.id).all();
 
+    /* The newest snapshot only. Everything older is history the page does not
+       show: this section answers "what is it set to now", and the change cards
+       are what say how it got there. */
+    const snapshot = await env.DB.prepare(
+      "SELECT taken_at,payload FROM lab_snapshots WHERE owner = ? ORDER BY id DESC LIMIT 1"
+    ).bind(who.id).first();
+
     const payload = performance({
       rows: readings.results || [],
       tests: tests.results || [],
       watch: watchLookup(),
     });
 
-    return json({ ok: true, me: { email: who.email, name: who.name }, ...payload });
+    return json({ ok: true, me: { email: who.email, name: who.name }, ...payload, current: currentOf(snapshot) });
   } catch (e) {
     console.error("lab performance failed", e);
     return json({ ok: false, error: "Couldn't work out the numbers just now." }, 500);

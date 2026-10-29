@@ -451,20 +451,6 @@ html,body{overflow-x:clip}img{max-width:100%}
  .lab-pc-btn{width:100%}
 }
 
-/* recent form — the strip that moves even in a week with no change */
-.lab-recent{margin:1rem 0 0;padding:.8rem .9rem .85rem;background:#ffffff04;border:1px solid #e6d3a01f;border-left:2px solid var(--g);border-radius:5px}
-.lab-recent-k{margin:0 0 .6rem;font:400 .66rem/1.2 Graduate,Georgia,serif;letter-spacing:.2em;text-transform:uppercase;color:var(--g)}
-.lab-recent-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.7rem}
-.lab-recent-cell{min-width:0}
-.lab-recent-l{display:block;font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--m);line-height:1.3}
-.lab-recent-games{display:block;margin:.15rem 0 .4rem;font:400 .8rem/1.2 Graduate,Georgia,serif;letter-spacing:.04em;color:var(--t)}
-.lab-recent-empty{display:block;margin:.3rem 0 0;font-size:.78rem;color:#8d8a83}
-.lab-recent-vals{display:flex;flex-wrap:wrap;gap:.1rem .85rem}
-.lab-recent-val{display:flex;flex-direction:column;min-width:0}
-.lab-recent-v{font:400 .95rem/1.2 Graduate,Georgia,serif;letter-spacing:.03em;color:var(--g);font-variant-numeric:tabular-nums}
-.lab-recent-k{font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;color:var(--m);line-height:1.3}
-.lab-recent-note{margin:.7rem 0 0;font-size:.75rem;line-height:1.5;color:var(--m)}
-
 /* in progress — a change that is still open */
 .lab-progress{background:var(--card);border:1px solid #e6d3a01f;border-left:2px solid var(--g);border-radius:6px;padding:.9rem;margin:0 0 .7rem}
 .lab-progress:last-child{margin-bottom:0}
@@ -503,6 +489,12 @@ html,body{overflow-x:clip}img{max-width:100%}
 .lab-c-fine{margin:.35rem 0 0;font-size:.72rem;line-height:1.5;color:#8d8a83}
 .lab-tag-testing{border-color:#e6d3a066;color:#c9c5bb}
 
+/* what the tracked settings are set to right now: two columns of label and
+   value, read down. Fourteen rows fit without a scroll on a phone. */
+.lab-now{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.42rem .9rem;margin:0;padding:.85rem .9rem;background:#ffffff04;border:1px solid #e6d3a01f;border-radius:5px}
+.lab-now-l{margin:0;font-size:.76rem;line-height:1.35;color:var(--m);min-width:0}
+.lab-now-v{margin:0;font:400 .82rem/1.35 Graduate,Georgia,serif;letter-spacing:.03em;color:var(--t);text-align:right;font-variant-numeric:tabular-nums;word-break:break-word}
+
 /* the honest note about what a test can and cannot settle */
 .lab-note{padding:.95rem 1rem;background:#ffffff04;border:1px solid #e6d3a01f;border-left:2px solid var(--g);border-radius:5px}
 .lab-note p{margin:0;font-size:.86rem;line-height:1.65;color:var(--m);max-width:58ch}
@@ -510,7 +502,6 @@ html,body{overflow-x:clip}img{max-width:100%}
 .lab-chart-lead{border-color:#e6d3a033}
 
 @media(max-width:420px){
- .lab-recent-grid{grid-template-columns:minmax(0,1fr)}
  .lab-ranges-row{gap:.35rem}
  .lab-primary-d{margin-left:0;flex-basis:100%}
  .lab-secondary-d{margin-left:0;flex-basis:100%}

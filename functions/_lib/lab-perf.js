@@ -294,25 +294,6 @@ export function judge(before, after) {
   return { ...out, verdict: "even" };
 }
 
-/* Rolling recent form, so the page has something that moves in weeks when no
-   setting changed. Null, never zero, where the readings do not reach. */
-function formOf(segments) {
-  if (!segments.length) return null;
-  const t = totalsOf(segments);
-  if (!(t.matches > 0)) return null;
-  return { matches: t.matches, kills_per_match: t.kills_per_match, win_rate: t.win_rate, kd: t.kd };
-}
-
-function recentOf(segments) {
-  const lastSessions = segments.slice(-10);
-  /* The last 100 games, walked back over whole segments like every other
-     sample here, so it can land a few games over 100 rather than guess. */
-  return {
-    sessions: formOf(lastSessions),
-    games: formOf(sampleBefore(segments, Infinity, 100)),
-  };
-}
-
 /* ---------- the whole payload ---------- */
 
 /* watchFor is the lookup the caller threads in: a Map or a plain object keyed
@@ -489,7 +470,6 @@ export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_S
   return {
     lifetime,
     chart,
-    recent: recentOf(segments),
     sessions: segments.length,
     changes: changes.reverse(),                 // newest first, for the cards
     ranked,

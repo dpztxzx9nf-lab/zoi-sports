@@ -365,3 +365,56 @@ export const PROPERTY_MAP = {
   GamepadLeftTriggerReleaseThreshold: "left_trigger_release",
   GamepadRightTriggerReleaseThreshold: "right_trigger_release",
 };
+
+/* ---------- what everything is set to right now ----------
+   The PC agent sends every key in the save, but the page only shows the ones the
+   catalog tracks: the same settings a change can open a test on, with the label
+   the rest of the page uses. All ninety-one keys would be a wall to scroll, and
+   the public settings page already mirrors the in-game menu for that.
+
+   The value shown is the value the save holds, untouched: the page should show
+   what Fortnite is set to, not a prettied version of it. A tracked setting the
+   snapshot did not carry comes back with value null rather than being dropped,
+   so a missing key looks missing instead of looking like a setting that does not
+   exist. */
+export function currentOf(snapshot) {
+  if (!snapshot || typeof snapshot.payload !== "string" || !snapshot.payload) return null;
+  let parsed = null;
+  try {
+    parsed = JSON.parse(snapshot.payload);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  /* settings is a plain object of name to value. An array would pass a bare
+     typeof check and then have no keys to read. */
+  if (!parsed.settings || typeof parsed.settings !== "object" || Array.isArray(parsed.settings)) return null;
+
+  /* One property per id is the rule, but the map is consulted rather than
+     assumed, so a second property added later would show up here too. */
+  const propsFor = new Map();
+  for (const name of Object.keys(PROPERTY_MAP)) {
+    const id = PROPERTY_MAP[name];
+    if (!propsFor.has(id)) propsFor.set(id, []);
+    propsFor.get(id).push(name);
+  }
+
+  const settings = [];
+  for (const entry of CATALOG) {
+    const names = propsFor.get(entry.id) || [];
+    let value = null;
+    for (const name of names) {
+      if (!Object.prototype.hasOwnProperty.call(parsed.settings, name)) continue;
+      const text = valueText(parsed.settings[name]);
+      if (text) { value = text; break; }
+    }
+    settings.push({ id: entry.id, label: entry.label, value });
+  }
+
+  const source = typeof parsed.source === "string" && parsed.source.trim() ? parsed.source.trim() : null;
+  return {
+    taken_at: snapshot.taken_at || null,
+    source,
+    settings,
+  };
+}

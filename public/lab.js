@@ -18,10 +18,9 @@ const nodes = {
   who: $('who'),
   loadError: $('load-error'), loadErrorText: $('load-error-text'), retry: $('retry'),
   app: $('app'), figures: $('figures'), figuresNote: $('figures-note'),
-  recentGrid: $('recent-grid'), recentNote: $('recent-note'),
+  current: $('current'), currentNote: $('current-note'),
   chartKpm: $('chart-kpm'), chartKpmBox: $('chart-kpm-box'),
   chartWin: $('chart-win'), chartWinBox: $('chart-win-box'),
-  chartKd: $('chart-kd'), chartKdBox: $('chart-kd-box'),
   chartKey: $('chart-key'), chartEmpty: $('chart-empty'),
   progress: $('progress'), changes: $('changes'), ranked: $('ranked'),
   pcConnect: $('pc-connect'), pcLabel: $('pc-label'), pcAdd: $('pc-add'),
@@ -197,96 +196,42 @@ function renderFigures() {
   show(nodes.figuresNote);
 }
 
-/* ---------- recent form ----------
-   A strip that moves even in a week with no setting change: what the last ten
-   sessions and the last hundred games looked like. Both are read off the same
-   segments as everything else. */
-
-function formCell(label, f) {
-  const box = el('div', 'lab-recent-cell');
-  box.append(el('span', 'lab-recent-l', label));
-  if (!f) {
-    box.append(el('span', 'lab-recent-empty', 'Nothing yet'));
-    return box;
+/* ---------- what everything is set to right now ----------
+   The tracked settings only, one row each. The page already knows every label
+   from the change cards, and the payload carries the value as the save holds
+   it, so this is a read rather than a second settings page. */
+function renderCurrent() {
+  const c = state.perf && state.perf.current;
+  nodes.current.replaceChildren();
+  if (!c || !Array.isArray(c.settings) || !c.settings.length) {
+    nodes.current.append(el('p', 'lab-empty', 'Nothing yet. Your PC sends the whole config with every sync, so this fills in on its own.'));
+    hide(nodes.currentNote);
+    return;
   }
-  box.append(el('span', 'lab-recent-games', matchesWord(f.matches)));
-  const grid = el('div', 'lab-recent-vals');
-  for (const [k, v] of [['Kills a match', kpm(f.kills_per_match)], ['Win rate', pct(f.win_rate)], ['K/D', kd(f.kd)]]) {
-    const cell = el('div', 'lab-recent-val');
-    cell.append(el('span', 'lab-recent-v', v), el('span', 'lab-recent-k', k));
-    grid.append(cell);
-  }
-  box.append(grid);
-  return box;
-}
 
-function renderRecent() {
-  const r = (state.perf && state.perf.recent) || {};
-  const floor = Number((state.perf && state.perf.min_games) || 25);
-  nodes.recentGrid.replaceChildren();
-  const sessions = r.sessions || null;
-  const games = r.games || null;
-  /* The games window walks back over whole sessions, because there is no
-     per-game data to split one, so it can run a little over a hundred. The cell
-     says so rather than claiming a hundred and then showing a different number. */
-  nodes.recentGrid.append(formCell('Last 10 sessions', sessions), formCell('Recent games', games));
-
-  /* The same floor the verdicts use, applied to the window's own game count. A
-     window of one game is not a reading: its kills a match is that game, and
-     saying "both windows agree" off it would be the same mistake the old
-     two-point rule made, only louder. A window under the floor takes part in
-     nothing and the note says how much more is needed. */
-  const played = (f) => (f && isNum(f.matches) ? f.matches : 0);
-  const shortBy = (f) => Math.max(0, floor - played(f));
-  const ready = [sessions, games].filter((f) => f && played(f) >= floor);
-
-  let note = '';
-  if (!sessions && !games) {
-    note = 'Recent form appears once two syncs show games played between them.';
-  } else if (!ready.length) {
-    /* Neither window is old enough to say anything. Name the nearer one so the
-       number is a wait, not a mystery. */
-    const best = played(sessions) >= played(games) ? sessions : games;
-    const left = shortBy(best);
-    note = 'Not enough played yet to compare anything. The fuller window has ' + matchesWord(played(best))
-      + ', and it needs ' + matchesWord(floor) + ' before a number here means something'
-      + (left ? ': ' + matchesWord(left) + ' to go.' : '.');
-  } else if (ready.length === 1) {
-    /* One clears the floor and one does not. Compare nothing: a window still
-       filling is not a second opinion, and printing one against the other would
-       dress a handful of games up as a trend. */
-    const full = ready[0];
-    const thin = full === sessions ? games : sessions;
-    /* Both names are plural, so "have" reads right either way round. */
-    const thinName = thin === sessions ? 'The last ten sessions' : 'The recent games';
-    const fullName = full === sessions ? 'The last ten sessions' : 'The recent games';
-    note = thin
-      ? fullName + ' have the games to read. ' + thinName + ' have ' + matchesWord(played(thin))
-        + ' and need ' + matchesWord(floor) + ', so the two are not compared yet: '
-        + matchesWord(shortBy(thin)) + ' to go.'
-      : 'Only one window has enough games so far, so there is nothing to compare it with.';
-  } else if (isNum(sessions.kills_per_match) && isNum(games.kills_per_match)) {
-    /* Both clear the floor, so the comparison is fair. Say out loud when they
-       disagree, because that is the honest reason the strip exists: a hot last
-       night is not a changed setting. */
-    const gap = games.kills_per_match - sessions.kills_per_match;
-    /* The games window is the recent end of the sessions window, so a higher
-       games figure means the last night or two is above the ten-session
-       average. That is a hot streak, not a changed setting, and it is why
-       neither number on its own is worth acting on. */
-    if (Math.abs(gap) < 0.3) {
-      note = 'Both windows agree, which means the last few sessions are ordinary for you. Nothing here to read as a change.';
-    } else if (gap > 0) {
-      note = 'The recent games are better than the last ten sessions, which is the shape of a hot streak rather than a changed setting. The longer window is the one to believe.';
-    } else {
-      note = 'The recent games are below the last ten sessions, so the run is older than this week. The longer window is the one to believe.';
+  const seen = fmtDayYear(c.taken_at);
+  const ago = c.taken_at ? agoText(c.taken_at) : '';
+  const list = el('dl', 'lab-now');
+  let missing = 0;
+  for (const row of c.settings) {
+    const dt = el('dt', 'lab-now-l', row.label);
+    let value = row.value;
+    if (value === null || value === undefined || value === '') {
+      value = '\u2014';
+      missing++;
     }
-    note = 'The two windows are here so a good night stays a good night. ' + note;
-  } else {
-    note = 'Both windows have the games, but one is missing the counters to work out kills a match.';
+    list.append(dt, el('dd', 'lab-now-v', value));
   }
-  nodes.recentNote.textContent = note;
-  show(nodes.recentNote);
+  nodes.current.append(list);
+
+  /* When it was read, in the same words the This PC list uses, so a stale
+     snapshot is obvious rather than being read as the current setting. */
+  const bits = [];
+  if (seen) bits.push('As of ' + seen + (ago ? ' (' + ago + ')' : '') + '.');
+  if (c.source) bits.push('Sent by ' + c.source + '.');
+  if (missing) bits.push(missing + (missing === 1 ? ' setting was not' : ' settings were not') + ' in the snapshot.');
+  nodes.currentNote.textContent = bits.join(' ');
+  if (bits.length) show(nodes.currentNote); else hide(nodes.currentNote);
 }
 
 /* ---------- charts ----------
@@ -388,12 +333,10 @@ function renderCharts() {
   const chart = Array.isArray(p.chart) ? p.chart : [];
   nodes.chartKpmBox.replaceChildren();
   nodes.chartWinBox.replaceChildren();
-  nodes.chartKdBox.replaceChildren();
 
   if (!chart.length) {
     hide(nodes.chartKpm);
     hide(nodes.chartWin);
-    hide(nodes.chartKd);
     nodes.chartEmpty.textContent = 'No sessions yet. A session appears once two syncs show different match counts, which means you played in between.';
     show(nodes.chartEmpty);
     hide(nodes.chartKey);
@@ -402,7 +345,6 @@ function renderCharts() {
 
   show(nodes.chartKpm);
   show(nodes.chartWin);
-  show(nodes.chartKd);
   hide(nodes.chartEmpty);
 
   const first = chart[0], last = chart[chart.length - 1];
@@ -430,17 +372,6 @@ function renderCharts() {
     axis: v => Math.round(v * 100) + '%',
     firstLabel, lastLabel,
     empty: 'Win rate needs a win recorded in a session.',
-  }));
-
-  /* K/D comes from the same rows; the endpoint carries it per session only when
-     the counters allow it, so a session without a death count is a gap. */
-  nodes.chartKdBox.append(lineChart(series(s => (isNum(s.kd) ? s.kd : null)), {
-    min: 0,
-    max: 2,
-    label: 'Kills per death by session',
-    axis: v => (Math.round(v * 10) / 10).toFixed(1),
-    firstLabel, lastLabel,
-    empty: 'K/D needs a death counted in a session.',
   }));
 
   const marks = chart.filter(s => s.change).length;
@@ -894,7 +825,7 @@ function bootPc() {
 /* ---------- boot ---------- */
 function render() {
   renderFigures();
-  renderRecent();
+  renderCurrent();
   renderCharts();
   renderProgress();
   renderChanges();
