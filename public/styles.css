@@ -513,3 +513,41 @@ html,body{overflow-x:clip}img{max-width:100%}
  .lab-secondary-d{margin-left:0;flex-basis:100%}
  .lab-note{padding:.8rem .85rem}
 }
+
+/* ---------- the lab's new top of page ----------
+   The page was led by lifetime totals, which average across every value a
+   setting has ever had and so cannot answer "did that change work". It now leads
+   with the open test and the window it is measured over. These are the blocks
+   those two sections draw. */
+
+/* The open test, given the weight it deserves: it is the one live question. */
+.lab-hero{position:relative;background:linear-gradient(180deg,#e6d3a014,#ffffff03);border:1px solid #e6d3a03d;border-left:2px solid var(--g);border-radius:6px;padding:1rem;margin:0 0 .8rem}
+.lab-hero:last-child{margin-bottom:0}
+.lab-hero-head{display:flex;align-items:baseline;justify-content:space-between;gap:.6rem;flex-wrap:wrap}
+.lab-hero-k{margin:0;font:400 1.05rem/1.25 Graduate,Georgia,serif;letter-spacing:.1em;color:var(--g);text-transform:uppercase;min-width:0;overflow-wrap:anywhere}
+.lab-hero-values{margin:.35rem 0 0;font:400 1.5rem/1.15 Graduate,Georgia,serif;letter-spacing:.05em;color:var(--t);display:flex;align-items:baseline;gap:.45rem;flex-wrap:wrap}
+.lab-hero-figs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem;margin:.85rem 0 0}
+.lab-hero-fig{display:flex;flex-direction:column;gap:.15rem;min-width:0}
+.lab-hero-fig .lab-fig-v{font-size:1.18rem}
+.lab-hero-fig .lab-fig-sub{font-size:.68rem}
+
+/* The since-change window: the same figure block, one wider column set. */
+.lab-figures-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.lab-window{margin:0}
+
+/* A fold for material that is real but not what the page is read for. Native
+   <details>, so it works without script and keeps the summary in the tab order. */
+.lab-fold{border:1px solid #e6d3a01f;border-radius:5px;background:#ffffff03}
+.lab-fold-k{font:400 .72rem/1.2 Graduate,Georgia,serif;letter-spacing:.18em;text-transform:uppercase;color:var(--g);padding:.85rem .9rem;cursor:pointer;list-style:none}
+.lab-fold-k::-webkit-details-marker{display:none}
+.lab-fold-k::after{content:'+';float:right;font-size:1rem;line-height:1;color:var(--m)}
+.lab-fold[open] .lab-fold-k::after{content:'\2212'}
+.lab-fold[open] .lab-fold-k{padding-bottom:.5rem;border-bottom:1px solid #e6d3a01a;margin-bottom:.75rem}
+.lab-fold>.lab-figures{padding:0 .9rem}
+.lab-fold>.lab-fine{padding:0 .9rem .9rem}
+
+@media(max-width:560px){
+ .lab-hero-figs,.lab-figures-3{grid-template-columns:repeat(3,minmax(0,1fr));gap:.4rem}
+ .lab-hero-fig .lab-fig-v{font-size:1rem}
+ .lab-hero-values{font-size:1.3rem}
+}

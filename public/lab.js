@@ -18,13 +18,15 @@ const nodes = {
   who: $('who'),
   loadError: $('load-error'), loadErrorText: $('load-error-text'), retry: $('retry'),
   app: $('app'), figures: $('figures'), figuresNote: $('figures-note'),
+  now: $('now'), nowBlock: $('now-block'),
+  window: $('window'), windowBlock: $('window-block'),
   current: $('current'), currentNote: $('current-note'), currentMode: $('current-mode'),
   chartKpm: $('chart-kpm'), chartKpmBox: $('chart-kpm-box'),
   chartWin: $('chart-win'), chartWinBox: $('chart-win-box'),
   chartKey: $('chart-key'), chartEmpty: $('chart-empty'),
   progress: $('progress'), changes: $('changes'), ranked: $('ranked'),
   startBlock: $('start-block'),
-  progressBlock: $('progress-block'), changesBlock: $('changes-block'), rankedBlock: $('ranked-block'),
+  changesBlock: $('changes-block'), rankedBlock: $('ranked-block'),
   pcConnect: $('pc-connect'), pcLabel: $('pc-label'), pcAdd: $('pc-add'),
   pcErrors: $('pc-errors'), pcToken: $('pc-token'), pcTokenValue: $('pc-token-value'),
   pcCopy: $('pc-copy'), pcDone: $('pc-done'), pcCopied: $('pc-copied'),
@@ -116,6 +118,12 @@ const signed = (v, places) => {
 };
 
 const matchesWord = n => group(n) + (n === 1 ? ' game' : ' games');
+
+/* Which side of the page a change belongs on. A test still running is the live
+   question and lives at the top; anything decided is history. Exactly one of the
+   two, never both. */
+const TESTING = 'testing';
+const isOpenChange = c => Boolean(c) && c.status === TESTING;
 
 /* "3.90 to 5.32" — a range, said plainly. */
 const range = (iv, fmt) => (iv && isNum(iv.low) && isNum(iv.high) ? fmt(iv.low) + ' to ' + fmt(iv.high) : 'no range');
@@ -278,6 +286,262 @@ function renderCurrent() {
   if (bits.length) show(nodes.currentNote); else hide(nodes.currentNote);
 }
 
+/* ---------- the two sections that lead the page ----------
+
+   Both answer the question the lab exists for: is the thing I just changed
+   working. They read the two windows the server sends - the open test and the
+   games since the last change - and neither of them is the lifetime totals,
+   which average across every value the setting has ever had. */
+
+/* How big a move a window can see, said plainly. This is the honest answer to
+   "do I have enough games": a window is not short or long in the abstract, it can
+   only see a move at least this big. */
+function detectableText(d, games) {
+  if (!isNum(d) || !isNum(games)) return '';
+  const shown = Math.round(d * 100) / 100;
+  return 'At ' + matchesWord(games) + ' the smallest move this sample could show is about '
+    + shown.toFixed(2) + ' kills a match. Anything smaller than that is inside the noise.';
+}
+
+/* How far the window has got towards the games a one-kill move would need. A
+   bar, quantised to five steps, because that is as much precision as it
+   honestly carries. */
+function progressBar(played, need) {
+  const box = el('div', 'lab-bar');
+  const fill = el('span', 'lab-bar-fill');
+  fill.classList.add('p' + Math.max(0, Math.min(100, Math.round((played / need) * 20) * 5)));
+  box.append(fill);
+  return box;
+}
+
+/* ---------- kills the log did not report ----------
+
+   A counter read can come back with no kill count, which leaves games in a window
+   that the kill rate does not cover. The rate is then measured on the games that
+   did carry one, which is right, and the card has to say so - otherwise a figure
+   over twenty games reads as though it covers all sixty. Nothing is added up as
+   zero to fill the gap.
+
+   One function, used by the live card and by the settled card, so the two can
+   never drift into saying slightly different things about the same shortfall. */
+function killGaps(c) {
+  const one = (side, word) => {
+    const all = side && isNum(side.matches) ? side.matches : 0;
+    const counted = side && isNum(side.kills_matches) ? side.kills_matches : all;
+    if (!side || side.kills_partial !== true || counted >= all) return null;
+    return matchesWord(counted) + ' of the ' + matchesWord(all) + ' ' + word + ' carried a kill count';
+  };
+  const gaps = [one(c.before, 'before the change'), one(c.after, 'after it')].filter(Boolean);
+  if (!gaps.length) return null;
+  return el('p', 'lab-c-fine', 'Kill counts were missing on some reads: ' + gaps.join(', and ')
+    + '. The rate is measured on the games that had one; the rest are left out rather than counted as scoreless games.');
+}
+
+/* The same shortfall, for the other rate on the card. A win count that came
+   back missing on some reads leaves games in the window the rate does not
+   cover, and both the rate and its range are measured on the rest - so the
+   card has to say which games the figure is over. */
+function winGaps(c) {
+  const one = (side, word) => {
+    const all = side && isNum(side.matches) ? side.matches : 0;
+    const counted = side && isNum(side.wins_matches) ? side.wins_matches : all;
+    if (!side || side.wins_partial !== true || counted >= all) return null;
+    return matchesWord(counted) + ' of the ' + matchesWord(all) + ' ' + word + ' carried a win count';
+  };
+  const gaps = [one(c.before, 'before the change'), one(c.after, 'after it')].filter(Boolean);
+  if (!gaps.length) return null;
+  return el('p', 'lab-c-fine', 'Win counts were missing on some reads: ' + gaps.join(', and ')
+    + '. The rate and its range are measured on the games that had one; the rest are left out rather than counted as losses.');
+}
+
+/* A reading runs from one counter change to the next, so a settings change
+   landing inside one leaves games that cannot be assigned to either value. They
+   are in neither figure, which is right, and the card says how many - otherwise
+   a 25-vs-25 card reads as everything that happened. */
+function unplacedNote(c) {
+  const n = isNum(c.unplaced) ? c.unplaced : 0;
+  if (n <= 0) return null;
+  const many = n !== 1;
+  return el('p', 'lab-c-fine', matchesWord(n) + (many ? ' were' : ' was')
+    + ' played while a single reading was open across the change, so there is no way to say '
+    + (many ? 'which side of it each one fell on. They are counted in neither figure above.'
+            : 'which side of it it fell on. It is counted in neither figure above.'));
+}
+
+/* ---------- on test now ---------- */
+
+/* Games a side past this is not going to happen on one setting: at that point a
+   progress bar is a promise the page cannot keep, so the card says so in words
+   instead. */
+const UNREACHABLE = 1500;
+
+function renderNow() {
+  const list = (state.perf && Array.isArray(state.perf.changes)) ? state.perf.changes : [];
+  const open = list.filter(isOpenChange);
+  nodes.now.replaceChildren();
+  if (!open.length) { hide(nodes.nowBlock); return; }
+  show(nodes.nowBlock);
+
+  for (const c of open) {
+    const card = el('article', 'lab-hero');
+
+    const head = el('div', 'lab-hero-head');
+    head.append(el('p', 'lab-hero-k', c.label || c.setting));
+    head.append(el('span', 'lab-tag lab-tag-testing', 'Testing'));
+    card.append(head);
+
+    const values = el('p', 'lab-hero-values');
+    values.append(el('span', null, c.from_value), el('span', 'lab-arrow', '\u2192'), el('span', null, c.to_value));
+    card.append(values);
+
+    /* What was compared, and since when, on one line. A test running inside one
+       mode is a narrower sample and a stronger claim, and an open test is the
+       card a reader acts on, so it has to say which games it is counting just as
+       a settled card does. */
+    const meta = el('p', 'lab-change-meta');
+    const when = fmtDay(c.started_at);
+    if (when) meta.append(el('span', 'lab-change-when', 'Since ' + when));
+    const scope = scopeNote(c);
+    if (scope) meta.append(el('span', 'lab-change-scope', scope));
+    card.append(meta);
+
+    if (c.watch) {
+      const watch = el('div', 'lab-watch');
+      watch.append(el('span', 'lab-watch-k', 'What to watch for'));
+      watch.append(el('p', 'lab-watch-t', c.watch));
+      card.append(watch);
+    }
+
+    /* The two numbers this card is for: how it is going since the change, and how
+       far that is from being enough to call. */
+    const played = c.after && isNum(c.after.matches) ? c.after.matches : 0;
+    const kpmNow = c.after ? c.after.kills_per_match : null;
+    const kpmBefore = c.before ? c.before.kills_per_match : null;
+
+    const fig = el('div', 'lab-hero-figs');
+    const figRow = (name, value, sub) => {
+      const box = el('div', 'lab-hero-fig');
+      box.append(el('span', 'lab-fig-k', name), el('span', 'lab-fig-v', value));
+      if (sub) box.append(el('span', 'lab-fig-sub', sub));
+      return box;
+    };
+    fig.append(
+      figRow('Kills a match now', kpm(kpmNow), isNum(kpmBefore) ? 'was ' + kpm(kpmBefore) : ''),
+      figRow('Games since', group(played), ''),
+      figRow('Win rate now', c.after ? pct(c.after.win_rate) : '\u2014', isNum(c.kills_delta) ? signed(c.kills_delta, 2) + ' kills' : ''),
+    );
+    card.append(fig);
+
+    const need = isNum(c.games_target) ? c.games_target : null;
+    if (need === null) {
+      card.append(el('p', 'lab-c-note', 'No kill rate to size a target from yet. Play a few games and this will fill in.'));
+    } else if (need > UNREACHABLE) {
+      card.append(el('p', 'lab-c-note', 'A move of one kill a match would take about ' + group(need) + ' games on each side at your rate, which is more than one setting is worth. Play it and trust how it feels.'));
+    } else {
+      /* The rate the target was worked out from, which is the rate since the
+         change when there is one and the lifetime rate when there is not. It is
+         never printed as a dash: a target with no rate beside it reads as a
+         number that came from nowhere. */
+      const rateShown = isNum(c.after && c.after.kills_per_match)
+        ? c.after.kills_per_match
+        : (state.perf && isNum(state.perf.lifetime_rate) ? state.perf.lifetime_rate : null);
+      card.append(progressBar(played, need));
+      /* Two facts in one line: how far in this is, and how far it has to go.
+         Written as "4 of about 187" the second number reads as a target that is
+         close, which it is not - so the line spells both out. */
+      card.append(el('p', 'lab-c-note', matchesWord(played) + ' games since the change. Proving a one-kill move'
+        + (isNum(rateShown) ? ' at ' + kpm(rateShown) + ' a match' : '')
+        + ' takes about ' + group(need) + ' a side.'));
+    }
+
+    /* What the games so far can and cannot say. An open test that reads
+       "no change" in its first four games is not a finding, and this says so
+       rather than letting the figures above imply otherwise. */
+    if (c.verdict === 'too-soon' && c.reason === 'after-thin') {
+      card.append(el('p', 'lab-c-fine', 'Under ' + (state.perf.min_games || 25) + ' games a side, so nothing here is a verdict yet \u2014 it is the start of the sample.'));
+    }
+
+    /* The admissions a settled card makes, from the same functions, because this
+       is the card a decision gets made on. */
+    const gaps = killGaps(c);
+    if (gaps) card.append(gaps);
+    const winShort = winGaps(c);
+    if (winShort) card.append(winShort);
+    const stuck = unplacedNote(c);
+    if (stuck) card.append(stuck);
+
+    nodes.now.append(card);
+  }
+}
+
+/* ---------- since the last change ---------- */
+
+function renderWindow() {
+  const w = state.perf && state.perf.since_change;
+  nodes.window.replaceChildren();
+  if (!w || !isNum(w.matches) || w.matches <= 0) { hide(nodes.windowBlock); return; }
+  show(nodes.windowBlock);
+
+  const card = el('div', 'lab-window');
+
+  const figs = el('div', 'lab-figures lab-figures-3');
+  const fig = (k, v, sub) => {
+    const box = el('div', 'lab-fig');
+    box.append(el('span', 'lab-fig-k', k), el('span', 'lab-fig-v', v));
+    if (sub) box.append(el('span', 'lab-fig-sub', sub));
+    return box;
+  };
+  figs.append(
+    fig('Kills a match', kpm(w.kills_per_match), w.interval ? range(w.interval, kpm) : ''),
+    fig('Win rate', pct(w.win_rate), isNum(w.wins) ? group(w.wins) + (w.wins === 1 ? ' win' : ' wins') : ''),
+    fig('Games', group(w.matches), w.sessions === 1 ? 'one session' : w.sessions + ' sessions'),
+  );
+  card.append(figs);
+
+  /* The band, drawn: one interval on its own, so the width of the sample is
+     visible rather than described. */
+  if (w.interval) {
+    const box = el('div', 'lab-range');
+    box.append(singleRange(w.interval, { label: 'Kills a match since the last change, with its 95% range', axis: v => (Math.round(v * 100) / 100).toFixed(1) }));
+    card.append(box);
+  }
+
+  const bits = [];
+  if (w.label) bits.push('Since ' + w.label + ' changed.');
+  if (isNum(w.detectable)) bits.push(detectableText(w.detectable, w.kills_matches || w.matches));
+  if (w.unplaced > 0) {
+    bits.push(matchesWord(w.unplaced) + (w.unplaced === 1 ? ' was' : ' were') + ' played across the change and cannot be placed on either side, so ' + (w.unplaced === 1 ? 'it is' : 'they are') + ' in neither figure.');
+  }
+  if (!bits.length) bits.push('These are the games since your last settings change.');
+  card.append(el('p', 'lab-c-fine', bits.join(' ')));
+
+  nodes.window.append(card);
+}
+
+/* One interval, drawn as a bar with its mean marked. The counterpart of
+   rangeChart, for the case where there is only one side to show. */
+function singleRange(iv, opts) {
+  const root = svg('svg', { viewBox: '0 0 320 46', role: 'img', 'aria-label': opts.label || '' });
+  if (!iv || !isNum(iv.low) || !isNum(iv.high)) return root;
+  const lo = iv.low, hi = iv.high;
+  const span = hi - lo;
+  const pad = span > 0 ? span * 0.14 : Math.max(Math.abs(hi), 1) * 0.2;
+  const min = Math.max(0, lo - pad);
+  const max = hi + pad;
+  const plotW = 320 - 16;
+  const xAt = v => 8 + (max === min ? plotW / 2 : ((v - min) / (max - min)) * plotW);
+  const y = 22;
+  root.append(svg('line', { x1: xAt(lo).toFixed(1), y1: y, x2: xAt(hi).toFixed(1), y2: y, stroke: '#ffe08a', 'stroke-width': 4, 'stroke-linecap': 'round', opacity: 0.55 }));
+  root.append(svg('circle', { cx: xAt(iv.mean).toFixed(1), cy: y, r: 3.6, fill: '#ffe08a' }));
+  /* The range is already written out in words beside the figures this bar sits
+     under, so the bar carries no scale of its own: a second set of two numbers
+     under a picture of the same two numbers is noise, not detail. */
+  root.append(svgText({ x: 8, y: 42, fill: '#a29f97', 'font-size': 7.5 }, opts.axis(iv.low)));
+  root.append(svgText({ x: 312, y: 42, fill: '#a29f97', 'font-size': 7.5, 'text-anchor': 'end' }, opts.axis(iv.high)));
+  root.append(svgText({ x: 160, y: 42, fill: '#6f6c66', 'font-size': 7, 'text-anchor': 'middle' }, 'the bar is the range it could sit in'));
+  return root;
+}
+
 /* ---------- charts ----------
    Hand-drawn SVG with presentation attributes, because the page's CSP allows no
    inline styles and no third-party chart script. */
@@ -310,8 +574,15 @@ function lineChart(series, opts) {
     return box;
   }
   const values = points.map(s => s.v);
-  const top = Math.max(opts.max || 0, ...values);
-  const yMax = top <= 0 ? 1 : top * 1.15;
+  /* A ceiling, when the metric has one. Win rate cannot exceed 100%, and one
+     session of four games won two of them is 50% - which used to stretch the axis
+     to 115%, printing a tick above the only value the number can take. The cap
+     keeps the scale inside the domain and lets a real spike hit the top of the
+     plot instead of inventing headroom that cannot be occupied. */
+  const cap = isNum(opts.cap) ? opts.cap : null;
+  const rawTop = Math.max(opts.max || 0, ...values);
+  const top = cap === null ? rawTop : Math.min(cap, rawTop);
+  const yMax = cap !== null && rawTop >= cap ? cap : (top <= 0 ? 1 : top * 1.15);
   const yMin = opts.min || 0;
 
   const plotW = W - PAD.l - PAD.r;
@@ -336,6 +607,29 @@ function lineChart(series, opts) {
     const x = xAt(i);
     root.append(svg('line', { x1: x, y1: PAD.t, x2: x, y2: PAD.t + plotH, stroke: '#e6d3a055', 'stroke-width': 1, 'stroke-dasharray': '2 3' }));
   });
+
+  /* The interval, as a band behind the line.
+
+     A bare line through a handful of games looks like a measurement and is not
+     one: four games swinging from 0 to 7 kills a match is two points that read
+     as a trend. The band is the 95% range the verdict actually uses, so a wide
+     band says "this session could easily be that different" and an eye cannot
+     mistake the line for precision it does not have. Only drawn where both
+     edges are real numbers, and broken at the same places the line is. */
+  let band = [];
+  const flushBand = () => {
+    if (band.length > 1) {
+      const up = band.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.hi.toFixed(1)).join(' ');
+      const down = band.slice().reverse().map((p) => 'L' + p.x.toFixed(1) + ' ' + p.lo.toFixed(1)).join(' ');
+      root.append(svg('path', { d: up + ' ' + down + ' Z', fill: '#ffe08a', 'fill-opacity': 0.13, stroke: 'none' }));
+    }
+    band = [];
+  };
+  series.forEach((s, i) => {
+    if (!isNum(s.lo) || !isNum(s.hi) || s.thin) { flushBand(); return; }
+    band.push({ x: xAt(i), lo: yAt(s.lo), hi: yAt(s.hi) });
+  });
+  flushBand();
 
   /* the line, broken wherever a value is missing or too thin to stand on */
   let run = [];
@@ -397,7 +691,11 @@ function renderCharts() {
      ends of the axis and read as a broken label rather than a short history. */
   const sameDay = fmtDay(first.to) === fmtDay(last.to);
   const lastLabel = sameDay ? '' : fmtDay(last.to);
-  const series = v => chart.map(s => ({ v: v(s), mark: Boolean(s.change), thin: Boolean(s.thin) }));
+  const series = v => chart.map(s => ({
+    v: v(s), mark: Boolean(s.change), thin: Boolean(s.thin),
+    lo: isNum(s.kills_low) ? s.kills_low : null,
+    hi: isNum(s.kills_high) ? s.kills_high : null,
+  }));
 
   /* Kills a match leads, because it is the number a verdict can move on. */
   nodes.chartKpmBox.append(lineChart(series(s => s.kills_per_match), {
@@ -412,6 +710,7 @@ function renderCharts() {
   nodes.chartWinBox.append(lineChart(series(s => s.win_rate), {
     min: 0,
     max: 0.15,
+    cap: 1,
     label: 'Win rate by session',
     axis: v => Math.round(v * 100) + '%',
     firstLabel, lastLabel,
@@ -421,6 +720,7 @@ function renderCharts() {
   const marks = chart.filter(s => s.change).length;
   const thins = chart.filter(s => s.thin).length;
   const bits = ['Each point is one session.'];
+  bits.push('The shaded band is the range each session could really sit in, so a point inside another point\u2019s band is not a change.');
   if (thins) bits.push('The hollow points are sessions of fewer than ' + (p.chart_min_games || 5) + ' games: one game at 0% is not a reading, so they sit off the line.');
   bits.push(marks ? 'The dashed uprights are where a setting changed.' : 'A dashed upright appears where a setting changes.');
   nodes.chartKey.textContent = bits.join(' ');
@@ -528,32 +828,11 @@ function killsLine(c) {
      window that the rate does not cover. The rate was measured on the rest, and
      the card says so rather than letting the games row imply every one of them
      is in the figure. Nothing is added up as zero to fill the gap. */
-  const partial = (side, word) => {
-    const all = side && isNum(side.matches) ? side.matches : 0;
-    const counted = side && isNum(side.kills_matches) ? side.kills_matches : all;
-    if (!side || side.kills_partial !== true || counted >= all) return null;
-    return matchesWord(counted) + ' of the ' + matchesWord(all) + ' ' + word + ' carried a kill count';
-  };
-  const gaps = [partial(c.before, 'before the change'), partial(c.after, 'after it')].filter(Boolean);
-  if (gaps.length) {
-    wrap.append(el('p', 'lab-c-fine', 'Kill counts were missing on some reads: ' + gaps.join(', and ') +
-      '. The rate is measured on the games that had one; the rest are left out rather than counted as scoreless games.'));
-  }
+  const gaps = killGaps(c);
+  if (gaps) wrap.append(gaps);
 
-  /* A reading covers the time between two counter changes, so a change that
-     lands in the middle of one leaves games that cannot be assigned to either
-     value - the reading says what the total moved by, not which side of the
-     change each game fell on. They are counted in neither figure, and the card
-     says how many rather than letting it read as though every game in the
-     window is in the comparison. */
-  const unplaced = isNum(c.unplaced) ? c.unplaced : 0;
-  if (unplaced > 0) {
-    const many = unplaced !== 1;
-    wrap.append(el('p', 'lab-c-fine', matchesWord(unplaced) + (many ? ' were' : ' was') +
-      ' played while a single reading was open across the change, so there is no way to say ' +
-      (many ? 'which side of it each one fell on. They are counted in neither figure above.'
-            : 'which side of it it fell on. It is counted in neither figure above.')));
-  }
+  const unplaced = unplacedNote(c);
+  if (unplaced) wrap.append(unplaced);
   return wrap;
 }
 
@@ -577,21 +856,8 @@ function winRateLine(c) {
     wrap.append(el('p', 'lab-c-fine', 'Ranges ' + pct(b.low) + ' to ' + pct(b.high) + ' before, ' + pct(a.low) + ' to ' + pct(a.high) + ' after.'));
   }
 
-  /* Same admission the kills line makes, for the other rate on the card. A win
-     count that came back missing on some reads leaves games in the window the
-     rate does not cover, and both the rate and its range are measured on the
-     rest. Without this the row silently implies every game is in the figure. */
-  const winsGap = (side, word) => {
-    const all = side && isNum(side.matches) ? side.matches : 0;
-    const counted = side && isNum(side.wins_matches) ? side.wins_matches : all;
-    if (!side || side.wins_partial !== true || counted >= all) return null;
-    return matchesWord(counted) + ' of the ' + matchesWord(all) + ' ' + word + ' carried a win count';
-  };
-  const winGaps = [winsGap(c.before, 'before the change'), winsGap(c.after, 'after it')].filter(Boolean);
-  if (winGaps.length) {
-    wrap.append(el('p', 'lab-c-fine', 'Win counts were missing on some reads: ' + winGaps.join(', and ') +
-      '. The rate and its range are measured on the games that had one; the rest are left out rather than counted as losses.'));
-  }
+  const winShort = winGaps(c);
+  if (winShort) wrap.append(winShort);
 
   /* The honest sentence, and it quotes a move worth having rather than the one
      that happened to show up. Sizing a half-point wobble gives hundreds of
@@ -664,83 +930,19 @@ function changeCard(c) {
   return card;
 }
 
+/* The history: every change that is no longer being played.
+
+   The split is by status and nothing else. An open test belongs to the top of the
+   page in full, and printing the same setting twice - once as a live test, once
+   as a card with the same numbers - was the page arguing with itself. So a test
+   still running appears only under "On test now", and once it is decided it
+   appears only here. No change is ever drawn in both places. */
 function renderChanges() {
   const list = (state.perf && Array.isArray(state.perf.changes)) ? state.perf.changes : [];
+  const past = list.filter(c => !isOpenChange(c));
   nodes.changes.replaceChildren();
-  if (!list.length) return;
-  for (const c of list) nodes.changes.append(changeCard(c));
-}
-
-/* ---------- in progress ----------
-   One card per change still open: what the setting did, what to watch for while
-   playing it, and how far the sample has got towards what it would take. */
-
-const UNREACHABLE = 1500;   // games a side past this is not going to happen on one setting
-
-function progressCard(c) {
-  const card = el('article', 'lab-progress');
-
-  const head = el('div', 'lab-progress-head');
-  head.append(el('p', 'lab-card-k', c.label || c.setting));
-  head.append(el('span', 'lab-tag lab-tag-testing', 'Testing'));
-  card.append(head);
-
-  const values = el('p', 'lab-values');
-  values.append(el('span', null, c.from_value), el('span', 'lab-arrow', '\u2192'), el('span', null, c.to_value));
-  card.append(values);
-
-  const when = fmtDay(c.started_at);
-  if (when) card.append(el('span', 'lab-change-when', 'Since ' + when));
-
-  if (c.watch) {
-    const watch = el('div', 'lab-watch');
-    watch.append(el('span', 'lab-watch-k', 'What to watch for'));
-    watch.append(el('p', 'lab-watch-t', c.watch));
-    card.append(watch);
-  }
-
-  const played = c.after && isNum(c.after.matches) ? c.after.matches : 0;
-
-  /* Progress is measured against the games a move of one kill a match would
-     need at this kill rate, which is the size of move this lab is built to
-     find and the smallest one worth acting on. games_needed is the move seen so
-     far, and early in a test that is nearly zero and its target runs into the
-     tens of thousands: true, but not a plan. */
-  const need = isNum(c.games_target) ? c.games_target : null;
-
-  if (need === null) {
-    card.append(el('p', 'lab-c-note', 'No kill rate to size a target from yet. Play a few games and this will fill in.'));
-  } else if (need > UNREACHABLE) {
-    card.append(el('p', 'lab-c-note', 'A move of one kill a match would take about ' + group(need) + ' games on each side at this rate, which is more than one setting is worth. Play it and trust how it feels.'));
-  } else {
-    const box = el('div', 'lab-bar');
-    const fill = el('span', 'lab-bar-fill');
-    /* The fill width is a class, not a style attribute: the CSP forbids inline
-       styles and the fill is quantised to five steps anyway, which is as much
-       precision as a progress bar honestly carries. */
-    fill.classList.add('p' + Math.max(0, Math.min(100, Math.round((played / need) * 20) * 5)));
-    box.append(fill);
-    card.append(box);
-    /* The target is worked out at the kill rate in the window after the change,
-       so it moves as the player's rate moves: a higher rate carries more
-       variance and so asks for more games. The note says which rate it used so
-       the number is never a mystery next to the note on the page. */
-    card.append(el('p', 'lab-c-note', matchesWord(played) + ' since the change, of about ' + group(need) + ' on each side for a move of one kill a match, at ' + kpm(c.after.kills_per_match) + ' a match.'));
-  }
-
-  if (isNum(c.after && c.after.kills_per_match)) {
-    card.append(el('p', 'lab-c-fine', 'So far: ' + kpm(c.after.kills_per_match) + ' kills a match, ' + pct(c.after.win_rate) + ' win rate, over ' + matchesWord(played) + '.'));
-  }
-
-  return card;
-}
-
-function renderProgress() {
-  const list = (state.perf && Array.isArray(state.perf.changes)) ? state.perf.changes : [];
-  const open = list.filter(c => c.status === 'testing');
-  nodes.progress.replaceChildren();
-  if (!open.length) return;
-  for (const c of open) nodes.progress.append(progressCard(c));
+  if (!past.length) return;
+  for (const c of past) nodes.changes.append(changeCard(c));
 }
 
 /* ---------- which setting actually helped ---------- */
@@ -929,13 +1131,18 @@ function bootPc() {
 }
 
 /* ---------- boot ---------- */
+/* Order matters as much as content here: the page is read top-down, and the top
+   is the only part that gets read on a phone between games. The open test comes
+   first because it is the live question, then the window it is measured over,
+   then the history, then the reference material. */
 function render() {
-  renderFigures();
-  renderCurrent();
+  renderNow();
+  renderWindow();
   renderCharts();
-  renderProgress();
   renderChanges();
   renderRanked();
+  renderCurrent();
+  renderFigures();
   renderEmptiness();
 }
 
@@ -947,13 +1154,14 @@ function render() {
 function renderEmptiness() {
   const list = (state.perf && Array.isArray(state.perf.changes)) ? state.perf.changes : [];
   const ranked = (state.perf && Array.isArray(state.perf.ranked)) ? state.perf.ranked : [];
-  const anyOpen = list.some(c => c.status === 'testing');
-
   const empty = !list.length && !ranked.length;
   if (empty) show(nodes.startBlock); else hide(nodes.startBlock);
 
-  nodes.progressBlock.hidden = !anyOpen;
-  nodes.changesBlock.hidden = !list.length;
+  /* The open-test block is owned by renderNow, which hides it when there is
+     nothing open. This one only decides the history sections. */
+  /* Same filter renderChanges uses, so the heading never sits over an empty box. */
+  const past = list.filter(c => !isOpenChange(c));
+  nodes.changesBlock.hidden = !past.length;
   nodes.rankedBlock.hidden = !ranked.length;
 }
 

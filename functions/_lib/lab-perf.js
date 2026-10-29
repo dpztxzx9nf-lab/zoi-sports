@@ -203,6 +203,23 @@ export function gamesToSeparate(effect, meanBefore, meanAfter, z = Z_95) {
   return Math.ceil(n);
 }
 
+/* The smallest move two windows of `gamesPerSide` games could tell apart, in
+   kills a match. This is gamesToSeparate asked backwards, and it is the honest
+   answer to "how many games is enough": a window is not useful or useless in the
+   abstract, it can only see a move at least this big. At this player's rate ten
+   games a side sees nothing smaller than about 2.8 kills a match, so ten games
+   can confirm a doubling and cannot see a nudge.
+
+   Null rather than 0 when there is no rate to size it from, because "can see any
+   move at all" is not a claim this can make. */
+export function moveDetectable(meanKills, gamesPerSide, z = Z_95) {
+  const mean = Number(meanKills), n = Number(gamesPerSide);
+  if (!Number.isFinite(mean) || mean <= 0) return null;
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const d = (z * Math.sqrt(2 * mean * OVERDISPERSION)) / Math.sqrt(n);
+  return Number.isFinite(d) && d > 0 ? d : null;
+}
+
 /* The games a change like this would need, given the player's own kill rate.
    A move of one kill a match at 4.8 kills a match lands near 190 games a side;
    a three-point win-rate move lands near 1,700. Nothing here decides anything,
@@ -585,6 +602,9 @@ function nextChangeOf(ordered, i) {
 
 export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_SEGMENTS, watch = null, matches = null }) {
   const segments = labelSessions(segmentsOf((rows || []).slice(-MAX_READINGS)), matches);
+  /* The header's lifetime numbers, read once here because the per-change target
+     sizing below falls back to the lifetime kill rate. */
+  const lifetime = lifetimeOf(rows || []);
   const watchFor = watcherFor(watch);
   const changes = [];
 
@@ -672,8 +692,24 @@ export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_S
        set from the smallest move worth caring about instead. Null only when
        there is no kill rate to size it from. */
     const designEffect = 1;
-    const games_target = meanKills !== null && Number.isFinite(meanKills) && meanKills > 0
-      ? gamesForEffect(designEffect, meanKills)
+    /* Sized from the pooled before/after rate when both sides have one, and from
+       the player's own lifetime rate when they do not.
+
+       This used to be null the moment either interval was missing, which is
+       exactly the case an OPEN test starts in: a change made an hour ago has no
+       after-interval yet, so the target came back null and the progress bar
+       vanished - on an account with four thousand games of history. The card then
+       said "no kill rate to size a target from yet", which was untrue. A test in
+       progress always knows the player's rate; it just may not know the rate
+       since the change, and the lifetime rate is the honest stand-in for sizing
+       a target. */
+    const rateForTarget = meanKills !== null && Number.isFinite(meanKills) && meanKills > 0
+      ? meanKills
+      : (lifetime && lifetime.kills !== null && lifetime.matches > 0
+        ? lifetime.kills / lifetime.matches
+        : null);
+    const games_target = rateForTarget !== null && Number.isFinite(rateForTarget) && rateForTarget > 0
+      ? gamesForEffect(designEffect, rateForTarget)
       : null;
 
     /* The same question asked of win rate, so the page can put a price on it
@@ -802,13 +838,18 @@ export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_S
       return y - x;
     });
 
-  const lifetime = lifetimeOf(rows || []);
   const chart = segments.slice(-maxSegments).map((s) => {
     const t = totalsOf([s]);
+    /* The same interval the verdict uses, per session, so the page can draw the
+       spread it is actually reading rather than a bare line that looks precise.
+       Null when the session has no kill count, never a zero-width band. */
+    const ci = t.kills !== null && t.kills_matches > 0 ? killsInterval(t.kills, t.kills_matches) : null;
     return {
       from: s.from, to: s.to, matches: s.matches,
       kills: s.kills === undefined ? null : s.kills,
       kills_per_match: t.kills_per_match,
+      kills_low: ci ? ci.low : null,
+      kills_high: ci ? ci.high : null,
       win_rate: t.win_rate, kd: t.kd,
       /* A session of one or two games drawn as a confident dot at 0% is a lie
          the eye believes. Below the floor the point is marked, and the page
@@ -821,8 +862,58 @@ export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_S
     };
   });
 
+  /* Windows counted in games, not days. The page leads with these instead of
+     the lifetime totals, because "since the last change" is the window that
+     answers the only question the lab exists for. Both are built over whole
+     sessions, so each carries the number of games it really got.
+
+     `sinceChange` is the window the last change opened - the primary reading on
+     the page - and is null before the first change. `recent` is the fixed
+     games window, which is the honest second opinion: it says how big a move a
+     handful of games can see, so a short window reads as short. */
+  const lastChangeMs = ordered.length ? ordered[ordered.length - 1].startedMs : null;
+  const sinceChangeSegs = lastChangeMs === null ? [] : segments.filter((s) => s.fromMs >= lastChangeMs);
+  const sinceChangeTotals = sinceChangeSegs.length ? totalsOf(sinceChangeSegs) : null;
+  const sinceChange = sinceChangeTotals === null ? null : {
+    ...sinceChangeTotals,
+    from: sinceChangeSegs[0].from,
+    to: sinceChangeSegs[sinceChangeSegs.length - 1].to,
+    sessions: sinceChangeSegs.length,
+    /* Games that the open reading covering the change cannot place: they exist
+       and they are not in the figure, so they are counted here rather than
+       silently dropped. */
+    unplaced: lastChangeMs === null ? 0 : sampleAfterDetailed(segments, lastChangeMs, null).unplaced,
+    detectable: sinceChangeTotals.kills_per_match !== null
+      ? moveDetectable(sinceChangeTotals.kills_per_match, sinceChangeTotals.kills_matches)
+      : null,
+    interval: sinceChangeTotals.kills !== null && sinceChangeTotals.kills_matches > 0
+      ? killsInterval(sinceChangeTotals.kills, sinceChangeTotals.kills_matches)
+      : null,
+    started_at: ordered.length ? ordered[ordered.length - 1].started_at : null,
+    setting: ordered.length ? ordered[ordered.length - 1].setting : null,
+    label: ordered.length ? ordered[ordered.length - 1].label : null,
+  };
+  /* The rate every target is priced at: the lifetime figure, which is what the
+     page uses when it has to say "this many games to see a move like that".
+
+     There is deliberately ONE window on this payload, not two. A fixed "last N
+     games" window sitting beside the since-change window would nearly always be
+     drawn from inside it - at this volume fifty games is often the whole since-
+     change sample - and two figures built from the same games agreeing with each
+     other is not a second opinion, it is the same reading printed twice. That
+     exact shape was removed from this file once already for that reason, and it
+     is not coming back under a new name. */
+  const lifetimeRate = lifetime && lifetime.kills !== null && lifetime.matches > 0
+    ? lifetime.kills / lifetime.matches
+    : null;
+
   return {
     lifetime,
+    lifetime_rate: lifetimeRate,
+    since_change: sinceChange,
+    /* How big a move this player's own sample size can see. Quoted next to the
+       window so a short one reads as short instead of as a number to believe. */
+    detectable_at_since_change: sinceChange ? sinceChange.detectable : null,
     chart,
     sessions: segments.length,
     changes: changes.reverse(),                 // newest first, for the cards
