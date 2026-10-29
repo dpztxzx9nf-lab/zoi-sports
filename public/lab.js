@@ -523,6 +523,37 @@ function killsLine(c) {
     note = 'The two ranges overlap, so the move so far is not bigger than the noise. That is not a verdict either way.';
   }
   wrap.append(el('p', 'lab-c-note lab-c-note-primary', note));
+
+  /* A kill count that came back missing on some reads leaves games in the
+     window that the rate does not cover. The rate was measured on the rest, and
+     the card says so rather than letting the games row imply every one of them
+     is in the figure. Nothing is added up as zero to fill the gap. */
+  const partial = (side, word) => {
+    const all = side && isNum(side.matches) ? side.matches : 0;
+    const counted = side && isNum(side.kills_matches) ? side.kills_matches : all;
+    if (!side || side.kills_partial !== true || counted >= all) return null;
+    return matchesWord(counted) + ' of the ' + matchesWord(all) + ' ' + word + ' carried a kill count';
+  };
+  const gaps = [partial(c.before, 'before the change'), partial(c.after, 'after it')].filter(Boolean);
+  if (gaps.length) {
+    wrap.append(el('p', 'lab-c-fine', 'Kill counts were missing on some reads: ' + gaps.join(', and ') +
+      '. The rate is measured on the games that had one; the rest are left out rather than counted as scoreless games.'));
+  }
+
+  /* A reading covers the time between two counter changes, so a change that
+     lands in the middle of one leaves games that cannot be assigned to either
+     value - the reading says what the total moved by, not which side of the
+     change each game fell on. They are counted in neither figure, and the card
+     says how many rather than letting it read as though every game in the
+     window is in the comparison. */
+  const unplaced = isNum(c.unplaced) ? c.unplaced : 0;
+  if (unplaced > 0) {
+    const many = unplaced !== 1;
+    wrap.append(el('p', 'lab-c-fine', matchesWord(unplaced) + (many ? ' were' : ' was') +
+      ' played while a single reading was open across the change, so there is no way to say ' +
+      (many ? 'which side of it each one fell on. They are counted in neither figure above.'
+            : 'which side of it it fell on. It is counted in neither figure above.')));
+  }
   return wrap;
 }
 
@@ -544,6 +575,22 @@ function winRateLine(c) {
 
   if (b && a) {
     wrap.append(el('p', 'lab-c-fine', 'Ranges ' + pct(b.low) + ' to ' + pct(b.high) + ' before, ' + pct(a.low) + ' to ' + pct(a.high) + ' after.'));
+  }
+
+  /* Same admission the kills line makes, for the other rate on the card. A win
+     count that came back missing on some reads leaves games in the window the
+     rate does not cover, and both the rate and its range are measured on the
+     rest. Without this the row silently implies every game is in the figure. */
+  const winsGap = (side, word) => {
+    const all = side && isNum(side.matches) ? side.matches : 0;
+    const counted = side && isNum(side.wins_matches) ? side.wins_matches : all;
+    if (!side || side.wins_partial !== true || counted >= all) return null;
+    return matchesWord(counted) + ' of the ' + matchesWord(all) + ' ' + word + ' carried a win count';
+  };
+  const winGaps = [winsGap(c.before, 'before the change'), winsGap(c.after, 'after it')].filter(Boolean);
+  if (winGaps.length) {
+    wrap.append(el('p', 'lab-c-fine', 'Win counts were missing on some reads: ' + winGaps.join(', and ') +
+      '. The rate and its range are measured on the games that had one; the rest are left out rather than counted as losses.'));
   }
 
   /* The honest sentence, and it quotes a move worth having rather than the one

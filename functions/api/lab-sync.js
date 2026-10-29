@@ -131,6 +131,34 @@ export async function onRequest({ request, env }) {
       flat[name] = v;
     }
   }
+  /* A complete read always carries the save's own property names. The agent
+     sends them bare, and prefixes the two files it parses separately: "ini." for
+     GameUserSettings.ini and "sg." for the scalability block inside it. So a
+     payload with settings but not one bare name is the ini on its own - which is
+     what a locked ClientSettings.Sav looks like, since the agent logs the failed
+     read and sends what it could still get.
+
+     Storing that would be worse than refusing it. It carries 34 of the 91
+     settings a real read has, none of the tracked ones, and no bindings; it
+     became the diff baseline, so the next complete read compared against a
+     half-read and a real move (sensitivity 39 to 55) looked like a setting
+     appearing from nowhere instead of changing. A 422 is the one answer the
+     agent can act on: the sentence below goes into its log, and it waits for the
+     next heartbeat rather than sending the same half-read bytes again, so
+     nothing half-read is ever stored.
+
+     Only the total absence of save properties is refused. A save that genuinely
+     holds nothing beyond the ini is not for this check to imagine - the real
+     payloads are the evidence, and every one of them has 57 bare names against
+     this payload's zero. */
+  const bareNames = Object.keys(flat || {}).filter((name) => !name.startsWith("ini.") && !name.startsWith("sg."));
+  if (!bareNames.length) {
+    return json({
+      ok: false,
+      errors: ["That snapshot has no settings from ClientSettings.Sav \u2014 was the save locked?"],
+    }, 422);
+  }
+
   const bindings = (body.bindings && typeof body.bindings === "object" && !Array.isArray(body.bindings))
     ? body.bindings : null;
   const source = str(body.source, SOURCE_MAX);
@@ -142,6 +170,10 @@ export async function onRequest({ request, env }) {
   const payloadHash = await sha256Hex(payload);
 
   let created = [];
+  /* Kept in the reply for the agent's sake, but nothing goes in it any more:
+     every tracked setting that moves now either opens a test or closes the stale
+     one and opens its own. It stays in the shape so an older agent reading this
+     response does not see a field vanish under it. */
   const skipped = [];
   const closed = [];
   let duplicate = false;
@@ -187,23 +219,25 @@ export async function onRequest({ request, env }) {
         const toValue = valueText(flat[name]);
         if (!fromValue || !toValue || sameValue(fromValue, toValue)) continue;
 
-        /* One open test per setting. A test already ending where this change
-           starts is the same test still running, so it is left as it is. */
+        /* One open test per setting. */
         const open = await env.DB.prepare(
           `SELECT id,to_value FROM lab_tests WHERE owner = ? AND setting = ? AND status = 'testing'
            ORDER BY id DESC LIMIT 1`
         ).bind(owner, setting).first();
 
-        if (open && sameValue(open.to_value, fromValue)) {
-          skipped.push({ setting, reason: "already testing" });
-          continue;
-        }
+        /* Any open test here is stale, and it used to be possible to leave one
+           open for ever. There was a branch above this that read "the open test
+           already ends where this change starts, so it is the same test still
+           running" and skipped. It could not be reached for that reason: this
+           change only gets here when fromValue and toValue differ, so an open
+           test whose to_value equals fromValue is a setting moving OFF the value
+           under test - a revert, or a change on past it. Skipping meant the test
+           stayed open, kept counting games played on a value nobody was running,
+           and the revert itself was never recorded.
 
-        /* Anything else means this setting moved somewhere the open test was not
-           watching, so that test can never finish: it would keep collecting
-           games played on a value nobody is running. Close it with the one
-           honest label there is for a test that ended without an answer, and
-           say why in its note, rather than guessing better or worse. */
+           It can never finish, either way. Close it with the one honest label
+           there is for a test that ended without an answer, and say why in its
+           note, rather than guessing better or worse. */
         if (open) {
           const done = await env.DB.prepare(
             `UPDATE lab_tests
@@ -243,15 +277,26 @@ export async function onRequest({ request, env }) {
 
   /* Past this point the snapshot is stored, so nothing below may fail the
      request: a stats problem is reported in the reply and nothing else. */
-  const stats = await syncStats(env, owner, tokenId, epicAccountId);
+  /* Whether this sync opened a test decides whether the stats read also writes
+     a boundary row: a reading exactly on the change, carrying the counters as
+     they stand, so the first evening on the new value is not swallowed by the
+     straddle rule. Only a test opening warrants one - an ordinary heartbeat that
+     did it too would fill lab_stats with rows that mark nothing. */
+  const stats = await syncStats(env, owner, tokenId, epicAccountId, created.map((t) => t.id));
   return json({ ok: true, created, skipped, closed, duplicate, stats, matches: matchResult });
 }
 
 /* ------------------------------------------------------------- the stats ---
    Runs after the snapshot is already stored, so every outcome here is a note
    in the reply rather than a failure. A token with no Epic id on it makes no
-   call at all: nobody has told the lab whose numbers to read. */
-async function syncStats(env, owner, tokenId, epicAccountId) {
+   call at all: nobody has told the lab whose numbers to read.
+
+   `boundaryTestIds` are the tests this sync opened, empty when it opened none.
+   With any, the read also writes one lab_stats row per test stamped at that
+   test's own start, so the change has a reading sitting exactly on it. Nothing
+   here can fail the sync: every path below returns a note, and the snapshot is
+   already stored by this point. */
+async function syncStats(env, owner, tokenId, epicAccountId, boundaryTestIds = []) {
   const id = epicIdOf(epicAccountId);
   if (!id) return { skipped: "no epic account id" };
 
@@ -270,7 +315,11 @@ async function syncStats(env, owner, tokenId, epicAccountId) {
     const summary = summarize(stats);
     if (!summary) return { ok: false, reason: "shape" };
 
-    const row = await recordStats(env, owner, id, summary);
+    /* A no-Epic-id token or a failed read above has already returned, so this
+       point is only reached with real counters. A missing boundary row is
+       therefore degraded rather than broken: the sync still succeeds and the
+       change simply loses its first evening, exactly as it did before. */
+    const row = await recordStats(env, owner, id, summary, boundaryTestIds.length ? { testIds: boundaryTestIds } : null);
     const updated = await updateGamesPlayed(env, owner);
 
     /* The id is learned from the PC, so record it the first time it arrives:
@@ -281,7 +330,8 @@ async function syncStats(env, owner, tokenId, epicAccountId) {
       ).bind(id, tokenId, owner, id).run();
     }
 
-    return { ok: true, group: summary.group, matches: summary.matches, deduped: row.deduped, tests: updated };
+    return { ok: true, group: summary.group, matches: summary.matches, deduped: row.deduped,
+      boundary: row.boundary === true, tests: updated };
   } catch (e) {
     console.error("lab stats store failed", e);
     return { ok: false, reason: "store" };

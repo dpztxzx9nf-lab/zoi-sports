@@ -79,9 +79,21 @@ export function timeOf(value) {
 }
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+
+/* "The log did not say" is not zero.
+   A NULL column (D1 hands one back for a counter the API never returned) used to
+   reach Number(), which turns null and the empty string into 0, so a missing
+   count became a real zero in every segment and every total. The schema comment
+   in 0007 promises the opposite in as many words, so the absence is carried as
+   null and each caller decides what it can still say without it. Only genuine
+   finite input - a number, or a string of one - is rounded. */
 const int = (v) => {
-  const n = typeof v === "number" ? v : Number(v);
-  return Number.isFinite(n) ? Math.round(n) : null;
+  if (typeof v === "number") return Number.isFinite(v) ? Math.round(v) : null;
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.round(n) : null;
+  }
+  return null;
 };
 
 /* ---------- the maths a verdict can stand on ---------- */
@@ -203,25 +215,47 @@ export function gamesForEffect(effect, killsPerMatch) {
 
 /* ---------- counters ---------- */
 
-/* Counters for a set of segments, or for one. win_rate is wins/matches; kd is
-   kills/deaths, and null when no death was recorded rather than Infinity. */
+/* Counters for a set of segments, or for one.
+
+   A counter can be missing from some segments - the stats API returns sparse
+   cells, and segmentsOf refuses to invent a delta across a row that had none.
+   Those games still happened, so they stay in `matches`; they do not belong in
+   the denominator of a rate they contributed nothing to. Each rate is therefore
+   divided by the games that actually carried its counter (`kills_matches`,
+   `wins_matches`), and `kills_partial` / `wins_partial` say out loud when that
+   is fewer games than the sample holds, so the page can qualify the figure
+   instead of quoting it as if it covered everything.
+
+   K/D is a ratio of two totals, so it needs both counter sets to cover the same
+   games; when they do not, there is no single spread it describes and it is
+   null rather than a figure assembled from two different denominators. */
 export function totalsOf(segments) {
   let matches = 0, wins = 0, kills = 0, deaths = 0;
-  let hasWins = false, hasKills = false, hasDeaths = false;
+  let winsGames = 0, killsGames = 0, deathsGames = 0;
   for (const s of segments || []) {
-    matches += Number(s.matches) || 0;
-    if (num(s.wins) !== null) { wins += s.wins; hasWins = true; }
-    if (num(s.kills) !== null) { kills += s.kills; hasKills = true; }
-    if (num(s.deaths) !== null) { deaths += s.deaths; hasDeaths = true; }
+    const games = Number(s.matches) || 0;
+    matches += games;
+    if (num(s.wins) !== null) { wins += s.wins; winsGames += games; }
+    if (num(s.kills) !== null) { kills += s.kills; killsGames += games; }
+    if (num(s.deaths) !== null) { deaths += s.deaths; deathsGames += games; }
   }
+  const hasWins = winsGames > 0, hasKills = killsGames > 0, hasDeaths = deathsGames > 0;
   return {
     matches,
     wins: hasWins ? wins : null,
     kills: hasKills ? kills : null,
     deaths: hasDeaths ? deaths : null,
-    win_rate: matches > 0 && hasWins ? wins / matches : null,
-    kd: hasKills && hasDeaths && deaths > 0 ? kills / deaths : null,
-    kills_per_match: matches > 0 && hasKills ? kills / matches : null,
+    /* The games behind each total. Equal to `matches` when nothing was missing,
+       which is the ordinary case, so a caller reading only `matches` is right
+       whenever it was right before. */
+    wins_matches: winsGames,
+    kills_matches: killsGames,
+    deaths_matches: deathsGames,
+    kills_partial: hasKills && killsGames < matches,
+    wins_partial: hasWins && winsGames < matches,
+    win_rate: hasWins ? wins / winsGames : null,
+    kd: hasKills && hasDeaths && deaths > 0 && killsGames === deathsGames ? kills / deaths : null,
+    kills_per_match: hasKills ? kills / killsGames : null,
   };
 }
 
@@ -279,22 +313,57 @@ export function lifetimeOf(rows) {
 
 /* The last N games before a moment, walked backwards over whole segments.
    Whole segments only: splitting one would mean guessing how the games inside
-   it were spread, and a guess is what this whole file exists to avoid. */
-function sampleBefore(segments, beforeMs, want) {
+   it were spread, and a guess is what this whole file exists to avoid.
+
+   `prevMs` is when the previous change to this same setting started, or
+   -Infinity when this is the first one. A reading only lands when the counters
+   move, so a segment routinely covers hours and can cover an earlier change as
+   well. Without this floor the walk reaches back past that change and offers
+   games played on an older value as the baseline for this one - a baseline the
+   card cannot name, because the value it belonged to is no longer on screen.
+   prevChangeOf is the same-setting search that supplies it. */
+function sampleBefore(segments, beforeMs, want, prevMs) {
+  const floor = prevMs === undefined || prevMs === null ? -Infinity : prevMs;
   const taken = [];
   let have = 0;
   for (let i = segments.length - 1; i >= 0 && have < want; i--) {
     const s = segments[i];
-    if (!(s.toMs <= beforeMs)) continue;             // wholly after the change
+    if (!(s.toMs <= beforeMs)) continue;             // not wholly before the change
+    if (!(s.fromMs >= floor)) continue;              // reaches back past the previous change
     taken.push(s);
     have += s.matches;
   }
   return taken.reverse();
 }
 
-/* The games since a moment, up to the next change. `nextMs` null means "now". */
-function sampleAfter(segments, afterMs, nextMs) {
-  return segments.filter((s) => s.toMs > afterMs && (nextMs === null || s.fromMs < nextMs));
+/* The games since a moment, up to the next change. `nextMs` null means "now".
+   Returns the segments it took and how many games it could not place.
+
+   Whole segments only, on this side too. A segment that straddles either end of
+   the window holds games from both values, and there is no honest way to say how
+   many belong to each. It is left out of both sides rather than credited to the
+   new value, which is what used to happen: the entire evening's games went to
+   "after" while "before" refused to look at them, so a change that made things
+   worse could be reported as an improvement.
+
+   Leaving those games out is only honest if the card admits it. They happened,
+   they are in the database, and a card that compares 25 games to 25 while another
+   300 sit unmentioned in the middle is telling a true story that reads as a
+   complete one. `unplaced` counts the games in readings that overlap this window
+   without sitting inside it, so the page can say they are in neither figure. */
+function sampleAfterDetailed(segments, afterMs, nextMs) {
+  const taken = [];
+  let unplaced = 0;
+  for (const s of segments) {
+    if (s.fromMs >= afterMs && (nextMs === null || s.toMs <= nextMs)) { taken.push(s); continue; }
+    /* It overlaps the window, or it would not be in this list at all: a segment
+       wholly before the change ends at or before it, and one wholly after the
+       next change starts at or after it. */
+    if (s.toMs > afterMs && (nextMs === null || s.fromMs < nextMs)) {
+      unplaced += Number(s.matches) || 0;
+    }
+  }
+  return { taken, unplaced };
 }
 
 /* Better, worse, or not yet, decided by whether the ranges separate.
@@ -303,17 +372,44 @@ function sampleAfter(segments, afterMs, nextMs) {
    alone, because win rate is the thing that cannot settle at this volume.
    There is no threshold here, and so no epsilon to guard: two intervals that
    touch are not separate, and that is the honest reading of a tie. */
+
+/* The games a side actually has a kill count for. totalsOf reports it; a caller
+   that hands over a plain {matches, kills} side is saying all of them. */
+const killsGamesOf = (side) => {
+  const n = Number(side.kills_matches);
+  return Number.isFinite(n) && n >= 0 ? n : Number(side.matches);
+};
+
+/* The same question for wins. totalsOf divides win_rate by the games that
+   carried a win count, so anything that puts a range around that rate, or pools
+   it with the other side, has to divide by the same number. Dividing by every
+   game instead brackets a rate that was measured on fewer of them: with 3 wins
+   over 10 covered games the interval was built from 20 games and came out about
+   two thirds the width of the one that actually holds. A win rate never decides
+   a verdict - judge() reads kills only - so this is the figure the card draws
+   being untrue about its own coverage, not the scoring. */
+const winsGamesOf = (side) => {
+  const n = Number(side.wins_matches);
+  return Number.isFinite(n) && n >= 0 ? n : Number(side.matches);
+};
+
 export function judge(before, after) {
   const blank = (reason) => ({ verdict: "too-soon", delta: null, kills_delta: null, reason, before_interval: null, after_interval: null });
   if (!before || !after || !(after.matches > 0)) return blank("after-thin");
   if (after.kills === null || after.kills === undefined) return blank("kills-missing");
   if (before.kills === null || before.kills === undefined) return blank("kills-missing");
-  if (before.matches < MIN_GAMES || after.matches < MIN_GAMES) {
-    return blank(before.matches < MIN_GAMES ? "before-thin" : "after-thin");
+
+  /* Measured against the games that carry a kill count, not against all of
+     them: 40 games with kills on only 20 of them is a 20-game sample however
+     many were played, and the interval has to widen for that. */
+  const beforeGames = killsGamesOf(before);
+  const afterGames = killsGamesOf(after);
+  if (beforeGames < MIN_GAMES || afterGames < MIN_GAMES) {
+    return blank(beforeGames < MIN_GAMES ? "before-thin" : "after-thin");
   }
 
-  const b = killsInterval(before.kills, before.matches);
-  const a = killsInterval(after.kills, after.matches);
+  const b = killsInterval(before.kills, beforeGames);
+  const a = killsInterval(after.kills, afterGames);
   if (!a || !b) return blank("kills-missing");
 
   const delta = before.win_rate !== null && after.win_rate !== null ? after.win_rate - before.win_rate : null;
@@ -439,6 +535,54 @@ function watcherFor(watch) {
   return (id) => (Object.prototype.hasOwnProperty.call(watch, id) ? clean(watch[id]) : null);
 }
 
+/* The change before this one, for the purpose of stopping this change's baseline
+   from reaching back past a value the card cannot name.
+
+   Only an earlier change to the SAME setting does that. Changing one setting does
+   not make another setting's history unreadable: he opens the menu once and moves
+   several at a time, and each of those cards still deserves the games played
+   before any of them. Using the previous change to any setting at all put the
+   floor at that change, which is the same instant as this one whenever the batch
+   went up in one snapshot - and then both windows are empty and every card in the
+   batch reads "too soon" for no reason but ordering.
+
+   A change to another setting is still a real limit on the sample, just not this
+   one's business: it is handled where it belongs, as the `nextMs` of the change
+   that made it. */
+function prevChangeOf(ordered, i) {
+  const setting = ordered[i] && ordered[i].setting;
+  for (let j = i - 1; j >= 0; j--) {
+    if (ordered[j].setting === setting) return ordered[j].startedMs;
+  }
+  return -Infinity;
+}
+
+/* The change after this one.
+
+   Changes sharing this one's instant are skipped: they are the same event, not a
+   later state of the world. One snapshot moving four settings opens four tests
+   stamped with the same second, and taking the next test's start as this one's
+   end would leave this change's window empty - the first setting in the batch
+   could never be scored at all.
+
+   KNOWN LIMITATION, not solved here: two changes a few seconds apart with no
+   reading landing between them still cannot be scored. The reading that covers
+   the gap reports one movement of the counters; nothing in it says how many games
+   were played on the intermediate value, so the earlier change's window has no
+   honest contents. Such a change reads "too soon", which is true, though the card
+   then also says "0 since the change", which is not. The real fix is per-match
+   stats - a kill count and a win per match, stamped with its end time - which
+   would place games inside a window instead of only at the readings either side
+   of it. A time-based heuristic was tried and made a different case wrong, so it
+   is not done here. */
+function nextChangeOf(ordered, i) {
+  const startedMs = ordered[i] && ordered[i].startedMs;
+  for (let j = i + 1; j < ordered.length; j++) {
+    if (ordered[j].startedMs > startedMs) return ordered[j].startedMs;
+  }
+  return null;
+}
+
 export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_SEGMENTS, watch = null, matches = null }) {
   const segments = labelSessions(segmentsOf((rows || []).slice(-MAX_READINGS)), matches);
   const watchFor = watcherFor(watch);
@@ -451,13 +595,21 @@ export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_S
 
   for (let i = 0; i < ordered.length; i++) {
     const t = ordered[i];
-    const nextMs = i + 1 < ordered.length ? ordered[i + 1].startedMs : null;
+    const nextMs = nextChangeOf(ordered, i);
+    const prevMs = prevChangeOf(ordered, i);
 
     /* The blended sample first, exactly as it was before any of this existed. It
        is what an agent sending no matches still gets, and it is the fallback. */
-    const blendedAfterSegs = sampleAfter(segments, t.startedMs, nextMs);
+    const blendedDetail = sampleAfterDetailed(segments, t.startedMs, nextMs);
+    const blendedAfterSegs = blendedDetail.taken;
     const blendedAfter = totalsOf(blendedAfterSegs);
-    const blendedBeforeSegs = blendedAfter.matches > 0 ? sampleBefore(segments, t.startedMs, blendedAfter.matches) : [];
+    /* Games this change's window cannot account for, carried to the payload so
+       the card can admit them. Replaced below if the comparison narrows to one
+       mode, since then only that mode's unplaced games are relevant. */
+    let unplaced = blendedDetail.unplaced;
+    const blendedBeforeSegs = blendedAfter.matches > 0
+      ? sampleBefore(segments, t.startedMs, blendedAfter.matches, prevMs)
+      : [];
     const blendedBefore = totalsOf(blendedBeforeSegs);
 
     /* Then the same question asked of one mode. The games after the change are
@@ -470,10 +622,11 @@ export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_S
     let before = blendedBefore;
 
     if (afterMode !== null) {
-      const scopedAfterSegs = blendedAfterSegs.filter((x) => x.mode === afterMode);
+      const scopedDetail = sampleAfterDetailed(segments.filter((x) => x.mode === afterMode), t.startedMs, nextMs);
+      const scopedAfterSegs = scopedDetail.taken;
       const scopedAfter = totalsOf(scopedAfterSegs);
       const scopedBeforeSegs = scopedAfter.matches > 0
-        ? sampleBefore(segments.filter((x) => x.mode === afterMode), t.startedMs, scopedAfter.matches)
+        ? sampleBefore(segments.filter((x) => x.mode === afterMode), t.startedMs, scopedAfter.matches, prevMs)
         : [];
       const scopedBefore = totalsOf(scopedBeforeSegs);
 
@@ -487,13 +640,19 @@ export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_S
         scope = scopeOfMode(afterMode) || "blended";
         after = scopedAfter;
         before = scopedBefore;
+        unplaced = scopedDetail.unplaced;
       }
     }
 
     const j = judge(before, after);
 
-    const winBefore = before.wins !== null && before.matches > 0 ? wilson(before.wins, before.matches) : null;
-    const winAfter = after.wins !== null && after.matches > 0 ? wilson(after.wins, after.matches) : null;
+    /* Bracketed over the games the win count covers, not over every game in the
+       sample. Those are the same number whenever no read was missing a counter,
+       which is the ordinary case. */
+    const winBeforeGames = winsGamesOf(before);
+    const winAfterGames = winsGamesOf(after);
+    const winBefore = before.wins !== null && winBeforeGames > 0 ? wilson(before.wins, winBeforeGames) : null;
+    const winAfter = after.wins !== null && winAfterGames > 0 ? wilson(after.wins, winAfterGames) : null;
 
     /* Sized from the move actually seen, so an open test has a target. Null when
        there is no move to size: a target built on zero would be Infinity. */
@@ -521,8 +680,13 @@ export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_S
        next to the kills figure. Sized from the pooled win rate, which is the
        least flattering (largest-variance) choice for a rate near eleven
        percent, and null whenever there is no move to size. */
-    const pooled = before.matches > 0 && after.matches > 0 && before.wins !== null && after.wins !== null
-      ? (before.wins + after.wins) / (before.matches + after.matches)
+    /* Pooled over the games both sides have a win count for, for the same reason
+       the intervals are: a pooled rate is what sizes the win-rate targets below,
+       and a rate divided by games it does not cover would understate the noise
+       and quote a target that is too small. */
+    const pooledGames = winBeforeGames + winAfterGames;
+    const pooled = pooledGames > 0 && before.wins !== null && after.wins !== null
+      ? (before.wins + after.wins) / pooledGames
       : null;
     const win_games_needed = pooled !== null && j.delta !== null && Math.abs(j.delta) > 0
       ? gamesNeeded(Math.abs(j.delta), pooled * (1 - pooled), MIN_POWER)
@@ -553,10 +717,21 @@ export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_S
       before: {
         matches: before.matches, wins: before.wins, kills: before.kills,
         win_rate: before.win_rate, kd: before.kd, kills_per_match: before.kills_per_match,
+        /* How many of those games the kill count actually covers, so the card
+           can say when a rate rests on fewer games than the sample holds. Same
+           for wins, which the card draws a rate and a range for. */
+        kills_matches: before.kills_matches,
+        kills_partial: before.kills_partial === true,
+        wins_matches: before.wins_matches,
+        wins_partial: before.wins_partial === true,
       },
       after: {
         matches: after.matches, wins: after.wins, kills: after.kills,
         win_rate: after.win_rate, kd: after.kd, kills_per_match: after.kills_per_match,
+        kills_matches: after.kills_matches,
+        kills_partial: after.kills_partial === true,
+        wins_matches: after.wins_matches,
+        wins_partial: after.wins_partial === true,
       },
       kills_interval: { before: j.before_interval, after: j.after_interval },
       win_rate_interval: { before: winBefore, after: winAfter },
@@ -582,6 +757,11 @@ export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_S
       /* The mode key the split was run on, for a caller that wants to name it
          ("Ranked · Zero Build · Solo"). Null when the comparison is blended. */
       mode: scope === "blended" ? null : afterMode,
+      /* Games played inside this change's window that no reading placed cleanly
+         on one side: the read that covered them began before the change and
+         ended after it. They are in neither figure. Counted here so the card can
+         say so; 0 when every game was placed. */
+      unplaced,
     });
   }
 

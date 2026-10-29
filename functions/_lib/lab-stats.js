@@ -186,8 +186,42 @@ const sameCounter = (a, b) => {
    created_at stays where it was, because it is the baseline that games_played
    is measured from: a test that started before the bump must still compare
    against the count as it stood then, not against a row that has drifted
-   forward in time. */
-export async function recordStats(env, owner, epicId, summary) {
+   forward in time.
+
+   `boundary` is `{ testIds }` - the tests this sync just opened - or null for an
+   ordinary read. One row is written per test, because a single snapshot can
+   move several settings and the test rows are inserted one at a time: the
+   inserts can land either side of a second tick, so "the change instant" is not
+   one instant, and a single row could only sit on one of them. Each row is
+   stamped from its own test's started_at inside the INSERT, so the two are
+   identical by construction rather than by hoping the clock has not moved.
+
+   A boundary row is written even when the counters are identical to the last
+   row, because that duplicate is the whole point: it puts a reading exactly on
+   the change, so the reading before it is wholly before and the one after it is
+   wholly after, and no segment straddles the change any more.
+
+   Without it he loses the first evening after every change. A read whose
+   counters did not move only bumps taken_at, so nothing lands at the moment he
+   opens the menu; the first session on the new value is one segment spanning the
+   change, and _lib/lab-perf.js refuses to split a segment it cannot place, which
+   is right. The ingest was what fed it an unsplittable one.
+
+   Its created_at is the change instant, copied from the test row itself rather
+   than read from the clock here. The tests are inserted before the stats are
+   fetched, and the fetch is a network round trip, so datetime('now') at this
+   point lands a second or more after the change - and a reading a second late is
+   still past the change, so the segment before it still straddles and the games
+   are unplaced again. Copying the test's own started_at makes the two instants
+   identical by construction. taken_at is still this read's own clock, because
+   that is when these numbers were seen.
+
+   What it cannot know: if a match ended between the change and this read, its
+   games are in the freshly-read count and land on the before side. The window is
+   one agent poll and he is in the menu rather than in a match, so it is a game
+   at most, and guessing a split by time is the thing this file exists to avoid.
+   The fix for that is per-match stats, the same one the straddle comment names. */
+export async function recordStats(env, owner, epicId, summary, boundary = null) {
   const db = env.DB;
   const raw = canonicalJson({ account: summary.account, group: summary.group, groups: summary.groups });
   const last = await db.prepare(
@@ -198,9 +232,31 @@ export async function recordStats(env, owner, epicId, summary) {
   const fresh = { matches: summary.matches, wins: summary.wins, kills: summary.kills, deaths: summary.deaths,
     kd: summary.kd, win_rate: summary.win_rate, minutes_played: summary.minutes_played };
 
-  if (last && last.epic_account_id === epicId && COUNTERS.every((k) => sameCounter(last[k], fresh[k]))) {
+  /* A boundary row skips the dedupe branch deliberately: two rows carrying the
+     same numbers is what marks the instant. */
+  if (!boundary && last && last.epic_account_id === epicId && COUNTERS.every((k) => sameCounter(last[k], fresh[k]))) {
     await db.prepare("UPDATE lab_stats SET taken_at = datetime('now') WHERE id = ?").bind(last.id).run();
-    return { id: last.id, deduped: true };
+    return { id: last.id, deduped: true, boundary: false };
+  }
+
+  if (boundary) {
+    const ids = (boundary.testIds || []).filter((id) => id !== null && id !== undefined);
+    let written = 0;
+    let lastId = null;
+    for (const testId of ids) {
+      const res = await db.prepare(
+        `INSERT INTO lab_stats (owner,epic_account_id,taken_at,matches,wins,kills,deaths,kd,win_rate,minutes_played,raw,created_at)
+         VALUES (?,?,datetime('now'),?,?,?,?,?,?,?,?,COALESCE((SELECT started_at FROM lab_tests WHERE id = ? AND owner = ?),datetime('now')))`
+      ).bind(owner, epicId, fresh.matches, fresh.wins, fresh.kills, fresh.deaths, fresh.kd, fresh.win_rate,
+        fresh.minutes_played, raw, testId, owner).run();
+      lastId = res?.meta?.last_row_id ?? lastId;
+      written += 1;
+    }
+    /* No usable test id means no row, and that is the degraded case, not a
+       failure: the sync still succeeds. The change simply keeps no reading on
+       its own instant, so the first evening on the new value stays unplaceable,
+       exactly as it did before any of this existed. */
+    return { id: lastId, deduped: false, boundary: written > 0, rows: written };
   }
 
   const res = await db.prepare(
@@ -208,7 +264,7 @@ export async function recordStats(env, owner, epicId, summary) {
      VALUES (?,?,datetime('now'),?,?,?,?,?,?,?,?)`
   ).bind(owner, epicId, fresh.matches, fresh.wins, fresh.kills, fresh.deaths, fresh.kd, fresh.win_rate,
     fresh.minutes_played, raw).run();
-  return { id: res?.meta?.last_row_id ?? null, deduped: false };
+  return { id: res?.meta?.last_row_id ?? null, deduped: false, boundary: false };
 }
 
 /* How many matches each open test has seen: the newest cumulative count minus
