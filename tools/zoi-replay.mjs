@@ -118,6 +118,15 @@ const LATEST_MS = Date.UTC(2100, 0, 1);
    misread, not a long game. */
 const MAX_LENGTH_MS = 6 * 60 * 60 * 1000;
 
+/* A replay whose header says the match lasted zero milliseconds is one the game
+   has not finished recording. The length is written into the header when the
+   match ends, so while the file is still being appended the field is still zero,
+   and the very same file gives a real length once the game closes it. Three of
+   Brock's replays on 2026-10-29 were read this way at 14:05, 13:57 and 13:44 and
+   all three read their full self-reported length minutes later - 709379,
+   374971 and 672636 ms - so this is not a damaged file to be written off. */
+const ZERO_LENGTH_MS = 0;
+
 /* The walk stops after this many chunks rather than grinding through a corrupt
    file. Every real replay seen so far has under two hundred. */
 const MAX_CHUNKS = 1_000_000;
@@ -498,14 +507,24 @@ const zero = (stats) => MEASURED.every((k) => !stats[k]);
 
 /* Which failures are worth another look, and which are not.
 
-   Two of the reasons below are about the moment the file was read rather than
-   about the file. A chunk stream that stops in the middle means the game is
-   still writing, and a missing AthenaMatchStats event means the event has not
-   been written yet - the game appends it last. Both are observed on a real file:
-   copying UnsavedReplay-2026.10.29-14.05.54.replay while it was being written
-   answered "no AthenaMatchStats event", and the same bytes copied ninety seconds
-   later read the match completely. A caller told `retryable: true` should hold
-   the file and look again.
+   Three of the reasons below are about the moment the file was read rather than
+   about the file, and each was seen on one of Brock's own replays on 2026-10-29:
+
+   - A chunk stream that stops in the middle means the game is still writing it.
+   - A missing AthenaMatchStats event means the event has not been written yet;
+     the game appends it last. Copying UnsavedReplay-2026.10.29-14.05.54.replay
+     while it was being written answered "no AthenaMatchStats event", and the
+     same bytes copied ninety seconds later read the match completely.
+   - A header still claiming a length of 0 ms is the same fact written in a
+     different field. The game fills the length in when the match ends, so the
+     three replays the agent skipped on 2026-10-29 with that reason - 13:44:15,
+     13:57:42 and 14:05:54 - all read their real lengths once they had finished
+     being written.
+
+   A caller told `retryable: true` should hold the file and look again. That
+   third one cost three real matches before it was found: the reader knew a
+   half-written file when it saw a truncated chunk stream and did not recognise
+   the same thing said in the header.
 
    Everything else that comes back as a failure is a property of the file, and
    waiting changes nothing: an unencrypted replay will never grow a key, a
@@ -517,7 +536,12 @@ const zero = (stats) => MEASURED.every((k) => !stats[k]);
    session and never change the answer - and, because the mark cannot move past a
    file that is being retried, it would also hold the whole folder behind it.
 
-   The flag is set on the two answers that carry it and is deliberately absent
+   A length past six hours is NOT in that group even though it sits beside the
+   zero in the same check: a misread header reads the same on every poll, so it is
+   a property of the file. That is why the check was split in two rather than
+   widened.
+
+   The flag is set on the three answers that carry it and is deliberately absent
    from `base`: a default of true would make every failure retryable, including
    the ones above, which is the opposite of what the caller needs. */
 
@@ -557,7 +581,18 @@ export function readReplayBuffer(buf, path = "(in memory)") {
   if (header.key.length !== 32) {
     return { ...base, reason: "the replay header carries a " + header.key.length + "-byte key; match stats need 32" };
   }
-  if (!(header.lengthMs > 0) || header.lengthMs > MAX_LENGTH_MS) {
+  /* Split deliberately: zero is the game still writing the file and a retry
+     later reads it whole, while a length past six hours is a misread that will
+     read the same way on every poll. */
+  if (header.lengthMs === ZERO_LENGTH_MS) {
+    return {
+      ...base,
+      retryable: true,
+      reason: "the replay's header still says the match lasted 0 ms, which is what the game writes " +
+        "until it has finished recording - so this is a replay still being written",
+    };
+  }
+  if (header.lengthMs > MAX_LENGTH_MS) {
     return { ...base, reason: "the replay states a match length of " + header.lengthMs + " ms, which is not a match" };
   }
   if (header.startTicks === null) {
