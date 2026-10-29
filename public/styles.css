@@ -12,9 +12,18 @@ a{color:var(--g)}
 .nav nav a:hover{color:#fff}
 .menu{background:none;border:1px solid var(--g);color:var(--g);font-size:1.2rem;border-radius:6px;padding:.2rem .6rem}
 section{max-width:1040px;margin:0 auto;padding:3.5rem 1.2rem}
-h2{font-size:2rem;text-align:center;background:linear-gradient(180deg,#fff,var(--g));-webkit-background-clip:text;background-clip:text;color:transparent;text-transform:uppercase}
-h2{-webkit-text-stroke:0;letter-spacing:.06em;font-size:clamp(1.7rem,5vw,2.4rem);filter:drop-shadow(0 3px 8px #000)}
-h2::after{content:"";display:block;width:64px;height:2px;margin:.6rem auto 0;background:linear-gradient(90deg,transparent,var(--g),transparent);-webkit-text-stroke:0}
+/* ---------- inscription type ----------
+   Roman monumental capitals: wide tracking, and a warm stone gradient that reads
+   as light raking down a carved line. Graduate already has the chiselled slab
+   quality, so nothing new is downloaded; the work is done with spacing, case and
+   an incised rule. The lozenge under each heading is the classical divider - the
+   rules stop short of it, as they would on a carved lintel. */
+h2{font-size:clamp(1.55rem,4.9vw,2.2rem);text-align:center;text-transform:uppercase;letter-spacing:.18em;padding-left:.18em;-webkit-text-stroke:0;background:linear-gradient(180deg,#fffaea 0,#efdfb4 42%,#c9ad74 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 2px 2px #000c)}
+h2::after{content:"";display:block;width:min(220px,56vw);height:10px;margin:.85rem auto 0;background:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='10'%20height='10'%20viewBox='0%200%2010%2010'%3E%3Cpath%20d='M5%200%2010%205%205%2010%200%205Z'%20fill='%23e6d3a0'/%3E%3C/svg%3E") center/9px 9px no-repeat,linear-gradient(90deg,transparent,#e6d3a0b3) left center/calc(50% - 13px) 1px no-repeat,linear-gradient(270deg,transparent,#e6d3a0b3) right center/calc(50% - 13px) 1px no-repeat;-webkit-text-stroke:0}
+@media(max-width:560px){h2{letter-spacing:.12em;padding-left:.12em}}
+/* Gradient text is painted, not coloured: with the background stripped in a
+   forced-colors theme the glyphs would vanish. Hand the headings back their ink. */
+@media(forced-colors:active){h2,.page-h1{color:CanvasText;background:none;filter:none}h2::after,.page-h1::after{background:none;border-top:1px solid CanvasText;height:0}}
 .hero{text-align:center;padding-top:3rem}
 .crest{position:relative;width:min(280px,70vw);aspect-ratio:300/340;margin:0 auto;filter:drop-shadow(0 0 40px #ffd63c22)}
 .shield{position:absolute;inset:0;width:100%;height:100%}
@@ -24,12 +33,46 @@ h2::after{content:"";display:block;width:64px;height:2px;margin:.6rem auto 0;bac
 .hero h1 .pron{-webkit-text-stroke:0;-webkit-text-fill-color:var(--g)}
 .pron{font-size:.35em;letter-spacing:.1em;color:var(--g);font-family:system-ui}
 .greek{color:var(--g);font-size:1.3rem;margin:0}
+
+/* ---------- the chapter designation ----------
+   ΖΩΗ set between two rules, the way a plaque over a doorway is set, with the
+   chapter's year beside it. Greek capitals are not in Graduate, so the letters
+   fall to Georgia - which has had a Greek range since forever and is a serif, so
+   the switch is invisible rather than a different typeface arriving. */
+.chapter{display:flex;align-items:baseline;justify-content:center;gap:.75rem;margin:1.05rem auto .55rem;max-width:460px;padding:0 1rem}
+.chapter::before,.chapter::after{content:"";flex:1 1 0;min-width:18px;height:1px;background:linear-gradient(90deg,transparent,#e6d3a0a6);align-self:center}
+.chapter::after{background:linear-gradient(270deg,transparent,#e6d3a0a6)}
+.chapter .gr{font:400 clamp(1.5rem,6vw,1.95rem)/1 Georgia,"Times New Roman",serif;letter-spacing:.3em;padding-left:.3em;color:var(--gold);text-shadow:0 0 22px #ffd63c24}
+.chapter .chapter-k{font:400 .64rem/1.4 Graduate,Georgia,serif;letter-spacing:.32em;text-transform:uppercase;color:var(--g);white-space:nowrap}
+.chapter .chapter-k .dot{color:#e6d3a080;margin:0 .35em}
+
+/* the same designation, quietly, at the top of an inner page */
+.legal .page-chapter{text-align:center}
+.page-chapter{margin:0 0 .55rem;font:400 .63rem/1.4 Graduate,Georgia,serif;letter-spacing:.3em;text-transform:uppercase;color:var(--g);opacity:.9}
+.page-chapter .gr{font-family:Georgia,"Times New Roman",serif;font-size:1.45em;letter-spacing:.2em;vertical-align:-.04em}
+.page-chapter .dot{color:#e6d3a080;margin:0 .45em}
+
+/* ---------- Our Letters ----------
+   A plaque, not another card: the letterform on the left, the reading on the
+   right, a gold lintel across the top. It extends the three marks below it
+   rather than repeating them. */
+.letters{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:1.5rem;margin:1.9rem 0 0;padding:1.35rem 1.5rem;border:1px solid #e6d3a033;border-top:2px solid var(--g);border-radius:4px;background:linear-gradient(180deg,#e6d3a009,transparent 70%);text-align:left}
+.letters-gr{margin:0;font:400 clamp(2rem,7vw,2.7rem)/1 Georgia,"Times New Roman",serif;letter-spacing:.12em;padding-left:.12em;color:var(--gold);text-shadow:0 0 28px #ffd63c1f}
+.letters h3{margin:0 0 .45rem;font-size:1rem;letter-spacing:.14em;text-transform:uppercase;color:var(--g)}
+.letters p{margin:0;color:var(--m);font-size:.95rem;line-height:1.65}
+.letters strong{color:var(--t);font-weight:400;letter-spacing:.02em}
+@media(max-width:600px){.letters{grid-template-columns:minmax(0,1fr);justify-items:center;text-align:center;gap:.9rem;padding:1.2rem 1.1rem}}
 .tag{font-size:1.15rem;color:var(--m)}
 .cta{display:flex;gap:.8rem;justify-content:center;flex-wrap:wrap;margin-top:1.4rem}
 .btn{padding:.8rem 1.6rem;border-radius:4px;background:var(--btn);color:#0b0b0d;box-shadow:0 0 0 1px #e6d3a066,0 6px 20px #ffd63c14;font-weight:700;text-decoration:none;text-transform:uppercase;letter-spacing:.1em}
 .btn.ghost{background:none;color:var(--g);border:1px solid var(--g)}
-.stripes{height:7px;max-width:1040px;margin:0 auto;border-top:2px solid var(--g);border-bottom:1px solid var(--g);opacity:.85}
-.meander{height:14px;max-width:1040px;margin:0 auto;opacity:.7;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='14'%3E%3Cpath d='M0 13H26V1H8V9H18V5H13' fill='none' stroke='%23e6d3a0' stroke-width='1.6'/%3E%3C/svg%3E") repeat-x}
+/* ---------- the frieze ----------
+   What used to be a pair of hairlines is now a Greek key. One SVG tile, 24 by 22
+   CSS pixels, repeated on x: the two rails run edge to edge so the band reads as
+   a continuous carved frieze rather than a gradient, and it ends where the
+   section ends instead of being stretched. Vector, so it stays crisp on retina,
+   and it needs no image file: the tile rides in the stylesheet as a data URI. */
+.stripes{height:22px;max-width:1040px;margin:0 auto;background:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='24'%20height='22'%20viewBox='0%200%2024%2022'%3E%3Cpath%20d='M0%20.7H24'%20stroke='%23e6d3a0'%20stroke-opacity='.34'%20stroke-width='1.1'/%3E%3Cpath%20d='M0%2021.3H24'%20stroke='%23e6d3a0'%20stroke-opacity='.6'%20stroke-width='1.1'/%3E%3Cpath%20d='M4.2%2021.3V5.2H20.3V14.8H10V9.9H15.6'%20fill='none'%20stroke='%23e6d3a0'%20stroke-opacity='.95'%20stroke-width='1.45'/%3E%3C/svg%3E") repeat-x center/24px 22px;opacity:.8;mask-image:linear-gradient(90deg,transparent,#000 20px,#000 calc(100% - 20px),transparent);-webkit-mask-image:linear-gradient(90deg,transparent,#000 20px,#000 calc(100% - 20px),transparent)}
 .cards{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin:1.5rem 0}
 .card{background:var(--card);border:1px solid #e6d3a022;border-top:3px solid var(--g);border-radius:6px;padding:1.3rem;text-align:center}
 .card p{color:var(--m);margin:.3rem 0}
@@ -99,8 +142,9 @@ html,body{overflow-x:clip}img{max-width:100%}
 @media(max-width:759px){.hero{min-height:100vh;min-height:100svh;display:flex;flex-direction:column;justify-content:center;align-items:center;box-sizing:border-box;padding-top:2rem;padding-bottom:max(3rem,env(safe-area-inset-bottom))}}
 
 /* settings page */
-.page-h1{font-size:clamp(1.7rem,5vw,2.4rem);margin:.4rem 0 .2rem;background:linear-gradient(180deg,#fff,var(--g));-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:.06em;filter:drop-shadow(0 3px 8px #000)}
-.page-h1::after{content:"";display:block;width:64px;height:2px;margin:.6rem auto 0;background:linear-gradient(90deg,transparent,var(--g),transparent)}
+.page-h1{font-size:clamp(1.55rem,4.9vw,2.2rem);margin:.4rem 0 .2rem;background:linear-gradient(180deg,#fffaea 0,#efdfb4 42%,#c9ad74 100%);-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:.18em;padding-left:.18em;text-transform:uppercase;filter:drop-shadow(0 2px 2px #000c)}
+.page-h1::after{content:"";display:block;width:min(220px,56vw);height:10px;margin:.85rem auto 0;background:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='10'%20height='10'%20viewBox='0%200%2010%2010'%3E%3Cpath%20d='M5%200%2010%205%205%2010%200%205Z'%20fill='%23e6d3a0'/%3E%3C/svg%3E") center/9px 9px no-repeat,linear-gradient(90deg,transparent,#e6d3a0b3) left center/calc(50% - 13px) 1px no-repeat,linear-gradient(270deg,transparent,#e6d3a0b3) right center/calc(50% - 13px) 1px no-repeat}
+@media(max-width:560px){.page-h1{letter-spacing:.12em;padding-left:.12em}}
 .read-date{color:var(--m);font-size:.85rem;letter-spacing:.06em;margin:.8rem 0 0}
 .fn-sec{padding-top:2rem;padding-bottom:2.4rem}
 
@@ -185,7 +229,7 @@ html,body{overflow-x:clip}img{max-width:100%}
 /* secondary sections below the card */
 .fn-below{padding:2rem 1.2rem}
 .fn-below h2{font-size:clamp(1.15rem,3.4vw,1.5rem);letter-spacing:.1em;margin:0 0 1rem}
-.fn-below h2::after{width:44px;height:1px;margin-top:.45rem}
+.fn-below h2::after{width:44px;height:1px;margin-top:.45rem;background:linear-gradient(90deg,transparent,var(--g),transparent) center/100% 1px no-repeat}
 .fn-below .legal{max-width:720px}
 .fn-below .legal li{margin:.45rem 0;font-size:.9rem;color:var(--m)}
 .fn-below .legal strong{color:var(--t)}

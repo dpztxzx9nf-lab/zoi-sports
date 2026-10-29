@@ -1,8 +1,8 @@
 # Zoi
 
-> Competitive Fortnite and Call of Duty esports organization. Tagline: "Play for life."
+> Competitive Fortnite and Call of Duty esports organization. Tagline: "Play for life." Chapter ΖΩΗ · MMXXVI.
 
-Zoi (pronounced zo-EE; Greek ζωή, "life") is a new, player-first competitive Fortnite and Call of Duty esports org founded in 2026. Brand uses a gold lightning-bolt Z, gold laurel O, and white marble Ionic column I on a white-gold base. Write the name as "Zoi" (not all-caps).
+Zoi (pronounced zo-EE; Greek ζωή, "life") is a new, player-first competitive Fortnite and Call of Duty esports org founded in 2026 and framed as a chapter of brothers rather than a company: ΖΩΗ serves as both the org name in Greek and the chapter designation, and recruiting is called "Rush". Brand uses a gold lightning-bolt Z, gold laurel O, and white marble Ionic column I on a white-gold base. Write the name as "Zoi" (not all-caps).
 
 Website: https://zoisports.com
 Contact: hello@zoisports.com
@@ -11,19 +11,19 @@ Handle: @zoi_sports_gg (Kick: https://kick.com/zoi_sports_gg; X, YouTube, Twitch
 ## What we do
 
 - Competitive Fortnite Zero Build (ZB): FNCS, cash cups, scrims, and community events
-- Competitive Call of Duty: roster forming, recruiting now
-- Recruiting players, content creators, and staff
+- Competitive Call of Duty: roster forming, rushing now
+- Rushing players, content creators, and staff
 - Official merch shop (coming soon): letterman jacket flagship, jerseys, hoodies, iced Cuban-link pendant, and more
 
-## Try out
+## Rush
 
-Apply on the homepage: https://zoisports.com/#tryouts
+Apply on the homepage (the Rush form): https://zoisports.com/#tryouts
 
 Required: game (Fortnite Zero Build or Call of Duty), Epic name, Discord username, region, platform, age (13+), role (ZB player / content creator / staff), and why you want to join. Optional: results link, tracker/clips link, contact email.
 
 ## Key pages
 
-- Home / About / Roster / Tryouts / Events / Socials: https://zoisports.com/
+- Home / About / Roster / Rush / Events / Socials: https://zoisports.com/
 - Shop (preview, coming soon): https://zoisports.com/shop
 - Results: https://zoisports.com/results
 - Settings: https://zoisports.com/settings
