@@ -138,7 +138,16 @@ const SETTINGS_FORM = (text) => (SETTINGS_OPEN_V1.test(textOf(text)) ? "v1"
 /* The island block: "Island:", then a LinkId line, then the Session line that
    carries the game session id. That id is the one client_match_assigned quotes,
    so it is what ties a match to the island it was played on. */
-const ISLAND_OPEN = /^\s*Island:\s*$/;
+/* An island block opens with a bare "Island:" line, but his log also
+   writes the title inline on that same line: "Island: Rapid 2V2V2 Zero
+   Build". Both open the block, and the inline form carries the title. */
+/* These two are matched against the whole line, log header and all, so they
+   cannot be anchored to the start of it: a real line reads
+   "LogEOSSDK: LogEOSPresence: Island: <title>". "Island:" at the start of the
+   payload is the fixture form; either way it is a token of its own, so the
+   character before it must not be a word character. */
+const ISLAND_OPEN = /(?:^|[^\w])Island:\s*$/;
+const ISLAND_INLINE = /(?:^|[^\w])Island:\s+(\S.*?)\s*$/;
 const LINK_ID = /LinkId\s*\[\s*Mnemonic=\[([^\]]*)\]/;
 const MNEMONIC = /Mnemonic=\[([^\]]*)\]/;
 const ISLAND_SESSION = /Session\s*\[\s*Session\s*Id\s*\[([0-9a-fA-F]{32})\]/;
@@ -152,6 +161,18 @@ const MATCHMAKING_ID = /^\s*MatchmakingId:\s*([0-9A-Fa-f]{32})\s*$/;
 const PLAYLIST = /PlaylistName:\s*(\S+)/;
 const PLAYLIST_TYPE = /PlaylistType:\s*(\S+)/;
 const REGION_ID = /RegionId:\s*(\S+)/;
+/* A Bad Match Attribute burst, field for field as the real log writes it. THE
+   ORDER MATTERS and is not alphabetical:
+     BadMatchReasons, RegionId, CPU, CSV, RandomCsv, ForcedCSV,
+     MobileNetBadMatchType, RFID, SubGameName, EngineVersion, Reported,
+     IsMinSpecOrAbove, GameSessionID, Platform, ProviderType, GameState,
+     BuildFlavor, InGameLinkMeta, PlaylistName, PlaylistType
+   GameSessionID opens the identifying half; RegionId is written BEFORE it, and
+   InGameLinkMeta sits before PlaylistName in one burst and after PlaylistType in
+   the next. So the burst is read FORWARD from its GameSessionID line and the
+   fields are taken one by one wherever they fall - never by scanning backwards
+   from PlaylistName for the session id, which would attach the previous match's
+   id and end a match that is still running. */
 const BMA = /Bad Match Attribute:/;
 const SESSION = /GameSessionID:\s*([0-9a-fA-F]{32})/;
 /* Which game the session id belongs to: an island runs in Playspace_GameState_C,
@@ -447,6 +468,7 @@ export function scanLog(lines, opts = {}) {
   let lastEnd = prior.lastEnd;
   let current = prior.mode;        // bracket-burst fallback mode only
   let pending = prior.pending ? { ...prior.pending } : null;   // the attribute block being collected
+  let burstRegion = null;   // a RegionId seen before the burst names its session
   let newestIso = null;
   let inflight = prior.inflight.map((o) => ({ ...o }));        // started, end not yet stated
   let island = null;                                           // the Island: block being read
@@ -761,6 +783,15 @@ export function scanLog(lines, opts = {}) {
        bound to the LinkId nearest it; his log has exactly one title per LinkId,
        so the first one seen is the one that stands. */
     if (ISLAND_OPEN.test(text)) { island = { i }; continue; }
+    const inlineIsland = ISLAND_INLINE.exec(text);
+    if (inlineIsland) {
+      /* "Island: <title>" on one line: the title is the island's own,
+         and the LinkId that follows in the block binds it. */
+      const title = inlineIsland[1].trim();
+      island = { i, title: title || null };
+      if (title) lastTitle = { title, i };
+      continue;
+    }
     if (island && i - island.i > LINK_TITLE_WINDOW) island = null;
 
     const link = LINK_ID.exec(text);
@@ -775,6 +806,20 @@ export function scanLog(lines, opts = {}) {
           titles.set(linkId, pendingTitle.title);
           lastTitle = null;
           backfillTitle(linkId, pendingTitle.title);
+        }
+        /* His log also writes the whole entry on ONE line:
+             LinkEntry [LinkId [Mnemonic=[7675-8305-9560] ...] - Title [...]
+                     - ProductTag [Product.FNE]]
+           so the title is on this very line, not the next one. Read it here or
+           the commonest form of the entry loses its title entirely. */
+        const ownTitle = TITLE.exec(text);
+        if (ownTitle) {
+          const title = ownTitle[1].trim();
+          if (title && !titles.has(linkId)) {
+            titles.set(linkId, title);
+            lastTitle = null;
+            backfillTitle(linkId, title);
+          }
         }
       }
       continue;
@@ -792,7 +837,8 @@ export function scanLog(lines, opts = {}) {
       const title = titled[1].trim();
       if (title) {
         if (island && island.linkId) {
-          /* Inside the island block: this title is the island's own. */
+          /* Inside the island block: this title is the island's own. An inline
+             "Island: <title>" line already named it, and stands. */
           if (!titles.has(island.linkId)) {
             titles.set(island.linkId, title);
             backfillTitle(island.linkId, title);
@@ -877,15 +923,30 @@ export function scanLog(lines, opts = {}) {
        it. */
     const isBma = BMA.test(rest);
     if (pending && (!isBma || at !== pending.at)) settlePending();
+    /* Any line that is not an attribute line ends the chance of a carried
+       region: it belongs to a burst that will never open. */
+    if (!isBma) burstRegion = null;
 
     if (isBma) {
       const sid = SESSION.exec(rest);
       if (sid) {
         if (pending) settlePending();
+        /* RegionId is written BEFORE the GameSessionID in the real block, so it
+           has already been seen by the time the burst has a session to hang it
+           on. Carry it across rather than losing it: without this a match with
+           no settings block reports no region, though the log plainly names it. */
+        const carried = burstRegion;
+        burstRegion = null;
         pending = {
           sessionId: sid[1].toLowerCase(), playlist: null, playlistType: null,
-          region: null, gameState: null, linkCode: null, at, endedBy: "bma",
+          region: carried, gameState: null, linkCode: null, at, endedBy: "bma",
         };
+      }
+      /* One region per burst. A line before the GameSessionID belongs to the
+         burst that is about to be named. */
+      if (!pending) {
+        const pre = REGION_ID.exec(rest);
+        if (pre) burstRegion = pre[1];
       }
       if (pending) {
         const play = PLAYLIST.exec(rest);
@@ -898,7 +959,20 @@ export function scanLog(lines, opts = {}) {
         }
         if (!pending.linkCode) {
           const lc = LINK_CODE.exec(rest);
-          if (lc) pending.linkCode = lc[1];
+          if (lc) {
+            pending.linkCode = lc[1];
+            /* The report names the island by code. If the log wrote the island's
+               title inline ("Island: <title>") and never wrote a LinkId line for
+               it, that title is still waiting and this code is what it belongs
+               to. Only a real island code is bound: a battle royale reports its
+               playlist's handle here and that is not a name. */
+            if (ISLAND_CODE.test(lc[1]) && lastTitle && i - lastTitle.i <= LINK_TITLE_WINDOW
+                && !titles.has(lc[1])) {
+              titles.set(lc[1], lastTitle.title);
+              backfillTitle(lc[1], lastTitle.title);
+              lastTitle = null;
+            }
+          }
         }
         if (!pending.region) {
           const reg = REGION_ID.exec(rest);
