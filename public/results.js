@@ -189,10 +189,7 @@ function fillPanel(panel, message) {
   status.replaceChildren();
   const l1 = document.createElement('p');
   l1.textContent = 'No matches logged yet.';
-  const l2 = document.createElement('p');
-  l2.className = 'res-empty-sub';
-  l2.textContent = 'Results go up here as scrims and tournaments happen.';
-  status.append(l1, l2);
+  status.append(l1);
   return;
  }
  status.className = 'res-status';
