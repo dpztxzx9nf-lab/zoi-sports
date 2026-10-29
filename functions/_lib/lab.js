@@ -297,3 +297,72 @@ export function groupBySetting(tests) {
   }
   return [...map.values()];
 }
+
+/* ---------- snapshots sent from a player's PC ----------
+   The PC agent (tools/zoi-lab-agent.mjs) posts a flat map of Fortnite's own
+   settings. Two things here are shared between the token endpoint, the sync
+   endpoint and the tests: how a token is hashed, and which of Fortnite's
+   property names mean anything to the catalog. */
+
+export const TOKEN_MAX_ACTIVE = 5;        // per person, at once
+export const SNAPSHOT_MAX_BYTES = 200 * 1024;
+export const SNAPSHOT_MAX_SETTINGS = 2000;
+export const SNAPSHOT_KEEP = 200;         // newest N kept per person
+export const MIN_SETTINGS = 5;            // below this it is not a config
+
+/* SHA-256, lowercase hex. Tokens are only ever stored this way, so a copy of the
+   database cannot be turned back into a working token. */
+export async function sha256Hex(text) {
+  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(String(text)));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/* JSON with object keys sorted at every level, so the same settings always hash
+   the same way whatever order the agent wrote them in. */
+export function canonicalJson(value) {
+  if (Array.isArray(value)) return "[" + value.map(canonicalJson).join(",") + "]";
+  if (value && typeof value === "object") {
+    return "{" + Object.keys(value).sort()
+      .map((k) => JSON.stringify(k) + ":" + canonicalJson(value[k])).join(",") + "}";
+  }
+  return JSON.stringify(value === undefined ? null : value);
+}
+
+const VALUE_TEXT_MAX = 24;
+
+/* One scalar setting as the short string the log stores. Objects and arrays are
+   not settings, so they come back empty and the caller drops them. */
+export function valueText(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? String(value).slice(0, VALUE_TEXT_MAX) : "";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "string") return value.trim().slice(0, VALUE_TEXT_MAX);
+  return "";
+}
+
+/* Fortnite's own property names, exactly as tools/parse.py lifts them out of
+   ClientSettings.Sav, mapped to catalog ids. Only names seen in a real save
+   (playbook/state/last-snapshot.json, Fortnite last wrote it 26 October 2026)
+   are here; a name that is wrong would silently never fire, so guessing is
+   worse than leaving a setting out.
+   Left out on purpose:
+     LookVerticalBoostSpeed - real, but the catalog has no vertical boost entry.
+     ads_boost_speed and ads_look_ease_time - no property name confirmed. The
+       save does carry a separate ADS boost ramp, so an ADS boost speed exists
+       somewhere, and LookEaseTimeAds is the likely ADS ease name, but neither
+       appears in the newest snapshot. Both are one line to add once a save
+       shows them. */
+export const PROPERTY_MAP = {
+  LookHorizontalSpeed: "look_horizontal_speed",
+  LookVerticalSpeed: "look_vertical_speed",
+  LookHorizontalBoostSpeed: "look_boost_speed",
+  LookBoostAccelerationTime: "look_boost_ramp",
+  LookEaseTime: "look_ease_time",
+  LookHorizontalSpeedAds: "ads_look_horizontal_speed",
+  LookVerticalSpeedAds: "ads_look_vertical_speed",
+  LookBoostAccelerationTimeAds: "ads_boost_ramp",
+  ScopedSensitivityMultiplier: "scoped_multiplier",
+  GamepadLookStickDeadZone: "look_stick_deadzone",
+  GamepadMoveStickDeadZone: "move_stick_deadzone",
+  GamepadLeftTriggerReleaseThreshold: "left_trigger_release",
+  GamepadRightTriggerReleaseThreshold: "right_trigger_release",
+};

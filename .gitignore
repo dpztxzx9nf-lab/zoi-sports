@@ -11,3 +11,10 @@ node_modules/
 exports/
 *.sql.bak
 .DS_Store
+
+# The lab agent's config holds its token; it never belongs in the repo.
+tools/zoi-lab-agent.json
+__pycache__/
+
+# The agent's own log: it lives on the player's PC, not in the repo.
+tools/zoi-lab-agent.log

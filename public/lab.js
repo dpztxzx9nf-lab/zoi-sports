@@ -61,6 +61,10 @@ const nodes = {
   app: $('app'), startForm: $('start-form'), setting: $('f-setting'), from: $('f-from'),
   to: $('f-to'), watch: $('f-watch'), games: $('f-games'), repeat: $('repeat'),
   startErrors: $('start-errors'), testing: $('testing'), history: $('history'),
+  pcConnect: $('pc-connect'), pcLabel: $('pc-label'), pcAdd: $('pc-add'),
+  pcErrors: $('pc-errors'), pcToken: $('pc-token'), pcTokenValue: $('pc-token-value'),
+  pcCopy: $('pc-copy'), pcDone: $('pc-done'), pcCopied: $('pc-copied'),
+  pcList: $('pc-list'), pcEmpty: $('pc-empty'), pcStats: $('pc-stats'),
 };
 
 class AuthError extends Error {}
@@ -491,6 +495,180 @@ function renderHistory() {
   nodes.history.append(frag);
 }
 
+/* ---------- connected PCs ----------
+   A PC holds a token instead of a sign-in, so it can post a snapshot without a
+   browser. The token is shown once, here, and is never readable again. */
+let pcTokens = [];
+
+/* D1's datetime('now') is UTC with no marker on it, so add one before parsing. */
+function whenFrom(value) {
+  const s = String(value || '').trim();
+  if (!s) return null;
+  const iso = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(s) ? s.replace(' ', 'T') + 'Z' : s;
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/* Plain words rather than a timestamp: "3 minutes ago", "2 days ago". */
+function agoText(value) {
+  const d = whenFrom(value);
+  if (!d) return 'not yet';
+  const secs = Math.round((Date.now() - d.getTime()) / 1000);
+  if (secs < 90) return 'a moment ago';
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return mins === 1 ? 'a minute ago' : mins + ' minutes ago';
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return hours === 1 ? 'an hour ago' : hours + ' hours ago';
+  const days = Math.round(hours / 24);
+  if (days < 7) return days === 1 ? 'a day ago' : days + ' days ago';
+  const weeks = Math.round(days / 7);
+  return weeks === 1 ? 'a week ago' : weeks + ' weeks ago';
+}
+
+function showPcErrors(messages) {
+  if (!messages.length) { clearErrors(nodes.pcErrors); return; }
+  showErrors(nodes.pcErrors, messages);
+}
+
+function hideToken() {
+  nodes.pcTokenValue.textContent = '';
+  hide(nodes.pcCopied);
+  hide(nodes.pcToken);
+}
+
+function renderPc() {
+  nodes.pcList.replaceChildren();
+  const live = pcTokens.filter(t => !t.revoked);
+  if (!live.length) { show(nodes.pcEmpty); return; }
+  hide(nodes.pcEmpty);
+
+  const frag = document.createDocumentFragment();
+  for (const t of live) {
+    const li = el('li', 'lab-pc-item');
+    const who = el('div');
+    who.append(el('span', 'lab-pc-name', t.label || 'This PC'));
+    const when = t.last_seen_at ? 'Last seen ' + agoText(t.last_seen_at) : 'Not seen yet';
+    who.append(el('span', 'lab-pc-when', when));
+    const remove = el('button', 'lab-mini', 'Remove');
+    remove.type = 'button';
+    remove.addEventListener('click', () => revokePc(t, remove));
+    li.append(who, remove);
+    frag.append(li);
+  }
+  nodes.pcList.append(frag);
+}
+
+/* One line, only when the lab has numbers: how many matches the account has
+   played, the win rate, and how long ago the lab last read them. No line at
+   all is better than a line saying zero. */
+const groupThousands = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+function pcStatsLine(stats) {
+  if (!stats || !Number.isFinite(stats.matches)) return '';
+  const bits = [groupThousands(stats.matches) + (stats.matches === 1 ? ' match' : ' matches') + ' from your Epic account'];
+  if (Number.isFinite(stats.win_rate)) {
+    const pct = stats.win_rate * 100;
+    const shown = pct >= 10 ? Math.round(pct) : Math.round(pct * 10) / 10;
+    bits.push(shown + '% won');
+  }
+  if (Number.isFinite(stats.wins)) {
+    bits.push(groupThousands(stats.wins) + (stats.wins === 1 ? ' win' : ' wins'));
+  }
+  const when = stats.taken_at ? agoText(stats.taken_at) : '';
+  return bits.join(' \u00b7 ') + (when ? ', updated ' + when : '') + '.';
+}
+
+function renderStats(stats) {
+  const line = pcStatsLine(stats);
+  if (!line) { nodes.pcStats.textContent = ''; hide(nodes.pcStats); return; }
+  nodes.pcStats.textContent = line;
+  show(nodes.pcStats);
+}
+
+async function loadStats() {
+  try {
+    const r = await api('/api/lab/stats');
+    if (!r.ok) { renderStats(null); return; }
+    renderStats(r.data && r.data.stats ? r.data.stats : null);
+  } catch (e) {
+    if (e instanceof AuthError) { needSignIn(); return; }
+    renderStats(null);
+  }
+}
+
+async function loadPc() {
+  try {
+    const r = await api('/api/lab/token');
+    if (!r.ok) { pcTokens = []; renderPc(); return; }
+    pcTokens = Array.isArray(r.data && r.data.tokens) ? r.data.tokens : [];
+    renderPc();
+  } catch (e) {
+    if (e instanceof AuthError) { needSignIn(); return; }
+    pcTokens = [];
+    renderPc();
+  }
+}
+
+async function revokePc(token, btn) {
+  btn.disabled = true;
+  showPcErrors([]);
+  try {
+    const r = await api('/api/lab/token', { method: 'DELETE', body: { id: token.id } });
+    if (!r.ok) { showPcErrors(errorsFrom(r.data, 'Could not remove that PC.')); return; }
+    await loadPc();
+  } catch (e) {
+    if (e instanceof AuthError) { needSignIn(); return; }
+    showPcErrors(["Couldn't reach the log. Nothing was removed."]);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* Only reached from a click on the Connect button, and only where the browser
+   allows it. A refusal is not worth a message: the token is on screen to copy. */
+async function copyToken(btn) {
+  const text = nodes.pcTokenValue.textContent || '';
+  if (!text || !navigator.clipboard || !navigator.clipboard.writeText) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    show(nodes.pcCopied);
+  } catch { /* clipboard blocked; the code block is still there to select */ }
+  btn.disabled = false;
+}
+
+function bootPc() {
+  hideToken();
+  clearErrors(nodes.pcErrors);
+  renderStats(null);
+
+  nodes.pcConnect.addEventListener('submit', async e => {
+    e.preventDefault();
+    showPcErrors([]);
+    hideToken();
+    const label = nodes.pcLabel.value.trim().slice(0, 40);
+    nodes.pcAdd.disabled = true;
+    try {
+      const r = await api('/api/lab/token', { method: 'POST', body: { label } });
+      if (!r.ok) { showPcErrors(errorsFrom(r.data, 'Could not connect that PC.')); return; }
+      const token = r.data && typeof r.data.token === 'string' ? r.data.token : '';
+      if (token) {
+        nodes.pcTokenValue.textContent = token;
+        show(nodes.pcToken);
+      }
+      nodes.pcLabel.value = '';
+      await loadPc();
+    } catch (err) {
+      if (err instanceof AuthError) { needSignIn(); return; }
+      showPcErrors(["Couldn't reach the log. Nothing was connected."]);
+    } finally {
+      nodes.pcAdd.disabled = false;
+    }
+  });
+
+  nodes.pcCopy.addEventListener('click', () => copyToken(nodes.pcCopy));
+  nodes.pcDone.addEventListener('click', hideToken);
+}
+
 function render() {
   renderTesting();
   renderHistory();
@@ -505,7 +683,10 @@ function boot() {
     load();
   });
   applySetting(true);
+  bootPc();
   load();
+  loadPc();
+  loadStats();
 }
 
 boot();
