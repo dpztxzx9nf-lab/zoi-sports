@@ -169,7 +169,8 @@ export async function onRequest({ request, env }) {
     try {
       if (await hasTable(env, "lab_replay_stats")) {
         const rows = await env.DB.prepare(
-          `SELECT ended_at, recorded, creative, eliminations, placement, total_players, match_id
+          `SELECT ended_at, recorded, creative, eliminations, placement, total_players, match_id,
+                  headshots, headshots_reason
              FROM lab_replay_stats
             WHERE owner = ? AND ended_at IS NOT NULL
             ORDER BY datetime(ended_at) DESC LIMIT 400`

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>zoi-cues</AssemblyName>
+    <RootNamespace>zoi-cues</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Where the pinned, patched FortniteReplayDecompressor clone sits. The
+         default is for a build run by hand inside this directory; build.sh
+         overrides it with its own temporary clone, so no build ever depends on
+         a checkout someone left lying around. -->
+    <FrdRoot Condition="'$(FrdRoot)' == ''">frd</FrdRoot>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(FrdRoot)/src/FortniteReplayReader/FortniteReplayReader.csproj" />
+  </ItemGroup>
+</Project>

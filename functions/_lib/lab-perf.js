@@ -479,7 +479,44 @@ function replayMatchOf(row) {
   /* A recorded row with no kill count cannot sit in a kill comparison. It is
      dropped rather than counted as zero, and `killsMissing` below counts it so
      the payload can admit it. */
-  return { endedMs, kills, placement: int(row.placement), totalPlayers: int(row.total_players !== undefined ? row.total_players : row.totalPlayers) };
+  /* Headshots are measured by a different reader from everything else on this
+     row, so they have their own gate: a row can carry real kills and no headshot
+     count, and that absence is never read as zero. int() maps NULL to null, and
+     a stored 0 stays 0 - which is a real match where he hit nobody in the head,
+     not a reader that failed. */
+  const headshots = int(row.headshots);
+  const headshotsReason = headshots === null && typeof row.headshots_reason === "string"
+    ? row.headshots_reason
+    : (headshots === null && typeof row.headshotsReason === "string" ? row.headshotsReason : null);
+  return {
+    endedMs, kills,
+    placement: int(row.placement),
+    totalPlayers: int(row.total_players !== undefined ? row.total_players : row.totalPlayers),
+    headshots, headshotsReason,
+  };
+}
+
+/* Headshots across one side of a change.
+   `total` is the sum and `games` is how many matches carried a number; `perMatch`
+   exists only when at least one did, so it is null rather than 0 when nobody
+   counted - the same rule the rest of this file follows, applied to an average.
+   `missing` counts the matches on both sides that had kills but no headshot
+   count, which is what makes a partial average readable as partial. */
+function headshotFigures(before, after) {
+  const side = (list) => {
+    let total = 0;
+    let games = 0;
+    for (const m of list) {
+      if (!Number.isFinite(m.headshots)) continue;
+      total += m.headshots;
+      games++;
+    }
+    return { total: games ? total : null, games, perMatch: games ? total / games : null };
+  };
+  const b = side(before);
+  const a = side(after);
+  const missing = (before.length - b.games) + (after.length - a.games);
+  return { before: b, after: a, missing };
 }
 
 /* The two sides of one change, from individual matches. `floorMs` is the
@@ -800,11 +837,30 @@ export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_S
       const mj = judgeMatches(split.before, split.after);
       const beforeRate = split.before.length ? split.before.reduce((n, m) => n + m.kills, 0) / split.before.length : null;
       const afterRate = split.after.length ? split.after.reduce((n, m) => n + m.kills, 0) / split.after.length : null;
+      /* Headshots over exactly the matches this block is already counting, so
+         the figures and the kill rates describe the same set of games. A side
+         with no headshot number contributes nothing rather than a zero: the
+         count of matches that carried one travels beside the figure, and the
+         page prints nothing at all when no side has one. */
+      const shots = headshotFigures(split.before, split.after);
       byMatch = {
         verdict: mj.verdict,
         reason: mj.reason,
         before: split.before.length,
         after: split.after.length,
+        headshots_before: shots.before.total,
+        headshots_after: shots.after.total,
+        headshots_per_match_before: shots.before.perMatch,
+        headshots_per_match_after: shots.after.perMatch,
+        /* How many matches on each side actually carried a count. Without it a
+           per-match average over two of ninety matches would read as the
+           evening's average. */
+        headshots_games_before: shots.before.games,
+        headshots_games_after: shots.after.games,
+        /* Matches with a kill count that no reader gave a headshot number for,
+           so the page can say the average covers part of the side instead of
+           letting it stand for the whole. */
+        headshots_missing: shots.missing,
         kills_before: beforeRate,
         kills_after: afterRate,
         kills_delta: mj.kills_delta,
