@@ -83,7 +83,7 @@ export function socialsFromText(text) {
    side has no business knowing an email, and the editor already knows its own. */
 export function publicProfile(row) {
   if (!row) return null;
-  return {
+  const out = {
     slug: row.slug,
     gamertag: row.gamertag,
     role: row.role || null,
@@ -93,4 +93,10 @@ export function publicProfile(row) {
     socials: socialsFromText(row.socials),
     updated_at: row.updated_at || null,
   };
+  /* Whether this player has a game settings page. Only the roster query joins
+     player_settings to answer that, so it is added only when the column is
+     really there - the lab's own profile read has no such column, and inventing
+     a false for it there would be a claim about a query that never asked. */
+  if (row.has_settings !== undefined) out.settings = row.has_settings === 1 || row.has_settings === true;
+  return out;
 }
