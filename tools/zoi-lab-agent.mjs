@@ -372,24 +372,28 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function loadConfig() {
   if (!existsSync(CONFIG_PATH)) {
     log("No config file at " + CONFIG_PATH + " - create it with the endpoint and the token from the lab page.");
-    process.exit(1);
+    process.exitCode = 1;
+    return null;
   }
   let cfg;
   try {
     cfg = JSON.parse(await readFile(CONFIG_PATH, "utf8"));
   } catch {
     log("The config file at " + CONFIG_PATH + " is not valid JSON.");
-    process.exit(1);
+    process.exitCode = 1;
+    return null;
   }
   const token = typeof cfg?.token === "string" ? cfg.token.trim() : "";
   const endpoint = typeof cfg?.endpoint === "string" ? cfg.endpoint.trim() : "";
   if (!token) {
     log("The config file at " + CONFIG_PATH + " has no token - paste the one the lab page shows.");
-    process.exit(1);
+    process.exitCode = 1;
+    return null;
   }
   if (!endpoint) {
     log("The config file at " + CONFIG_PATH + " has no endpoint - use https://zoisports.com/api/lab-sync.");
-    process.exit(1);
+    process.exitCode = 1;
+    return null;
   }
   return { token, endpoint };
 }
@@ -523,8 +527,20 @@ const runDirectly = (() => {
 
 if (runDirectly) {
   const cfg = await loadConfig();
-  if (process.argv.includes("--once")) {
-    process.exit((await send(cfg)) ? 0 : 1);
+  /* A missing or broken config has already said why and set the exit code; it
+     must not fall through to watching, which would retry the same bad file
+     every minute and fill the log. */
+  if (cfg) {
+    if (process.argv.includes("--once")) {
+      const sent = await send(cfg);
+      /* process.exit() while stdout is still draining is what trips libuv on
+         Windows ("Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)") - a
+         crash after a successful send, which looks like a failure in the log
+         and gives a task a bad exit code. Setting the code and letting the loop
+         empty is enough: nothing here keeps the process alive. */
+      process.exitCode = sent ? 0 : 1;
+    } else {
+      await watch(cfg);
+    }
   }
-  await watch(cfg);
 }
