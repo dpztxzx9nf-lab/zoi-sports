@@ -437,6 +437,121 @@ export function judge(before, after) {
   return { ...out, verdict: "even" };
 }
 
+/* ---------- per-match, from the replays ----------
+
+   Everything above reads the stats API, which counts a whole account. That
+   forces every comparison through segments: a change made at 23:40 with one
+   reading at 23:30 and the next at 00:10 puts all eight games in one segment
+   that straddles the change, and the honest answer there is "these games are in
+   neither figure". With four evenings of history the card can therefore compare
+   25 games to 25 and leave 300 unmentioned.
+
+   The replay files remove the whole problem, because each one carries its own
+   match's end time to the millisecond and its own kills, damage and placement.
+   A game that ended at 23:52 is before a change at 23:40 or after it; there is
+   no straddle to resolve and nothing to guess. This builds a second, independent
+   reading of the same question from those rows.
+
+   Independence is the point, not a side effect. The two sources can disagree,
+   and where they do the page should say so rather than blend them: the account
+   counters count every game played anywhere, while a replay only exists for a
+   match this machine recorded. A replay sample smaller than the counter sample
+   is normal, and a disagreement is information, not a bug to smooth over.
+
+   Nothing here is filled in. A match row that is not `recorded` - a Creative
+   island, or a file the reader could not read - is not a zero, it is absent. A
+   side with fewer than MIN_GAMES recorded matches gets no verdict, the same
+   floor the counter path uses. */
+
+/* One match, as the only thing a comparison needs: when it ended, and what
+   happened in it. Rows arrive from D1 with snake_case columns; the reader's own
+   objects are camelCase, so both spellings are accepted. */
+function replayMatchOf(row) {
+  if (!row || typeof row !== "object") return null;
+  /* recorded is the gate. A row stored with recorded = 0 says, in its own words,
+     that it carries no measurements, and reading its nulls as zero kills would
+     turn every Creative island into a terrible game that never happened. */
+  if (Number(row.recorded) !== 1 && row.recorded !== true) return null;
+  const ended = row.ended_at !== undefined ? row.ended_at : row.endedAtUtc;
+  const endedMs = timeOf(ended);
+  if (!Number.isFinite(endedMs)) return null;
+  const kills = int(row.eliminations);
+  /* A recorded row with no kill count cannot sit in a kill comparison. It is
+     dropped rather than counted as zero, and `killsMissing` below counts it so
+     the payload can admit it. */
+  return { endedMs, kills, placement: int(row.placement), totalPlayers: int(row.total_players !== undefined ? row.total_players : row.totalPlayers) };
+}
+
+/* The two sides of one change, from individual matches. `floorMs` is the
+   previous change to the same setting, for the same reason sampleBefore has one:
+   a baseline that reaches back past an earlier change would be measuring games
+   played on a value the card cannot name. */
+function perMatchSplit(matches, atMs, nextMs, floorMs) {
+  const before = [];
+  const after = [];
+  let killsMissing = 0;
+  for (const m of matches) {
+    if (m.kills === null) { killsMissing++; continue; }
+    if (m.endedMs < atMs) {
+      if (m.endedMs >= floorMs) before.push(m);
+    } else if (nextMs === null || m.endedMs < nextMs) {
+      after.push(m);
+    }
+  }
+  return { before, after, killsMissing };
+}
+
+/* Kills per match over an exact set of games.
+
+   This is where the replay path earns its keep. killsInterval above has to
+   pretend it does not know how the kills were spread - it only ever sees a
+   total - so it multiplies by a made-up overdispersion factor to stop the range
+   being too narrow. With the individual counts in hand the spread can be
+   measured instead of assumed, so this is a plain standard error over the real
+   sample. A run of 0, 0, 9 is wide for a reason; a run of 4, 4, 4 is not, and the
+   assumed factor cannot tell them apart. */
+export function matchInterval(matches) {
+  const games = (matches || []).filter((m) => m && Number.isFinite(m.kills));
+  const n = games.length;
+  if (n < 2) {
+    /* One game has no spread to measure. Its interval is not zero-width - that
+       would read as certainty - it is simply not computable, so it is null. */
+    return null;
+  }
+  let sum = 0;
+  for (const m of games) sum += m.kills;
+  const mean = sum / n;
+  let sq = 0;
+  for (const m of games) sq += (m.kills - mean) ** 2;
+  /* Sample variance, n-1. A variance of exactly zero - four identical games - is
+     a real answer, not a division by zero: the range is then the mean itself,
+     which is what "every game was the same" means. It is widened by one game's
+     worth of Poisson noise anyway, because four identical outcomes is a sample
+     of four, not a law. */
+  const variance = sq / (n - 1);
+  const se = Math.sqrt((variance + mean) / n);
+  return { mean, low: Math.max(0, mean - Z_95 * se), high: mean + Z_95 * se, games: n, variance };
+}
+
+/* The verdict for one change, from matches instead of counters. Deliberately
+   the same rule judge() applies - two 95% intervals that separate - so the two
+   readings can be laid side by side without one looking stricter than the other
+   for reasons a reader cannot see. */
+function judgeMatches(before, after) {
+  const blank = (reason) => ({ verdict: "too-soon", reason, kills_delta: null, before_interval: null, after_interval: null });
+  if (after.length === 0) return blank("after-thin");
+  if (before.length < MIN_GAMES || after.length < MIN_GAMES) {
+    return blank(before.length < MIN_GAMES ? "before-thin" : "after-thin");
+  }
+  const b = matchInterval(before);
+  const a = matchInterval(after);
+  if (!b || !a) return blank("kills-missing");
+  const out = { reason: null, kills_delta: a.mean - b.mean, before_interval: b, after_interval: a };
+  if (a.low > b.high) return { ...out, verdict: "better" };
+  if (a.high < b.low) return { ...out, verdict: "worse" };
+  return { ...out, verdict: "even" };
+}
+
 /* ---------- what a session was played in ---------- */
 
 /* The mode a match was played in, as one short key, or null when the log never
@@ -600,8 +715,15 @@ function nextChangeOf(ordered, i) {
   return null;
 }
 
-export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_SEGMENTS, watch = null, matches = null }) {
+export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_SEGMENTS, watch = null, matches = null, replays = null }) {
   const segments = labelSessions(segmentsOf((rows || []).slice(-MAX_READINGS)), matches);
+  /* The replay rows, oldest first, read once. `replays` is null when the caller
+     did not send any - a database without 0010, or a read that failed - and that
+     is different from an empty list: null means "the second reading is not
+     available here", and the payload says so rather than reporting zero games. */
+  const replayMatches = Array.isArray(replays)
+    ? replays.map(replayMatchOf).filter(Boolean).sort((a, b) => a.endedMs - b.endedMs)
+    : null;
   /* The header's lifetime numbers, read once here because the per-change target
      sizing below falls back to the lifetime kill rate. */
   const lifetime = lifetimeOf(rows || []);
@@ -665,6 +787,39 @@ export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_S
     }
 
     const j = judge(before, after);
+
+    /* The same question asked of the individual games the replays recorded.
+       Independent of the counter path above - different source, different
+       arithmetic, and it does not fall back to it, because a comparison that
+       quietly changes source halfway is not a second opinion. When there are no
+       replays the whole block is null and the page shows the counter reading
+       alone, exactly as it did before this existed. */
+    let byMatch = null;
+    if (replayMatches !== null) {
+      const split = perMatchSplit(replayMatches, t.startedMs, nextMs, prevMs === null || prevMs === undefined ? -Infinity : prevMs);
+      const mj = judgeMatches(split.before, split.after);
+      const beforeRate = split.before.length ? split.before.reduce((n, m) => n + m.kills, 0) / split.before.length : null;
+      const afterRate = split.after.length ? split.after.reduce((n, m) => n + m.kills, 0) / split.after.length : null;
+      byMatch = {
+        verdict: mj.verdict,
+        reason: mj.reason,
+        before: split.before.length,
+        after: split.after.length,
+        kills_before: beforeRate,
+        kills_after: afterRate,
+        kills_delta: mj.kills_delta,
+        kills_interval: { before: mj.before_interval, after: mj.after_interval },
+        /* Matches a replay recorded that the counter sample never saw, in either
+           direction. This is the one number that explains a disagreement
+           between the two readings, so it is carried rather than hidden. */
+        unmatched: split.killsMissing,
+        /* Games on each side that no replay accounts for but the counters did.
+           Not an error: a replay only exists for a match this machine recorded,
+           so a session played elsewhere is real games with no per-match row. */
+        counters_only: Math.max(0, (after.matches - split.after.length) + (before.matches - split.before.length)),
+        min_games: MIN_GAMES,
+      };
+    }
 
     /* Bracketed over the games the win count covers, not over every game in the
        sample. Those are the same number whenever no read was missing a counter,
@@ -798,6 +953,10 @@ export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_S
          ended after it. They are in neither figure. Counted here so the card can
          say so; 0 when every game was placed. */
       unplaced,
+      /* The per-match reading of this same change, from the replay files. Null
+         when no replays were loaded at all; otherwise its own verdict, which may
+         disagree with the counter one and is allowed to. */
+      by_match: byMatch,
     });
   }
 

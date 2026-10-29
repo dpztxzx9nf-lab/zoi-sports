@@ -382,6 +382,130 @@ function unplacedNote(c) {
             : 'which side of it it fell on. It is counted in neither figure above.'));
 }
 
+/* ---------- the per-match reading ----------
+
+   The figures above come from the account counters, which only move between
+   readings, so a change made mid-session puts every game of that session in a
+   reading that straddles it and the card has to leave them out. The replay files
+   carry each match's own end time and its own kills, so a second reading of the
+   same change can place those games exactly. Where the counter card has to
+   abstain, this one can answer.
+
+   It is shown as its own block, never merged into the figures above. Two readings
+   from two sources that can disagree must be readable side by side, and a blended
+   number would hide the disagreement rather than report it. When it has nothing to
+   say - no replays yet, or too few games a side - it says that in one line and
+   claims nothing. */
+
+/* Whether there is a per-match reading worth drawing for this change. */
+function hasMatchReading(c) {
+  const m = c && c.by_match;
+  return Boolean(m && (m.before > 0 || m.after > 0));
+}
+
+/* The block itself, or null when there is nothing true to say about it. */
+function matchReading(c) {
+  const m = c.by_match;
+  if (!m || !hasMatchReading(c)) return null;
+
+  const box = el('div', 'lab-bymatch');
+  const head = el('p', 'lab-bymatch-k');
+  head.append(el('span', null, 'From your replays'));
+  if (m.verdict !== 'too-soon') {
+    head.append(el('span', 'lab-bymatch-tag lab-bymatch-' + m.verdict, VERDICT_WORD[m.verdict] || m.verdict));
+  }
+  box.append(head);
+
+  /* What it counted. Said as the two sample sizes rather than as one figure,
+     because the whole point is which games landed on which side. */
+  box.append(el('p', 'lab-bymatch-n',
+    matchesWord(m.before) + ' before, ' + matchesWord(m.after) + ' after, placed by when each match ended.'));
+
+  /* The rate on each side, and the move between them, only where the numbers
+     exist. A dash is used rather than a zero for a side with no games. */
+  const row = el('div', 'lab-bymatch-figs');
+  const fig = (name, value) => {
+    const f = el('div', 'lab-bymatch-fig');
+    f.append(el('span', 'lab-fig-k', name), el('span', 'lab-fig-v', value));
+    return f;
+  };
+  row.append(
+    fig('Before', isNum(m.kills_before) ? kpm(m.kills_before) + ' kills' : '\u2014'),
+    fig('After', isNum(m.kills_after) ? kpm(m.kills_after) + ' kills' : '\u2014'),
+    fig('Move', isNum(m.kills_delta) ? signed(m.kills_delta, 2) : '\u2014'),
+  );
+  box.append(row);
+
+  /* Why it is not a verdict yet, in the reader's own terms. The two reasons are
+     different situations and a card that blurred them would be telling a reader
+     to keep playing when the problem is that no replay was ever recorded. */
+  if (m.verdict === 'too-soon') {
+    const floor = m.min_games || 25;
+    if (m.reason === 'after-thin' && m.after === 0) {
+      box.append(el('p', 'lab-c-fine', 'No recorded matches since the change yet. A replay is written at the end of a match this PC played, so this fills in after the next one.'));
+    } else {
+      box.append(el('p', 'lab-c-fine', 'Under ' + floor + ' recorded matches a side, so this is the start of the sample rather than a verdict.'));
+    }
+  } else if (m.verdict === 'better' || m.verdict === 'worse') {
+    box.append(el('p', 'lab-c-fine', 'Placed match by match, the ranges separate.'));
+  }
+
+  /* The admission that keeps this honest: the counter sample and the replay
+     sample are not the same games, and where they differ the card says so
+     instead of letting a reader assume the two figures cover one thing. */
+  const gaps = [];
+  if (isNum(m.counters_only) && m.counters_only > 0) {
+    gaps.push(matchesWord(m.counters_only) + ' the counters counted have no replay on this PC, so they are in the figures above and not in these');
+  }
+  if (isNum(m.unmatched) && m.unmatched > 0) {
+    const one = m.unmatched === 1;
+    gaps.push(group(m.unmatched) + (one ? ' recorded match carried' : ' recorded matches carried')
+      + ' no kill count and ' + (one ? 'was' : 'were') + ' left out rather than counted as scoreless');
+  }
+  if (gaps.length) box.append(el('p', 'lab-c-fine', gaps.join('. ') + '.'));
+
+  return box;
+}
+
+/* When the two readings disagree, say it plainly, and name which one is
+   actually better informed. This is the case a single blended figure would have
+   hidden, and the case worth the most: the counters lose every game that
+   straddled the change, so they often sit at "too soon" while the replays have
+   already put those games on the right side and settled it. Saying nothing there
+   would throw away the whole point of the replay sample. */
+function readingsDisagree(c) {
+  const m = c && c.by_match;
+  if (!m || !hasMatchReading(c)) return null;
+  if (!m.verdict || !c.verdict) return null;
+
+  /* Settled one way by the replays while the counters still cannot place the
+     games: the replays win, and the card says why rather than leaving two
+     contradictory signals side by side. */
+  if (c.verdict === 'too-soon' && m.verdict !== 'too-soon') {
+    return el('p', 'lab-c-fine',
+      'The counters alone cannot call this one yet, because a match that started before the change and ended after it does not belong to either side. '
+      + 'Your replays place each match by when it ended, which is enough to separate the two ranges. That is the reading to trust here.');
+  }
+
+  /* The counters have a verdict and the replays do not. Usually just a thinner
+     sample on this PC, so it is an explanation and not a contradiction. */
+  if (m.verdict === 'too-soon' && c.verdict !== 'too-soon') {
+    const floor = m.min_games || 25;
+    return el('p', 'lab-c-fine',
+      'Your replays do not cover ' + floor + ' matches a side since the change yet, so they cannot confirm the call above. The counter verdict stands on its own sample.');
+  }
+
+  if (c.verdict === m.verdict) return null;
+
+  /* Both settled, pointing opposite ways. Neither is wrong: they are counting
+     different games, and the card says which is which instead of picking one. */
+  return el('p', 'lab-c-fine',
+    'The two readings point opposite ways: the account counters say '
+    + (VERDICT_WORD[c.verdict] || c.verdict).toLowerCase() + ' and the replays say '
+    + (VERDICT_WORD[m.verdict] || m.verdict).toLowerCase()
+    + '. The counters cover every account on this key, the replays only matches played on this PC, so they are counting different games. Neither is wrong.');
+}
+
 /* ---------- on test now ---------- */
 
 /* Games a side past this is not going to happen on one setting: at that point a
@@ -442,7 +566,10 @@ function renderNow() {
     fig.append(
       figRow('Kills a match now', kpm(kpmNow), isNum(kpmBefore) ? 'was ' + kpm(kpmBefore) : ''),
       figRow('Games since', group(played), ''),
-      figRow('Win rate now', c.after ? pct(c.after.win_rate) : '\u2014', isNum(c.kills_delta) ? signed(c.kills_delta, 2) + ' kills' : ''),
+      /* `delta` on a change is the win-rate move; `kills_delta` is the kill one.
+         The sublabel under a win-rate figure has to be the win-rate move, or the
+         card captions the wrong number. */
+      figRow('Win rate now', c.after ? pct(c.after.win_rate) : '\u2014', isNum(c.delta) ? points(c.delta) + ' points' : ''),
     );
     card.append(fig);
 
@@ -463,7 +590,7 @@ function renderNow() {
       /* Two facts in one line: how far in this is, and how far it has to go.
          Written as "4 of about 187" the second number reads as a target that is
          close, which it is not - so the line spells both out. */
-      card.append(el('p', 'lab-c-note', matchesWord(played) + ' games since the change. Proving a one-kill move'
+      card.append(el('p', 'lab-c-note', matchesWord(played) + ' since the change. Proving a one-kill move'
         + (isNum(rateShown) ? ' at ' + kpm(rateShown) + ' a match' : '')
         + ' takes about ' + group(need) + ' a side.'));
     }
@@ -483,6 +610,16 @@ function renderNow() {
     if (winShort) card.append(winShort);
     const stuck = unplacedNote(c);
     if (stuck) card.append(stuck);
+
+    /* The per-match reading, which is the one that can place the games the note
+       above had to leave out. It goes last because it is the second opinion, and
+       it never replaces the figures above it. */
+    const byMatch = matchReading(c);
+    if (byMatch) card.append(byMatch);
+    /* And the line that says which reading to trust when they part ways. On this
+       card it matters most: it is the one still being tested. */
+    const split = readingsDisagree(c);
+    if (split) card.append(split);
 
     nodes.now.append(card);
   }
@@ -847,6 +984,17 @@ function killsLine(c) {
 
   const unplaced = unplacedNote(c);
   if (unplaced) wrap.append(unplaced);
+
+  /* The same second opinion the open card carries, on the card a decision was
+     actually made on. A settled verdict built from counters left out every game
+     that straddled the change; the replays put those games back on the side they
+     were played on, so where the two readings agree the reader gets confirmation,
+     and where they disagree the line below says so in words. */
+  const byMatch = matchReading(c);
+  if (byMatch) wrap.append(byMatch);
+  const split = readingsDisagree(c);
+  if (split) wrap.append(split);
+
   return wrap;
 }
 
@@ -1043,19 +1191,57 @@ function showAccount(me) {
 
 function clearProfileErrors() { nodes.pfErrors.replaceChildren(); hide(nodes.pfErrors); }
 
-function fillProfile(p) {
+/* Which fields the reader has already typed into. The profile arrives from the
+   network while the dialog is open, and it used to be written straight into the
+   boxes: open the menu, start typing fast, and the load landed on top of the
+   keystrokes half way through a gamertag, giving "PlayerOneZB" from a field the
+   reader had typed "OneZB" into. A fetch that started before they typed must
+   never overwrite what they typed, so every field carries a dirty flag and a
+   load only fills the ones still untouched.
+
+   The save path passes force, because there the server's answer is the truth and
+   the form should show exactly what was stored. */
+const pfTouched = new Set();
+
+function fillProfile(p, force = false) {
   const has = Boolean(p);
-  nodes.pfGamertag.value = has && p.gamertag ? p.gamertag : '';
-  nodes.pfRole.value = has && p.role ? p.role : '';
-  nodes.pfRegion.value = has && p.region ? p.region : '';
-  nodes.pfPlatform.value = has && p.platform ? p.platform : '';
-  nodes.pfBio.value = has && p.bio ? p.bio : '';
-  nodes.pfPublished.checked = has ? p.published === true : false;
+  const put = (input, key, value) => {
+    if (!input) return;
+    if (!force && pfTouched.has(key)) return;
+    input.value = value;
+  };
+
+  put(nodes.pfGamertag, 'gamertag', has && p.gamertag ? p.gamertag : '');
+  put(nodes.pfRole, 'role', has && p.role ? p.role : '');
+  put(nodes.pfRegion, 'region', has && p.region ? p.region : '');
+  put(nodes.pfPlatform, 'platform', has && p.platform ? p.platform : '');
+  put(nodes.pfBio, 'bio', has && p.bio ? p.bio : '');
+  if (force || !pfTouched.has('published')) {
+    nodes.pfPublished.checked = has ? p.published === true : false;
+  }
   const socials = has && p.socials && typeof p.socials === 'object' ? p.socials : {};
   for (const net of Object.keys(nodes.pfSocials)) {
-    const input = nodes.pfSocials[net];
-    if (input) input.value = typeof socials[net] === 'string' ? socials[net] : '';
+    put(nodes.pfSocials[net], 'social:' + net, typeof socials[net] === 'string' ? socials[net] : '');
   }
+}
+
+/* Wire the dirty flags once. Any keystroke in a field marks it, and a field the
+   reader has cleared counts as typed in too: deleting a bio on purpose must not
+   be undone by the load either. */
+function watchProfileFields() {
+  const map = {
+    gamertag: nodes.pfGamertag, role: nodes.pfRole, region: nodes.pfRegion,
+    platform: nodes.pfPlatform, bio: nodes.pfBio,
+  };
+  for (const key of Object.keys(map)) {
+    const input = map[key];
+    if (input) input.addEventListener('input', () => pfTouched.add(key));
+  }
+  for (const net of Object.keys(nodes.pfSocials)) {
+    const input = nodes.pfSocials[net];
+    if (input) input.addEventListener('input', () => pfTouched.add('social:' + net));
+  }
+  nodes.pfPublished.addEventListener('change', () => pfTouched.add('published'));
 }
 
 async function loadProfile() {
@@ -1120,7 +1306,8 @@ async function saveProfile(event) {
     const dropped = r.data && Array.isArray(r.data.dropped) ? r.data.dropped : [];
     const typed = {};
     for (const net of dropped) if (nodes.pfSocials[net]) typed[net] = nodes.pfSocials[net].value;
-    fillProfile(saved);
+    fillProfile(saved, true);
+    pfTouched.clear();
     for (const net of Object.keys(typed)) nodes.pfSocials[net].value = typed[net];
     profileLoaded = true;
     if (dropped.length) {
@@ -1168,6 +1355,7 @@ function bootAccount() {
     if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) closeAccount();
   });
   nodes.pfForm.addEventListener('submit', saveProfile);
+  watchProfileFields();
 }
 
 /* ---------- connected PCs ---------- */
