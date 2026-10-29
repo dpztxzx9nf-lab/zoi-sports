@@ -8,7 +8,7 @@ dotnet dist/zoi-cues.dll "C:\Users\Golf\AppData\Local\FortniteGame\Saved\Demos\x
 ```
 
 ```
-{"ok":true,"headshots":8,"cues":167,"crit":11,"critNamed":8,"localPlayer":"Knecziᵀᵀ"}
+{"ok":true,"headshots":8,"cues":167,"crit":11,"critNamed":8,"localDamage":1304,"matchDamage":1195,"damageRatio":1.091,"localPlayer":"Knecziᵀᵀ"}
 ```
 
 One line of JSON on stdout. On failure, one line of JSON and a non-zero exit:
@@ -18,7 +18,8 @@ One line of JSON on stdout. On failure, one line of JSON and a non-zero exit:
 ```
 
 There is no third answer. A replay that cannot be read is never reported as a
-match with zero headshots.
+match with zero headshots, and a replay whose cue stream contradicts its own
+stats is never reported as a count either.
 
 ## What the numbers mean
 
@@ -28,10 +29,15 @@ match with zero headshots.
 | `cues` | damage cues the local player fired at all |
 | `crit` | how many of those had `bIsCritical` exactly true |
 | `critNamed` | how many of *those* named a victim — equal to `headshots` |
+| `localDamage` | sum of `Magnitude` over the local player's named cues, critical or not |
+| `matchDamage` | `damageToPlayers` from the match's own `AthenaMatchStats` |
+| `damageRatio` | `localDamage / matchDamage`, to three decimals |
 | `localPlayer` | the name every cue was filtered against |
 
-`headshots == critNamed` always. The other two are there so a wrong count is
-visible in the same line as the count.
+`headshots == critNamed` always. The other fields are there so a wrong count is
+visible in the same line as the count: `crit` says how many critical cues the
+reader saw, and `localDamage` against `matchDamage` says whether the reader's
+attribution survived the reconciliation.
 
 ## The headshot rule
 
@@ -40,6 +46,9 @@ A damage cue counts when **all** of these hold:
 1. it was fired by the local player — the replay owner — not the whole lobby;
 2. `bIsCritical` is exactly `true` (a missing field is not a yes);
 3. the cue names a victim (non-empty victim name).
+
+And the resulting count is published only if the reader's damage agrees with the
+match's, which is the check below.
 
 This is settled. It was proven against ground truth and it is not open to
 re-tuning.
@@ -64,24 +73,96 @@ players, so the rule above would report two dozen "headshots" from a match that
 never had one. The tool refuses anything with no `AthenaMatchTeamStats`, the same
 test `tools/zoi-replay.mjs` already applies.
 
+## The reconciliation check
+
+The three conditions above describe the cues the reader attributed to the local
+player. They cannot tell whether that attribution was right, and on some replays
+it is not: the cue reader credits other players' damage cues to the local player,
+which inflates the damage and the headshot count together.
+
+So before anything is published, the tool sums `Magnitude` over every cue the
+local player instigated that **named a victim** — critical and non-critical
+alike, since structural hits carry no victim and are excluded — and compares it
+to `damageToPlayers` from the replay's own `AthenaMatchStats`:
+
+```
+ratio = localDamage / damageToPlayers
+```
+
+`ratio <= 1.15` publishes. `ratio > 1.15` **refuses**: one line of
+`{"ok":false,"reason":"the cue reader credited N damage to the local player but
+the match recorded M, so the cue attribution is unreliable for this replay"}` and
+a non-zero exit.
+
+Measured against Brock's end screens, the screen-confirmed matches and the
+known-wrong ones do not overlap:
+
+| replay | screen headshots | raw `critNamed` | local named damage | `damageToPlayers` | ratio | verdict |
+|---|---|---|---|---|---|---|
+| `m7.replay` | 2 | 2 | 926 | 922 | 1.005 | correct |
+| `m10b.replay` | 5 | 5 | 882 | 866 | 1.018 | correct |
+| `m13.replay` | 2 | 2 | 1027 | 1001 | 1.026 | correct |
+| `m6.replay` | (no screen captured) | 3 | 1349 | 1317 | 1.025 | consistent |
+| `reload2.replay` | 8 | 8 | 1304 | 1195 | 1.091 | correct |
+| `m9b.replay` | 25 | 37 | 5867 | 4478 | 1.310 | **wrong** |
+| `m8.replay` | 1 | 4 | 1415 | 554 | 2.553 | **wrong** |
+
+Every match where the raw count matches the screen is at or below 1.091. Both
+wrong matches are at or above 1.310. Nothing screen-confirmed lands in between;
+`reload.replay` (1.186) is in that gap and was never screen-confirmed, which is
+its own reason not to publish its count, and it is refused like the others.
+
+**Refusing is the fix, not a workaround.** A number the replay itself contradicts
+is not a measurement. Publishing the inflated count would put a wrong headshot
+figure on the lab; publishing zero would be worse, because zero is a real answer
+for a real match and the two must stay distinguishable. The refusal carries both
+totals in its reason, so the lab stores a null headshot with that reason and the
+match says why it has no headshot figure.
+
+**What does not work, and was tried.** Collapsing repeated critical cues,
+deduping by victim, any time window. `m10b.replay` has four critical cues on
+`Alejandro281113`, all magnitude `13.50`, inside 1.1 seconds, and the end screen
+counts all four (5 total, including one earlier crit on a different victim). Any
+collapse rule destroys a correct match in order to rescue two broken ones. The
+reconciliation check changes nothing about a good replay's count.
+
 ## Fixtures
 
-All seven of these must reproduce exactly. They are the regression test; the
+All of these must reproduce exactly. They are the regression test; the
 JavaScript side runs them too.
 
-| replay | eliminations | headshots |
-|---|---|---|
-| `reload2.replay` | 1 | **8** (confirmed on the in-game end screen) |
-| `m7.replay` | 2 | 2 (confirmed on the in-game end screen) |
-| `latest4.replay` | 2 | 4 |
-| `m6.replay` | 3 | 3 |
-| `reload.replay` | 7 | 7 |
-| `latest1.replay` | 13 | 5 |
-| `latest2.replay` | 0 | 0 |
+| replay | headshots | ratio | why |
+|---|---|---|---|
+| `m7.replay` | **2** | 1.005 | confirmed on the in-game end screen |
+| `m10b.replay` | **5** | 1.018 | confirmed on the in-game end screen; four of the five are crits on one victim inside 1.1 s |
+| `m13.replay` | **2** | 1.026 | confirmed on the in-game end screen |
+| `m6.replay` | **3** | 1.025 | no screen captured; consistent with the match's recorded damage |
+| `reload2.replay` | **8** | 1.091 | confirmed on the in-game end screen; the match the rule was settled on |
+| `m9b.replay` | **REFUSED** | 1.310 | screen said 25, the cue stream claims 37. Over-credited by construction |
+| `m8.replay` | **REFUSED** | 2.553 | screen said 1, the cue stream claims 4. Over-credited by construction |
+| `latest4.replay` | 4 | 1.009 | earlier fixture, still reproduces |
+| `latest1.replay` | 5 | 0.638 | earlier fixture, still reproduces |
+| `latest2.replay` | 0 | 1.038 | earlier fixture; a real match, a real zero |
+| `reload.replay` | **REFUSED** | 1.186 | earlier fixture, never screen-confirmed; now over the line |
 
-`latest2` is the one that matters for honesty: a real match, a real zero. It has
-to come back `ok:true, headshots:0`, not as a failure, or a player who never hit
-a headshot would look like a broken reader.
+**`m9b` and `m8` are REFUSED ON PURPOSE.** Their cue streams over-credit the
+local player's damage badly — 5867 against 4478 recorded on `m9b`, 1415 against
+554 on `m8` — so the reader is demonstrably attributing other players' cues to
+Brock, and any headshot count taken from those streams would be wrong for the
+same reason. The refusal *is* the fix: the tool says so in one line and exits
+non-zero, and the lab stores a null headshot with that reason. It is not a count,
+and it is not zero.
+
+`latest2` is the one that matters for the other direction: a real match, a real
+zero. It has to come back `ok:true, headshots:0`, not as a failure, or a player
+who never hit a headshot would look like a broken reader.
+
+`reload.replay` is the fixture the rule change moved. It was never confirmed
+against an end screen — the earlier table carried its count because it came out
+of the reader, not because anyone checked it — and at 1.186 it sits above the
+1.15 line. It is now refused for the same reason as `m9b` and `m8`. That is the
+check doing its job on a match nobody had verified, and it is recorded here
+rather than quietly special-cased.
 
 ## Who is the local player
 
@@ -98,6 +179,15 @@ once the whole replay is parsed, when the maps are complete. If that yields
 anything other than exactly one name, the count is refused. There is deliberately
 no fallback that guesses by name — guessing whose cues these are would be a
 different rule, and it is the kind of guess that quietly invents a number.
+
+A cue's victim is resolved the same way, and has the same gap: the guid-keyed
+actor map is built as the stream names actors, so a real player's pawn can be
+missing from it. `ResolveActor` therefore falls back to guid → live channel →
+player state → name, which is the identical lookup by a longer route, not a
+second opinion. Without that fallback nine local cues on `reload.replay` resolve
+to no victim at all and drop out of both the damage sum and the count; with it,
+the damage totals reproduce the research harness's numbers to the last decimal on
+every fixture. It never changes a headshot count on any of them.
 
 ## Rebuilding
 
@@ -135,8 +225,8 @@ it; the fixture table is what catches a stale or wrong build at runtime.
 
 | file | what it is |
 |---|---|
-| `Program.cs` | entry point: resolve the owner, apply the rule, print one line |
-| `CueReader.cs` | captures the damage-cue property stream and rebuilds cues from it |
+| `Program.cs` | entry point: resolve the owner, apply the rule, check it against the match, print one line |
+| `CueReader.cs` | captures the damage-cue property stream and rebuilds cues from it, magnitude included |
 | `zoi-cues.csproj` | minimal console project, `ProjectReference` to the patched decompressor |
 | `build.sh` | the reproducible build described above |
 | `frd-damage-cues.patch` | the patch that adds the damage-cue export to the decompressor |

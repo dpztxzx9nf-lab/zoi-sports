@@ -86,7 +86,8 @@ export function cueReaderInstalled() {
 /* Read one replay's headshot count.
 
    Resolves - never rejects - to one of:
-     { ok: true,  headshots: 8, cues: 167, crit: 11, critNamed: 8, localPlayer: "..." }
+     { ok: true,  headshots: 8, cues: 167, crit: 11, critNamed: 8,
+       localDamage: 1304, matchDamage: 1195, damageRatio: 1.091, localPlayer: "..." }
      { ok: false, reason: "..." }
 
    `opts` exists for the harness: a shorter timeout, or a stand-in for dotnet
@@ -204,6 +205,15 @@ export function parseCueLine(text) {
         cues: Number.isFinite(value.cues) ? value.cues : null,
         crit: Number.isFinite(value.crit) ? value.crit : null,
         critNamed: Number.isFinite(value.critNamed) ? value.critNamed : null,
+        /* The reconciliation the CLI had to pass before it printed a count, and
+           the figures it compared. Carried through so a caller can see that a
+           number came from a replay whose damage added up rather than from one
+           that happened to get under the line. Null, not 0, when the build on
+           the machine is too old to print them - an absent diagnostic is not a
+           zero damage total. */
+        localDamage: Number.isFinite(value.localDamage) ? value.localDamage : null,
+        matchDamage: Number.isFinite(value.matchDamage) ? value.matchDamage : null,
+        damageRatio: Number.isFinite(value.damageRatio) ? value.damageRatio : null,
         localPlayer: typeof value.localPlayer === "string" ? value.localPlayer : null,
       };
     }
