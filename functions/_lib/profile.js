@@ -13,7 +13,7 @@
       javascript: or data: value must never reach the page even if it somehow
       got past the form - the page re-checks with socialUrl() before using one. */
 
-export const NETWORKS = ["x", "tiktok", "youtube", "twitch", "instagram", "kick"];
+export const NETWORKS = ["x", "tiktok", "youtube", "instagram", "twitch", "kick"];
 
 export const LIMITS = {
   gamertag: 32,
