@@ -361,6 +361,7 @@ html,body{overflow-x:clip}img{max-width:100%}
 .lab-field-sm{max-width:8.5rem}
 
 .lab-empty{margin:0;padding:1rem;border:1px dashed #e6d3a033;border-radius:5px;color:var(--m);font-size:.88rem;line-height:1.5}
+.lab-start{margin:0;font-size:.92rem;line-height:1.6;color:var(--m);max-width:58ch}
 
 /* the lifetime figures */
 .lab-figures{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem}

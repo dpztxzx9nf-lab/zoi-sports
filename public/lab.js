@@ -23,6 +23,8 @@ const nodes = {
   chartWin: $('chart-win'), chartWinBox: $('chart-win-box'),
   chartKey: $('chart-key'), chartEmpty: $('chart-empty'),
   progress: $('progress'), changes: $('changes'), ranked: $('ranked'),
+  startBlock: $('start-block'),
+  progressBlock: $('progress-block'), changesBlock: $('changes-block'), rankedBlock: $('ranked-block'),
   pcConnect: $('pc-connect'), pcLabel: $('pc-label'), pcAdd: $('pc-add'),
   pcErrors: $('pc-errors'), pcToken: $('pc-token'), pcTokenValue: $('pc-token-value'),
   pcCopy: $('pc-copy'), pcDone: $('pc-done'), pcCopied: $('pc-copied'),
@@ -225,10 +227,11 @@ function renderCurrent() {
   nodes.current.append(list);
 
   /* When it was read, in the same words the This PC list uses, so a stale
-     snapshot is obvious rather than being read as the current setting. */
+     snapshot is obvious rather than being read as the current setting. The
+     agent's own name is deliberately not shown: it is an internal filename and
+     tells him nothing he can act on. How long ago is the useful part. */
   const bits = [];
   if (seen) bits.push('As of ' + seen + (ago ? ' (' + ago + ')' : '') + '.');
-  if (c.source) bits.push('Sent by ' + c.source + '.');
   if (missing) bits.push(missing + (missing === 1 ? ' setting was not' : ' settings were not') + ' in the snapshot.');
   nodes.currentNote.textContent = bits.join(' ');
   if (bits.length) show(nodes.currentNote); else hide(nodes.currentNote);
@@ -559,10 +562,7 @@ function changeCard(c) {
 function renderChanges() {
   const list = (state.perf && Array.isArray(state.perf.changes)) ? state.perf.changes : [];
   nodes.changes.replaceChildren();
-  if (!list.length) {
-    nodes.changes.append(el('p', 'lab-empty', 'No changes recorded yet. Change a setting in Fortnite and the next sync logs it by itself.'));
-    return;
-  }
+  if (!list.length) return;
   for (const c of list) nodes.changes.append(changeCard(c));
 }
 
@@ -634,10 +634,7 @@ function renderProgress() {
   const list = (state.perf && Array.isArray(state.perf.changes)) ? state.perf.changes : [];
   const open = list.filter(c => c.status === 'testing');
   nodes.progress.replaceChildren();
-  if (!open.length) {
-    nodes.progress.append(el('p', 'lab-empty', 'Nothing open. A change opens by itself when the PC agent sees a setting move.'));
-    return;
-  }
+  if (!open.length) return;
   for (const c of open) nodes.progress.append(progressCard(c));
 }
 
@@ -646,10 +643,7 @@ function renderProgress() {
 function renderRanked() {
   const ranked = (state.perf && Array.isArray(state.perf.ranked)) ? state.perf.ranked : [];
   nodes.ranked.replaceChildren();
-  if (!ranked.length) {
-    nodes.ranked.append(el('p', 'lab-empty', 'Nothing to rank yet. This fills in once a change has enough games on both sides for the ranges to separate.'));
-    return;
-  }
+  if (!ranked.length) return;
   const list = el('ol', 'lab-rank');
   for (const g of ranked) {
     const li = el('li', 'lab-rank-row');
@@ -830,6 +824,25 @@ function render() {
   renderProgress();
   renderChanges();
   renderRanked();
+  renderEmptiness();
+}
+
+/* ---------- what to show before there is anything ----------
+   A first-time reader has no changes, no open tests and nothing ranked, which
+   used to render three separate dashed "nothing here yet" boxes in a row. That
+   reads as a broken page. One sentence that says what to do instead, and the
+   three sections stay out of the way until each has something real in it. */
+function renderEmptiness() {
+  const list = (state.perf && Array.isArray(state.perf.changes)) ? state.perf.changes : [];
+  const ranked = (state.perf && Array.isArray(state.perf.ranked)) ? state.perf.ranked : [];
+  const anyOpen = list.some(c => c.status === 'testing');
+
+  const empty = !list.length && !ranked.length;
+  if (empty) show(nodes.startBlock); else hide(nodes.startBlock);
+
+  nodes.progressBlock.hidden = !anyOpen;
+  nodes.changesBlock.hidden = !list.length;
+  nodes.rankedBlock.hidden = !ranked.length;
 }
 
 function boot() {
