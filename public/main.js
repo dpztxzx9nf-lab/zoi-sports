@@ -55,11 +55,11 @@ const safe=u=>{try{const x=new URL(u);return x.protocol==='https:'?x.href:null}c
 function open(card){const k=card.dataset.player,p=ROSTER[k];if(!p)return;opener=card;
  const av=dlg.querySelector('.pf-avatar');av.textContent=p.gamertag[0].toUpperCase();
  const i=new Image();i.alt='';i.onload=()=>{av.textContent='';av.appendChild(i)};i.src='/img/roster/'+k+'.png';
- $('pf-name').textContent=p.gamertag;$('pf-role').textContent=p.role||'';
- const f=$('pf-facts');f.replaceChildren();[[(p.games||[]).length>1?'Games':'Game',(p.games||[p.game]).filter(Boolean).map(g=>g.replace(/ /g,'\u00a0')).join(', ')],['Region',p.region],['Platform',p.platform]].forEach(([l,v])=>{if(!v)return;const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=l;dd.textContent=v;f.append(dt,dd)});
- const b=$('pf-bio');b.textContent=p.bio||'';b.hidden=!p.bio;
- const ul=$('pf-socials');ul.replaceChildren();Object.keys(NET).forEach(n=>{const u=p.socials&&safe(p.socials[n]);if(!u)return;const li=document.createElement('li'),a=document.createElement('a');a.href=u;a.target='_blank';a.rel='noopener noreferrer';a.textContent=NET[n];a.setAttribute('aria-label',p.gamertag+' on '+NET[n]);li.append(a);ul.append(li)});
- $('pf-soon').hidden=ul.children.length>0;
+ $('pop-name').textContent=p.gamertag;$('pop-role').textContent=p.role||'';
+ const f=$('pop-facts');f.replaceChildren();[[(p.games||[]).length>1?'Games':'Game',(p.games||[p.game]).filter(Boolean).map(g=>g.replace(/ /g,'\u00a0')).join(', ')],['Region',p.region],['Platform',p.platform]].forEach(([l,v])=>{if(!v)return;const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=l;dd.textContent=v;f.append(dt,dd)});
+ const b=$('pop-bio');b.textContent=p.bio||'';b.hidden=!p.bio;
+ const ul=$('pop-socials');ul.replaceChildren();Object.keys(NET).forEach(n=>{const u=p.socials&&safe(p.socials[n]);if(!u)return;const li=document.createElement('li'),a=document.createElement('a');a.href=u;a.target='_blank';a.rel='noopener noreferrer';a.textContent=NET[n];a.setAttribute('aria-label',p.gamertag+' on '+NET[n]);li.append(a);ul.append(li)});
+ $('pop-soon').hidden=ul.children.length>0;
  dlg.showModal();dlg.querySelector('.pf-close').focus()}
 document.querySelectorAll('.card[data-player]').forEach(c=>{c.addEventListener('click',()=>open(c));c.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open(c)}})});
 dlg.querySelector('.pf-close').addEventListener('click',()=>dlg.close());

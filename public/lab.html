@@ -6,18 +6,20 @@
 <meta name="description" content="Your settings, measured. Every change is compared against the games you played before it.">
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#050506">
-<!-- The lab has its own mark: a serrated badge, not the site bolt, so it reads as
-     its own app when it is saved to a home screen. The SVG is what a browser
-     tab uses; the PNGs are the fallback and the iOS home-screen icon, which
-     cannot take an SVG and cannot take transparency. -->
-<link rel="icon" href="assets/lab-icon.svg" type="image/svg+xml">
-<link rel="icon" type="image/png" sizes="192x192" href="assets/lab-icon-192.png">
-<link rel="apple-touch-icon" sizes="180x180" href="assets/lab-icon-180.png">
+<!-- The lab saves to a home screen as the main Zoi mark, not a second logo: same
+     bolt, laurel and column as the site, on the same black, so the app icon and
+     the site read as one team. The SVG is what a browser tab uses; the PNGs are
+     the fallback and the iOS home-screen icon, which cannot take an SVG and
+     cannot take transparency. ?v= is the icon cache-buster: a home screen keeps
+     the image it first downloaded, so a changed mark needs a changed URL. -->
+<link rel="icon" href="assets/lab-icon.svg?v=2" type="image/svg+xml">
+<link rel="icon" type="image/png" sizes="192x192" href="assets/lab-icon-192.png?v=2">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/lab-icon-180.png?v=2">
 <link rel="manifest" href="lab.webmanifest">
 <meta name="apple-mobile-web-app-title" content="Zoi Lab">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="styles.css?v=34">
+<link rel="stylesheet" href="styles.css?v=35">
 </head>
 <body class="lab-page">
 <header class="nav"><a href="/" class="brand"><img class="zw" src="/assets/zoi-wordmark-gold.png?v=10" alt="Zoi" width="600" height="320"></a>
@@ -103,100 +105,8 @@
 </div>
 </main>
 
-<dialog class="acct" id="acct" aria-labelledby="acct-title">
- <div class="acct-head">
-  <p class="acct-k" id="acct-title">Your account</p>
-  <button type="button" class="acct-x" id="acct-x" aria-label="Close">&times;</button>
- </div>
- <p class="acct-who" id="acct-who" hidden></p>
-
- <div class="acct-tabs" role="tablist" aria-label="Account sections">
-  <button type="button" role="tab" id="acct-tab-profile" aria-controls="acct-profile" aria-selected="true" tabindex="0">Profile</button>
-  <button type="button" role="tab" id="acct-tab-pc" aria-controls="acct-pc" aria-selected="false" tabindex="-1">PCs</button>
- </div>
-
- <!-- The card people see on the roster, edited here. -->
- <div class="acct-pane" role="tabpanel" id="acct-profile" aria-labelledby="acct-tab-profile" tabindex="0">
-  <p class="acct-lede">This is your card on the <a href="/#roster">roster</a>. Saved here, it replaces what the public page shows.</p>
-  <form class="acct-form" id="pf-form" novalidate>
-   <label class="lab-field" for="pf-gamertag">Gamertag
-    <input id="pf-gamertag" name="gamertag" maxlength="32" autocomplete="off" spellcheck="false" required>
-   </label>
-   <label class="lab-field" for="pf-role">Role
-    <input id="pf-role" name="role" maxlength="40" autocomplete="off" placeholder="Founder &amp; Owner">
-   </label>
-   <div class="acct-two">
-    <label class="lab-field" for="pf-region">Region
-     <input id="pf-region" name="region" maxlength="24" autocomplete="off" placeholder="NA-East">
-    </label>
-    <label class="lab-field" for="pf-platform">Platform
-     <input id="pf-platform" name="platform" maxlength="24" autocomplete="off" placeholder="PC">
-    </label>
-   </div>
-   <label class="lab-field" for="pf-bio">Bio
-    <textarea id="pf-bio" name="bio" rows="3" maxlength="400" placeholder="One or two lines. What you play, how you play it."></textarea>
-   </label>
-
-   <p class="acct-sub">Socials</p>
-   <p class="acct-hint">Full https links. Anything else is not saved.</p>
-   <div class="acct-socials">
-    <label class="lab-field" for="pf-x">X<input id="pf-x" name="x" inputmode="url" autocomplete="off" placeholder="https://x.com/you"></label>
-    <label class="lab-field" for="pf-tiktok">TikTok<input id="pf-tiktok" name="tiktok" inputmode="url" autocomplete="off" placeholder="https://tiktok.com/@you"></label>
-    <label class="lab-field" for="pf-youtube">YouTube<input id="pf-youtube" name="youtube" inputmode="url" autocomplete="off" placeholder="https://youtube.com/@you"></label>
-    <label class="lab-field" for="pf-twitch">Twitch<input id="pf-twitch" name="twitch" inputmode="url" autocomplete="off" placeholder="https://twitch.tv/you"></label>
-    <label class="lab-field" for="pf-instagram">Instagram<input id="pf-instagram" name="instagram" inputmode="url" autocomplete="off" placeholder="https://instagram.com/you"></label>
-    <label class="lab-field" for="pf-kick">Kick<input id="pf-kick" name="kick" inputmode="url" autocomplete="off" placeholder="https://kick.com/you"></label>
-   </div>
-
-   <label class="acct-check" for="pf-published">
-    <input type="checkbox" id="pf-published" name="published">
-    <span>Show this card on the public roster</span>
-   </label>
-
-   <div class="acct-actions">
-    <button class="btn" type="submit" id="pf-save">Save profile</button>
-    <span class="acct-saved" id="pf-saved" hidden role="status"></span>
-   </div>
-   <ul class="lab-errors" id="pf-errors" hidden></ul>
-  </form>
- </div>
-
- <!-- Connecting a PC, and what the page's numbers mean. -->
- <div class="acct-pane" role="tabpanel" id="acct-pc" aria-labelledby="acct-tab-pc" tabindex="0" hidden>
-  <p class="lab-pc-lede" id="pc-lede">The lab fills itself in from your PC. Connect one, and it sends Fortnite's own settings after every change, so a change opens by itself and nobody has to log it by hand.</p>
-
-  <p class="lab-pc-stats" id="pc-stats" hidden></p>
-
-  <form class="lab-pc-connect" id="pc-connect" novalidate>
-   <label class="lab-field lab-field-sm" for="pc-label">Name this PC
-    <input id="pc-label" name="label" maxlength="40" autocomplete="off" spellcheck="false" placeholder="This PC">
-   </label>
-   <button class="btn lab-pc-btn" type="submit" id="pc-add">Connect a PC</button>
-  </form>
-
-  <ul class="lab-errors" id="pc-errors" hidden></ul>
-
-  <div class="lab-pc-token" id="pc-token" hidden>
-   <p class="lab-pc-note">This is the token, shown once. Paste it into <code>tools/zoi-lab-agent.json</code> beside <code>"token"</code>, then run the agent.</p>
-   <code class="lab-code" id="pc-token-value"></code>
-   <div class="lab-row">
-    <button class="lab-mini" type="button" id="pc-copy">Copy token</button>
-    <button class="lab-mini" type="button" id="pc-done">Done</button>
-   </div>
-   <p class="lab-pc-copied" id="pc-copied" hidden>Copied.</p>
-  </div>
-
-  <ul class="lab-pc-list" id="pc-list"></ul>
-  <p class="lab-empty" id="pc-empty" hidden>No PC connected yet.</p>
-
-  <h3 class="acct-h3">How to read this</h3>
-  <div class="lab-note" id="note">
-   <p>A setting nudge is small next to the noise of a few nights, so the verdicts run on kills a match, which moves fast enough to read, and win rate is the slow second opinion underneath it. The window is counted in games rather than days: at about five kills a match, a one-kill move needs roughly 190 games a side to prove out, and a week can hold twelve games or two hundred.</p>
-  </div>
- </div>
-</dialog>
-
 <script src="main.js" defer></script>
-<script src="lab.js?v=13" defer></script>
+<script src="account.js?v=2" defer></script>
+<script src="lab.js?v=14" defer></script>
 </body>
 </html>
