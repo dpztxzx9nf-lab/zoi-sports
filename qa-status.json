@@ -9,12 +9,12 @@
     {
       "name": "mobile-layout",
       "result": "fail",
-      "details": "job cancelled"
+      "details": "exit 2"
     },
     {
       "name": "links",
       "result": "fail",
-      "details": "job cancelled"
+      "details": "exit 2;  \ud83d\udd0d Total 30 ; \u2705 Successful 28 ; \ud83d\udc7b Excluded 0 ; \ud83d\udeab Errors 2 ;## Errors per input;### Errors in https://zoisports.com/; [404] <https://kick.com/zoi_sports_gg [404] <https://zoisports.com/cdn-cgi/l/email-protection#c9a1aca5a5a689b3a6a0bab9a6bbbdbae7aaa6a4 "
     },
     {
       "name": "denylist",
@@ -39,11 +39,11 @@
   ],
   "passing": 2,
   "total": 5,
-  "run_url": "https://github.com/dpztxzx9nf-lab/zoi-sports/actions/runs/40951076322",
-  "commit": "3219a56d8dd71702c36dbde97c5eb10c38ea7dec",
+  "run_url": "https://github.com/dpztxzx9nf-lab/zoi-sports/actions/runs/40951087989",
+  "commit": "9ad5a17d5fb51a630b6ef0e4169529c87fb334ae",
   "event": "push",
   "ref": "main",
   "pr": null,
   "mode": "report-only",
-  "updated_at": "2026-10-29T20:40:22Z"
+  "updated_at": "2026-10-29T20:40:51Z"
 }
