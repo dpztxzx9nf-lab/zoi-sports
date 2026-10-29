@@ -216,11 +216,6 @@ html,body{overflow-x:clip}img{max-width:100%}
 /* description strip — the game's hovered-setting readout, pinned under the scrolling panel */
 .fn-desc{position:sticky;bottom:0;z-index:2;margin:0;padding:.7rem 1.15rem;min-height:calc(1.5em + 1.4rem);border-top:1px solid #e6d3a033;background:#0a0a0ce6;color:var(--m);font-size:.82rem;line-height:1.5;backdrop-filter:blur(6px)}
 
-/* the line under the description strip, which used to sit beneath the action
-   bar. There is no action bar: this page only reports what the PC is set to, so
-   there is nothing on it to apply and nothing to reset. */
-.fn-caption{margin:0;padding:.35rem 1.15rem .85rem;color:var(--m);font-size:.74rem;letter-spacing:.02em}
-
 /* secondary sections below the card */
 .fn-below{padding:2rem 1.2rem}
 .fn-below h2{font-size:clamp(1.15rem,3.4vw,1.5rem);letter-spacing:.1em;margin:0 0 1rem}
@@ -247,8 +242,8 @@ html,body{overflow-x:clip}img{max-width:100%}
  .fn-ctrl{justify-content:flex-end}
  .fn-slider{width:100%}
  .fn-bind{padding:.5rem .95rem}
- .fn-h,.fn-intro,.fn-foot,.fn-card-note,.fn-desc,.fn-caption{margin-left:.95rem;margin-right:.95rem}
- .fn-desc,.fn-caption{margin-left:0;margin-right:0}
+ .fn-h,.fn-intro,.fn-foot,.fn-card-note,.fn-desc{margin-left:.95rem;margin-right:.95rem}
+ .fn-desc{margin-left:0;margin-right:0}
 }
 
 /* slider fill utilities — CSP-safe arbitrary values (.f0 … .f100) */
@@ -614,6 +609,11 @@ html,body{overflow-x:clip}img{max-width:100%}
 .acct-form .lab-field textarea{resize:vertical;min-height:4.2rem}
 .acct-two{display:grid;grid-template-columns:1fr;gap:.85rem}
 @media(min-width:520px){.acct-two{grid-template-columns:1fr 1fr}}
+.gs-fields{display:flex;flex-direction:column;gap:1.1rem}
+.gs-group{display:flex;flex-direction:column;gap:.6rem}
+.gs-grid{display:grid;grid-template-columns:1fr;gap:.7rem}
+@media(min-width:520px){.gs-grid{grid-template-columns:1fr 1fr}}
+.gs-grid .lab-field input,.gs-grid .lab-field select{font-size:.92rem}
 .acct-sub{margin:.4rem 0 -.4rem;font:700 .7rem/1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--g)}
 .acct-hint{margin-bottom:0;font-size:.8rem}
 .acct-socials{display:grid;grid-template-columns:1fr;gap:.7rem}

@@ -30,9 +30,16 @@ export async function onRequest({ request, env }) {
   if (request.method !== "GET") return answer({ ok: false, error: "Method not allowed." }, 405, "no-store");
 
   try {
+    /* The left join is what lets a card say whether its player has a game
+       settings page. It is a left join on purpose: a player with no saved
+       settings still belongs on the roster, and a player with settings but no
+       card is not on it at all. */
     const { results } = await env.DB.prepare(
-      `SELECT slug,gamertag,role,region,platform,bio,socials,updated_at
-       FROM player_profiles WHERE published = 1 ORDER BY gamertag COLLATE NOCASE ASC`
+      `SELECT p.slug,p.gamertag,p.role,p.region,p.platform,p.bio,p.socials,p.updated_at,
+              CASE WHEN s.owner IS NULL THEN 0 ELSE 1 END AS has_settings
+       FROM player_profiles p
+       LEFT JOIN player_settings s ON s.owner = p.owner
+       WHERE p.published = 1 ORDER BY p.gamertag COLLATE NOCASE ASC`
     ).all();
     const players = (results || []).map(publicProfile).filter((p) => p && p.gamertag);
     return answer({ ok: true, players }, 200, "public, max-age=" + CACHE_SECONDS);

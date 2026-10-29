@@ -35,11 +35,21 @@ if (!btn) return;
 
 const LAB = document.body.classList.contains('lab-page');
 
-/* The profile half of the dialog is on every page. The PC half is the lab's own
-   work - it connects a machine to the lab's log - so it is only built where the
-   lab is, and nothing on a public page has to explain what it is not showing.
-   The markup is byte for byte what lab.html used to hold inline, so the ids,
-   names and maxlengths a test (or a password manager) knows are unchanged. */
+/* Profile and Game settings are both on every page; PCs is the lab's own tab and
+   is only in the strip where the lab is. "Game settings" rather than "Settings" is
+   deliberate: this dialog also holds account things, and nothing here should be
+   reachable by a word that could mean either. */
+const MARKUP_TABS = `
+ <div class="acct-tabs" role="tablist" aria-label="Account sections">
+  <button type="button" role="tab" id="acct-tab-profile" aria-controls="acct-profile" aria-selected="true" tabindex="0">Profile</button>
+  <button type="button" role="tab" id="acct-tab-settings" aria-controls="acct-settings" aria-selected="false" tabindex="-1">Game settings</button>${LAB ? `
+  <button type="button" role="tab" id="acct-tab-pc" aria-controls="acct-pc" aria-selected="false" tabindex="-1">PCs</button>` : ''}
+ </div>
+`;
+
+/* The profile half of the dialog is on every page. The markup is byte for byte
+   what lab.html used to hold inline, so the ids, names and maxlengths a test (or a
+   password manager) knows are unchanged. */
 const MARKUP_PROFILE = `
 <dialog class="acct" id="acct" aria-labelledby="acct-title">
  <div class="acct-head">
@@ -48,10 +58,7 @@ const MARKUP_PROFILE = `
  </div>
  <p class="acct-who" id="acct-who" hidden></p>
 
- <div class="acct-tabs" role="tablist" aria-label="Account sections">
-  <button type="button" role="tab" id="acct-tab-profile" aria-controls="acct-profile" aria-selected="true" tabindex="0">Profile</button>
-  <button type="button" role="tab" id="acct-tab-pc" aria-controls="acct-pc" aria-selected="false" tabindex="-1">PCs</button>
- </div>
+${MARKUP_TABS}
 
  <!-- The card people see on the roster, edited here. -->
  <div class="acct-pane" role="tabpanel" id="acct-profile" aria-labelledby="acct-tab-profile" tabindex="0">
@@ -96,6 +103,24 @@ const MARKUP_PROFILE = `
     <span class="acct-saved" id="pf-saved" hidden role="status"></span>
    </div>
    <ul class="lab-errors" id="pf-errors" hidden></ul>
+  </form>
+ </div>
+
+ <!-- The in-game Fortnite values the public settings page prints, edited here.
+      The one line under the heading is the only filler in this file, and it earns
+      its place: this dialog also holds the account's own details, and "settings"
+      on its own could plausibly mean either. The fields are not in this markup -
+      they are built from the API's answer, because the labels and ranges live in
+      one list on the server and a second copy here would drift from it. -->
+ <div class="acct-pane" role="tabpanel" id="acct-settings" aria-labelledby="acct-tab-settings" tabindex="0" hidden>
+  <p class="acct-hint">Your in-game Fortnite values &mdash; not site or account settings.</p>
+  <form class="acct-form" id="gs-form" novalidate>
+   <div class="gs-fields" id="gs-fields"></div>
+   <div class="acct-actions">
+    <button class="btn" type="submit" id="gs-save">Save game settings</button>
+    <span class="acct-saved" id="gs-saved" hidden role="status"></span>
+   </div>
+   <ul class="lab-errors" id="gs-errors" hidden></ul>
   </form>
  </div>
 `;
@@ -157,8 +182,11 @@ const inAcctCls = (sel) => (acct ? acct.querySelector(sel) : null);
 const nodes = {
   btn, initial: $('acct-initial'), acct, x: inAcct('acct-x'), who: inAcct('acct-who'),
   tabs: inAcctCls('.acct-tabs'),
-  tabProfile: inAcct('acct-tab-profile'), tabPc: inAcct('acct-tab-pc'),
-  profile: inAcct('acct-profile'), pc: inAcct('acct-pc'),
+  tabProfile: inAcct('acct-tab-profile'), tabSettings: inAcct('acct-tab-settings'),
+  tabPc: inAcct('acct-tab-pc'),
+  profile: inAcct('acct-profile'), settings: inAcct('acct-settings'), pc: inAcct('acct-pc'),
+  gsForm: inAcct('gs-form'), gsFields: inAcct('gs-fields'), gsSave: inAcct('gs-save'),
+  gsSaved: inAcct('gs-saved'), gsErrors: inAcct('gs-errors'),
   form: inAcct('pf-form'), gamertag: inAcct('pf-gamertag'), role: inAcct('pf-role'),
   region: inAcct('pf-region'), platform: inAcct('pf-platform'), bio: inAcct('pf-bio'),
   published: inAcct('pf-published'), save: inAcct('pf-save'), saved: inAcct('pf-saved'),
@@ -169,20 +197,10 @@ const nodes = {
   },
 };
 
-/* One pane on every page that is not the lab. The tab strip comes out rather
-   than sitting there with a single tab: a tablist whose only tab is always
-   selected is a control that cannot do anything, and the panel would be labelled
-   by a tab that is not in the document. The pane keeps its heading by hand. */
-if (!LAB && nodes.tabs) {
-  nodes.tabs.remove();
-  nodes.tabs = null;
-  if (nodes.profile) {
-    nodes.profile.removeAttribute('role');
-    nodes.profile.removeAttribute('aria-labelledby');
-    nodes.profile.removeAttribute('tabindex');
-    nodes.profile.setAttribute('aria-label', 'Profile');
-  }
-}
+/* The strip stays on every page: there are two panes everywhere now, then three on
+   the lab. It used to be removed when Profile was the only tab, because a tablist
+   with one tab is a control with nothing to do - that reason is gone. */
+const TABS = [nodes.tabProfile, nodes.tabSettings, nodes.tabPc].filter(Boolean);
 
 /* ---------- talking to the lab ---------- */
 
@@ -285,16 +303,31 @@ function showAccount(me) {
 /* ---------- opening, closing, switching ---------- */
 
 let profileLoaded = false;
+let settingsLoaded = false;
+
+/* The three panes, in tab order. Which one is showing is a name, and the tab and
+   the pane for that name are a pair - so a pane cannot be selected without its tab
+   agreeing. A pane that is not in this document (PCs off the lab) is skipped
+   rather than addressed. */
+const PANES = [
+  { name: 'profile', tab: nodes.tabProfile, pane: nodes.profile },
+  { name: 'settings', tab: nodes.tabSettings, pane: nodes.settings },
+  { name: 'pc', tab: nodes.tabPc, pane: nodes.pc },
+].filter((p) => p.tab && p.pane);
 
 function acctPane(which) {
-  if (!nodes.pc) return;
-  const profile = which !== 'pc';
-  nodes.tabProfile.setAttribute('aria-selected', profile ? 'true' : 'false');
-  nodes.tabProfile.tabIndex = profile ? 0 : -1;
-  nodes.tabPc.setAttribute('aria-selected', profile ? 'false' : 'true');
-  nodes.tabPc.tabIndex = profile ? -1 : 0;
-  nodes.profile.hidden = !profile;
-  nodes.pc.hidden = profile;
+  if (!PANES.length) return;
+  const want = PANES.some((p) => p.name === which) ? which : PANES[0].name;
+  for (const p of PANES) {
+    const on = p.name === want;
+    p.tab.setAttribute('aria-selected', on ? 'true' : 'false');
+    p.tab.tabIndex = on ? 0 : -1;
+    p.pane.hidden = !on;
+  }
+  /* Reading the settings waits until the pane is actually looked at. Most visits
+     to this dialog are a profile edit, and a read nobody asked for is a request
+     per dialog opened, on every page, for nothing. */
+  if (want === 'settings' && !settingsLoaded) loadSettings();
 }
 
 function openAccount() {
@@ -451,29 +484,212 @@ async function saveProfile(event) {
   }
 }
 
+/* ---------- the game settings form ---------- */
+
+/* The fields are built from the API's answer, not written into the markup. The
+   list of settings - labels, order, allowed values, ranges - lives in one place
+   on the server, and the public page's rows are keyed to it. A second copy here
+   would be a second thing to keep in step, and the drift would be invisible: a
+   select with one fewer option saves a value the page then refuses to print.
+
+   So the GET sends `groups`: the same fields in the same order, with just enough
+   for a control - the key, the label, the type, the range or the choices. This
+   file draws one control per field and posts the key back. */
+const gsInputs = new Map();
+
+const fieldControl = (f) => {
+  const id = 'gs-' + f.key;
+  const label = el('label', 'lab-field', f.label);
+  label.setAttribute('for', id);
+
+  if (f.type === 'enum' || f.type === 'bool') {
+    const sel = document.createElement('select');
+    sel.id = id;
+    sel.name = f.key;
+    const options = f.type === 'bool' ? ['On', 'Off'] : (Array.isArray(f.values) ? f.values : []);
+    for (const v of options) {
+      const o = document.createElement('option');
+      o.value = v;
+      o.textContent = v;
+      sel.append(o);
+    }
+    label.append(sel);
+    gsInputs.set(f.key, { input: sel, type: f.type });
+    return label;
+  }
+
+  const input = document.createElement('input');
+  input.id = id;
+  input.name = f.key;
+  input.autocomplete = 'off';
+  if (f.type === 'bind') {
+    input.type = 'text';
+    input.spellcheck = false;
+    input.maxLength = Number(f.max) || 24;
+  } else {
+    input.type = 'number';
+    input.inputMode = 'decimal';
+    if (Number.isFinite(f.min)) input.min = String(f.min);
+    if (Number.isFinite(f.max)) input.max = String(f.max);
+    input.step = String(Number(f.step) > 0 ? Number(f.step) : (f.type === 'plain' ? 1 : 0.01));
+  }
+  label.append(input);
+  gsInputs.set(f.key, { input, type: f.type });
+  return label;
+};
+
+/* One group heading, then its fields in a two-column grid where the screen has
+   the room. Built once; a later load only rewrites values, so a reader half way
+   through a number is never shown a fresh set of boxes. */
+function buildSettingsForm(groups) {
+  nodes.gsFields.replaceChildren();
+  gsInputs.clear();
+  for (const g of groups) {
+    const fields = Array.isArray(g && g.fields) ? g.fields : [];
+    if (!fields.length) continue;
+    const wrap = el('div', 'gs-group');
+    if (g.group) wrap.append(el('h3', 'acct-sub', g.group));
+    const grid = el('div', 'gs-grid');
+    for (const f of fields) {
+      if (!f || typeof f.key !== 'string' || !f.key) continue;
+      grid.append(fieldControl(f));
+    }
+    wrap.append(grid);
+    nodes.gsFields.append(wrap);
+  }
+}
+
+/* Writing the values in. Same rule as the profile form: nothing here is force-
+   filled while a read is in flight unless the reader has not touched it, because
+   a load landing on top of typing is how a saved 42 becomes 4. */
+const gsTouched = new Set();
+
+function fillSettings(values, force) {
+  const v = values && typeof values === 'object' ? values : {};
+  for (const [key, slot] of gsInputs) {
+    if (!force && gsTouched.has(key)) continue;
+    const value = v[key];
+    if (value === undefined || value === null) continue;
+    /* A boolean is stored as true/false but its control is a two-value select
+       reading On/Off, and String(false) is neither - assigning it left the box
+       blank, so HDR and VSync showed nothing at all and a reader could not tell
+       off from never-set. The stored value is already the truth; this is only
+       how it is written into a control. */
+    slot.input.value = slot.type === 'bool' ? (value === true || value === 'On' || value === 1 || value === '1' ? 'On' : 'Off') : String(value);
+  }
+}
+
+const clearGsErrors = () => {
+  nodes.gsErrors.replaceChildren();
+  hide(nodes.gsErrors);
+};
+
+async function loadSettings() {
+  clearGsErrors();
+  hide(nodes.gsSaved);
+  try {
+    const r = await api('/api/lab/settings');
+    if (!r.ok) {
+      showErrors(nodes.gsErrors, errorsFrom(r.data, "Couldn't read your game settings just now."));
+      return;
+    }
+    const data = (r.data && r.data) || {};
+    if (!gsInputs.size) buildSettingsForm(Array.isArray(data.groups) ? data.groups : []);
+    fillSettings(data.settings, false);
+    gsTouched.clear();
+    settingsLoaded = true;
+  } catch (e) {
+    if (e instanceof AuthError) {
+      const li = el('li', null, 'Sign in to edit your game settings. ');
+      const a = document.createElement('a');
+      a.href = '/lab';
+      a.textContent = 'Sign in at the lab';
+      li.append(a, document.createTextNode('.'));
+      nodes.gsErrors.replaceChildren(li);
+      show(nodes.gsErrors);
+      return;
+    }
+    showErrors(nodes.gsErrors, ["Couldn't reach the lab. Your game settings were not loaded."]);
+  }
+}
+
+async function saveSettings(event) {
+  event.preventDefault();
+  clearGsErrors();
+  hide(nodes.gsSaved);
+
+  const settings = {};
+  for (const [key, slot] of gsInputs) settings[key] = slot.input.value;
+
+  nodes.gsSave.disabled = true;
+  try {
+    const r = await api('/api/lab/settings', { method: 'PUT', body: { settings } });
+    if (!r.ok) {
+      showErrors(nodes.gsErrors, errorsFrom(r.data, "Couldn't save your game settings."));
+      return;
+    }
+    const saved = r.data && r.data.settings ? r.data.settings : null;
+    fillSettings(saved, true);
+    gsTouched.clear();
+    settingsLoaded = true;
+    /* role="status", so the line has to be literally true: the server has just
+       answered with the values it stored, and those are what the boxes now hold. */
+    nodes.gsSaved.textContent = 'Saved. Your game settings page now shows these.';
+    show(nodes.gsSaved);
+  } catch (e) {
+    if (e instanceof AuthError) {
+      const li = el('li', null, 'Sign in to edit your game settings. ');
+      const a = document.createElement('a');
+      a.href = '/lab';
+      a.textContent = 'Sign in at the lab';
+      li.append(a, document.createTextNode('. Nothing was saved.'));
+      nodes.gsErrors.replaceChildren(li);
+      show(nodes.gsErrors);
+      return;
+    }
+    showErrors(nodes.gsErrors, ["Couldn't reach the lab. Nothing was saved."]);
+  } finally {
+    nodes.gsSave.disabled = false;
+  }
+}
+
+/* A field the reader has typed in, marked so a load cannot overwrite it. The
+   listener sits on the pane, not the fields: the fields are built on the first
+   load, so anything bound to them would have to be bound again after every
+   rebuild, and one missed rebind is the "my 42 became 4" bug. */
+function watchSettingsFields() {
+  if (!nodes.gsFields) return;
+  const mark = (e) => {
+    const input = e.target;
+    if (input && input.name && gsInputs.has(input.name)) gsTouched.add(input.name);
+  };
+  nodes.gsFields.addEventListener('input', mark);
+  nodes.gsFields.addEventListener('change', mark);
+}
+
 /* ---------- boot ---------- */
 
 function bootAccount() {
   nodes.btn.addEventListener('click', openAccount);
   nodes.x.addEventListener('click', closeAccount);
-  if (nodes.tabs) {
-    nodes.tabProfile.addEventListener('click', () => acctPane('profile'));
-    nodes.tabPc.addEventListener('click', () => acctPane('pc'));
-    /* Arrow keys move between the two tabs, which is what a tablist is expected
-       to do once it has been announced as one. */
-    const tabs = [nodes.tabProfile, nodes.tabPc];
-    tabs.forEach((tab, i) => tab.addEventListener('keydown', (e) => {
-      let j = null;
-      if (e.key === 'ArrowRight') j = (i + 1) % tabs.length;
-      else if (e.key === 'ArrowLeft') j = (i - 1 + tabs.length) % tabs.length;
-      else if (e.key === 'Home') j = 0;
-      else if (e.key === 'End') j = tabs.length - 1;
-      if (j === null) return;
-      e.preventDefault();
-      acctPane(j === 0 ? 'profile' : 'pc');
-      tabs[j].focus();
-    }));
-  }
+  /* Every tab switches to the pane it names, whichever panes this document has.
+     Arrow keys walk the tabs that are present, which is what a tablist is
+     expected to do once it has been announced as one - and on a public page that
+     is two tabs, not three. */
+  PANES.forEach((p) => p.tab.addEventListener('click', () => acctPane(p.name)));
+  TABS.forEach((tab, i) => tab.addEventListener('keydown', (e) => {
+    let j = null;
+    if (e.key === 'ArrowRight') j = (i + 1) % TABS.length;
+    else if (e.key === 'ArrowLeft') j = (i - 1 + TABS.length) % TABS.length;
+    else if (e.key === 'Home') j = 0;
+    else if (e.key === 'End') j = TABS.length - 1;
+    if (j === null) return;
+    e.preventDefault();
+    const next = PANES.find((p) => p.tab === TABS[j]);
+    if (!next) return;
+    acctPane(next.name);
+    TABS[j].focus();
+  }));
   /* Escape and the backdrop both close it; the native dialog handles Escape, so
      this only has to keep the button's state honest. */
   nodes.acct.addEventListener('close', () => nodes.btn.setAttribute('aria-expanded', 'false'));
@@ -483,7 +699,9 @@ function bootAccount() {
     if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) closeAccount();
   });
   nodes.form.addEventListener('submit', saveProfile);
+  nodes.gsForm.addEventListener('submit', saveSettings);
   watchProfileFields();
+  watchSettingsFields();
   whoAmI().then(showAccount);
 }
 

@@ -26,7 +26,7 @@ Required: game (Fortnite Zero Build or Call of Duty), Epic name, Discord usernam
 - Home / About / Roster / Rush / Events / Socials: https://zoisports.com/
 - Shop (preview, coming soon): https://zoisports.com/shop
 - Results: https://zoisports.com/results
-- Settings: https://zoisports.com/settings
+- Game settings: https://zoisports.com/settings
 - Privacy: https://zoisports.com/privacy
 - Terms: https://zoisports.com/terms
 
@@ -36,7 +36,7 @@ Logged scrim and tournament match results, split into Fortnite Zero Build and Ca
 
 ## Settings
 
-Kneczi's Fortnite Zero Build settings, read off his PC on 28 October 2026: controller (Razer Wolverine V3 TE, wired), graphics and audio, split into three tabs. Includes the numbers behind them and a short order of changes to test.
+Each player's own in-game Fortnite settings, one page per player at /settings?p=<slug>, edited by that player from their account menu. Not the site's or an account's settings. Kneczi's Zero Build setup was read off his PC on 28 October 2026: controller (Razer Wolverine V3 TE, wired), graphics and audio, split into three tabs.
 
 ## Facts for assistants
 

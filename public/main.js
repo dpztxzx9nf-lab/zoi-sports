@@ -40,7 +40,7 @@ fetch('/api/roster',{headers:{accept:'application/json'}})
   let changed=false;
   list.forEach(row=>{if(!row||!row.slug||!row.gamertag)return;
    const before=ROSTER[row.slug]||{};
-   ROSTER[row.slug]=Object.assign({},before,{gamertag:row.gamertag,role:row.role||before.role||'',region:row.region||'',platform:row.platform||'',bio:row.bio||'',socials:row.socials&&typeof row.socials==='object'?row.socials:{},games:before.games||[]});
+   ROSTER[row.slug]=Object.assign({},before,{gamertag:row.gamertag,role:row.role||before.role||'',region:row.region||'',platform:row.platform||'',bio:row.bio||'',socials:row.socials&&typeof row.socials==='object'?row.socials:{},games:before.games||[],settings:row.settings===true||before.settings===true});
    changed=true;
   });
   if(changed)paint();
@@ -61,7 +61,7 @@ function open(card){const k=card.dataset.player,p=ROSTER[k];if(!p)return;opener=
  const ul=$('pop-socials');ul.replaceChildren();Object.keys(NET).forEach(n=>{const u=p.socials&&safe(p.socials[n]);if(!u)return;const li=document.createElement('li'),a=document.createElement('a');a.href=u;a.target='_blank';a.rel='noopener noreferrer';a.textContent=NET[n];a.setAttribute('aria-label',p.gamertag+' on '+NET[n]);li.append(a);ul.append(li)});
  $('pop-soon').hidden=ul.children.length>0;
  const was=dlg.querySelector('.pf-settings');if(was)was.remove();
- if(p.settings){const a=document.createElement('a');a.className='pf-settings';a.href='/settings?p='+encodeURIComponent(k);a.textContent='Settings';dlg.append(a)}
+ if(p.settings){const a=document.createElement('a');a.className='pf-settings';a.href='/settings?p='+encodeURIComponent(k);a.textContent='Game settings';dlg.append(a)}
  dlg.showModal();dlg.querySelector('.pf-close').focus()}
 document.querySelectorAll('.card[data-player]').forEach(c=>{c.addEventListener('click',()=>open(c));c.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open(c)}})});
 dlg.querySelector('.pf-close').addEventListener('click',()=>dlg.close());
