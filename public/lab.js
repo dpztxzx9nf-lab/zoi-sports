@@ -31,6 +31,18 @@ const nodes = {
   pcErrors: $('pc-errors'), pcToken: $('pc-token'), pcTokenValue: $('pc-token-value'),
   pcCopy: $('pc-copy'), pcDone: $('pc-done'), pcCopied: $('pc-copied'),
   pcList: $('pc-list'), pcEmpty: $('pc-empty'), pcStats: $('pc-stats'),
+  acctBtn: $('acct-btn'), acctInitial: $('acct-initial'), acct: $('acct'),
+  acctX: $('acct-x'), acctWho: $('acct-who'),
+  acctTabProfile: $('acct-tab-profile'), acctTabPc: $('acct-tab-pc'),
+  acctProfile: $('acct-profile'), acctPc: $('acct-pc'),
+  pfForm: $('pf-form'), pfGamertag: $('pf-gamertag'), pfRole: $('pf-role'),
+  pfRegion: $('pf-region'), pfPlatform: $('pf-platform'), pfBio: $('pf-bio'),
+  pfPublished: $('pf-published'), pfSave: $('pf-save'), pfSaved: $('pf-saved'),
+  pfErrors: $('pf-errors'),
+  pfSocials: {
+    x: $('pf-x'), tiktok: $('pf-tiktok'), youtube: $('pf-youtube'),
+    twitch: $('pf-twitch'), instagram: $('pf-instagram'), kick: $('pf-kick'),
+  },
 };
 
 class AuthError extends Error {}
@@ -171,6 +183,8 @@ function showWho(me) {
   const seen = me && typeof me === 'object' ? String(me.email || me.name || '').trim() : '';
   nodes.who.textContent = seen ? 'Signed in as ' + seen + '.' : '';
   if (seen) show(nodes.who); else hide(nodes.who);
+  /* Who you are is a menu now, not a line of text above the page. */
+  showAccount(me);
 }
 
 /* ---------- lifetime figures ---------- */
@@ -972,6 +986,190 @@ function renderRanked() {
   nodes.ranked.append(list);
 }
 
+/* ---------- the account menu ----------
+   Two things live behind the avatar in the top right: the card this person shows
+   on the public roster, and the PCs feeding the lab. Both used to be sections at
+   the bottom of a long page; neither is something a reader comes to the lab for,
+   and the PC block in particular was the first thing a new visitor saw. */
+
+const NETWORK_LABEL = {
+  x: 'X', tiktok: 'TikTok', youtube: 'YouTube',
+  twitch: 'Twitch', instagram: 'Instagram', kick: 'Kick',
+};
+
+let profileLoaded = false;
+
+function acctPane(which) {
+  const profile = which === 'profile';
+  nodes.acctTabProfile.setAttribute('aria-selected', profile ? 'true' : 'false');
+  nodes.acctTabProfile.tabIndex = profile ? 0 : -1;
+  nodes.acctTabPc.setAttribute('aria-selected', profile ? 'false' : 'true');
+  nodes.acctTabPc.tabIndex = profile ? -1 : 0;
+  nodes.acctProfile.hidden = !profile;
+  nodes.acctPc.hidden = profile;
+}
+
+function openAccount() {
+  acctPane('profile');
+  nodes.acct.showModal();
+  nodes.acctBtn.setAttribute('aria-expanded', 'true');
+  nodes.acctX.focus();
+  if (!profileLoaded) loadProfile();
+}
+
+function closeAccount() {
+  nodes.acct.close();
+  nodes.acctBtn.setAttribute('aria-expanded', 'false');
+  nodes.acctBtn.focus();
+}
+
+/* The button only appears once we know who is signed in: an avatar in the corner
+   of a signed-out page would be a dead control. */
+function showAccount(me) {
+  const email = me && typeof me === 'object' ? String(me.email || '').trim() : '';
+  const name = me && typeof me === 'object' ? String(me.name || '').trim() : '';
+  const shown = name || email;
+  if (!shown) { hide(nodes.acctBtn); return; }
+  nodes.acctInitial.textContent = (name || email).charAt(0).toUpperCase();
+  nodes.acctBtn.setAttribute('aria-label', 'Your account' + (email ? ', signed in as ' + email : ''));
+  if (email) {
+    nodes.acctWho.textContent = 'Signed in as ' + email + '.';
+    show(nodes.acctWho);
+  } else {
+    hide(nodes.acctWho);
+  }
+  show(nodes.acctBtn);
+}
+
+function clearProfileErrors() { nodes.pfErrors.replaceChildren(); hide(nodes.pfErrors); }
+
+function fillProfile(p) {
+  const has = Boolean(p);
+  nodes.pfGamertag.value = has && p.gamertag ? p.gamertag : '';
+  nodes.pfRole.value = has && p.role ? p.role : '';
+  nodes.pfRegion.value = has && p.region ? p.region : '';
+  nodes.pfPlatform.value = has && p.platform ? p.platform : '';
+  nodes.pfBio.value = has && p.bio ? p.bio : '';
+  nodes.pfPublished.checked = has ? p.published === true : false;
+  const socials = has && p.socials && typeof p.socials === 'object' ? p.socials : {};
+  for (const net of Object.keys(nodes.pfSocials)) {
+    const input = nodes.pfSocials[net];
+    if (input) input.value = typeof socials[net] === 'string' ? socials[net] : '';
+  }
+}
+
+async function loadProfile() {
+  clearProfileErrors();
+  try {
+    const r = await api('/api/lab/profile');
+    if (!r.ok) {
+      showErrors(nodes.pfErrors, errorsFrom(r.data, "Couldn't read your profile just now."));
+      return;
+    }
+    fillProfile(r.data && r.data.profile ? r.data.profile : null);
+    profileLoaded = true;
+  } catch (e) {
+    if (e instanceof AuthError) { needSignIn(); return; }
+    showErrors(nodes.pfErrors, ["Couldn't reach the lab. Your profile was not loaded."]);
+  }
+}
+
+async function saveProfile(event) {
+  event.preventDefault();
+  clearProfileErrors();
+  hide(nodes.pfSaved);
+
+  const gamertag = nodes.pfGamertag.value.trim();
+  if (!gamertag) {
+    showErrors(nodes.pfErrors, ['A gamertag is required: it is the name on the card.']);
+    nodes.pfGamertag.focus();
+    return;
+  }
+
+  const socials = {};
+  for (const net of Object.keys(nodes.pfSocials)) {
+    const raw = (nodes.pfSocials[net].value || '').trim();
+    if (raw) socials[net] = raw;
+  }
+
+  nodes.pfSave.disabled = true;
+  try {
+    const r = await api('/api/lab/profile', {
+      method: 'PUT',
+      body: {
+        gamertag,
+        role: nodes.pfRole.value,
+        region: nodes.pfRegion.value,
+        platform: nodes.pfPlatform.value,
+        bio: nodes.pfBio.value,
+        socials,
+        published: nodes.pfPublished.checked,
+      },
+    });
+    if (!r.ok) {
+      showErrors(nodes.pfErrors, errorsFrom(r.data, "Couldn't save your profile."));
+      return;
+    }
+    const saved = r.data && r.data.profile ? r.data.profile : null;
+    /* A social that was not a usable https link is filtered out on the way in
+       rather than refusing the whole save. Saying which ones is the difference
+       between "my link vanished" and "that link was not usable" - and the field
+       has to keep what was typed, or there is nothing left to correct. So the
+       form is refilled from the saved row FIRST, then the refused fields are put
+       back as they were. */
+    const dropped = r.data && Array.isArray(r.data.dropped) ? r.data.dropped : [];
+    const typed = {};
+    for (const net of dropped) if (nodes.pfSocials[net]) typed[net] = nodes.pfSocials[net].value;
+    fillProfile(saved);
+    for (const net of Object.keys(typed)) nodes.pfSocials[net].value = typed[net];
+    profileLoaded = true;
+    if (dropped.length) {
+      showErrors(nodes.pfErrors, dropped.map(net =>
+        NETWORK_LABEL[net] + ' was not saved: it needs to be a full https link.'));
+    } else {
+      nodes.pfSaved.textContent = saved && saved.published
+        ? 'Saved. Your card is on the public roster.'
+        : 'Saved. It stays off the public roster until you tick the box.';
+      show(nodes.pfSaved);
+    }
+  } catch (e) {
+    if (e instanceof AuthError) { needSignIn(); return; }
+    showErrors(nodes.pfErrors, ["Couldn't reach the lab. Nothing was saved."]);
+  } finally {
+    nodes.pfSave.disabled = false;
+  }
+}
+
+function bootAccount() {
+  nodes.acctBtn.addEventListener('click', openAccount);
+  nodes.acctX.addEventListener('click', closeAccount);
+  nodes.acctTabProfile.addEventListener('click', () => acctPane('profile'));
+  nodes.acctTabPc.addEventListener('click', () => acctPane('pc'));
+  /* Arrow keys move between the two tabs, which is what a tablist is expected
+     to do once it has been announced as one. */
+  const tabs = [nodes.acctTabProfile, nodes.acctTabPc];
+  tabs.forEach((tab, i) => tab.addEventListener('keydown', (e) => {
+    let j = null;
+    if (e.key === 'ArrowRight') j = (i + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') j = (i - 1 + tabs.length) % tabs.length;
+    else if (e.key === 'Home') j = 0;
+    else if (e.key === 'End') j = tabs.length - 1;
+    if (j === null) return;
+    e.preventDefault();
+    acctPane(j === 0 ? 'profile' : 'pc');
+    tabs[j].focus();
+  }));
+  /* Escape and the backdrop both close it; the native dialog handles Escape, so
+     this only has to keep the button's state honest. */
+  nodes.acct.addEventListener('close', () => nodes.acctBtn.setAttribute('aria-expanded', 'false'));
+  nodes.acct.addEventListener('click', (e) => {
+    if (e.target !== nodes.acct) return;
+    const r = nodes.acct.getBoundingClientRect();
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) closeAccount();
+  });
+  nodes.pfForm.addEventListener('submit', saveProfile);
+}
+
 /* ---------- connected PCs ---------- */
 let pcTokens = [];
 
@@ -1170,6 +1368,7 @@ function boot() {
     if (signInNeeded) { location.reload(); return; }
     load();
   });
+  bootAccount();
   bootPc();
   load();
   loadPc();

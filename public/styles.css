@@ -551,3 +551,49 @@ html,body{overflow-x:clip}img{max-width:100%}
  .lab-hero-fig .lab-fig-v{font-size:1rem}
  .lab-hero-values{font-size:1.3rem}
 }
+
+/* ---------- account button + the account dialog (lab) ----------
+   The avatar is the only account surface in the header; it appears once the page
+   knows who is signed in, so it never sits there as a dead control. */
+.nav-end{display:flex;align-items:center;gap:.5rem;margin-left:auto}
+.acct-btn{width:40px;height:40px;padding:0;border:1px solid #e6d3a055;border-radius:50%;background:#e6d3a01a;color:var(--g);cursor:pointer;display:grid;place-items:center;flex:0 0 auto}
+.acct-btn:hover{border-color:var(--g);background:#e6d3a02f;color:#fff}
+.acct-btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.acct-btn[hidden]{display:none}
+.acct-initial{font:400 1rem/1 Graduate,Georgia,serif;letter-spacing:.02em}
+@media(min-width:760px){.nav-end{margin-left:0}}
+
+.acct{width:min(560px,calc(100vw - 1.5rem));max-height:calc(100dvh - 2rem);overflow:auto;background:var(--card);color:var(--t);border:1px solid #e6d3a044;border-top:3px solid var(--g);border-radius:10px;padding:1.35rem 1.35rem 1.5rem;box-shadow:0 0 60px #ffd63c22}
+.acct::backdrop{background:#000c;backdrop-filter:blur(3px)}
+.acct-head{display:flex;align-items:flex-start;justify-content:space-between;gap:.75rem}
+.acct-k{margin:0;font:700 .7rem/1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--g)}
+.acct-x{width:40px;height:40px;border:0;background:none;color:var(--g);font-size:1.6rem;line-height:1;cursor:pointer;border-radius:50%;flex:0 0 auto}
+.acct-x:hover{color:#fff}
+.acct-x:focus-visible{outline:2px solid var(--gold)}
+.acct-who{margin:.3rem 0 0;font-size:.82rem;color:var(--m);overflow-wrap:anywhere}
+
+.acct-tabs{display:flex;gap:.4rem;margin:1rem 0 1.1rem;border-bottom:1px solid #e6d3a02e}
+.acct-tabs button{font:700 .72rem/1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;letter-spacing:.1em;text-transform:uppercase;background:none;border:0;border-bottom:2px solid transparent;color:var(--m);padding:.6rem .2rem;margin-bottom:-1px;cursor:pointer;min-height:40px}
+.acct-tabs button:hover{color:var(--t)}
+.acct-tabs button[aria-selected="true"]{color:var(--g);border-bottom-color:var(--g)}
+.acct-tabs button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.acct-pane:focus-visible{outline:none}
+
+.acct-lede,.acct-hint{margin:0 0 1rem;font-size:.88rem;line-height:1.55;color:var(--m);max-width:52ch}
+.acct-lede a{color:var(--g)}
+.acct-form{display:flex;flex-direction:column;gap:.85rem}
+.acct-form .lab-field textarea{resize:vertical;min-height:4.2rem}
+.acct-two{display:grid;grid-template-columns:1fr;gap:.85rem}
+@media(min-width:520px){.acct-two{grid-template-columns:1fr 1fr}}
+.acct-sub{margin:.4rem 0 -.4rem;font:700 .7rem/1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--g)}
+.acct-hint{margin-bottom:0;font-size:.8rem}
+.acct-socials{display:grid;grid-template-columns:1fr;gap:.7rem}
+@media(min-width:520px){.acct-socials{grid-template-columns:1fr 1fr}}
+.acct-check{display:flex;align-items:center;gap:.6rem;font-size:.88rem;line-height:1.4;color:var(--t);cursor:pointer;margin-top:.2rem}
+.acct-check input{width:20px;height:20px;flex:0 0 auto;accent-color:var(--g);cursor:pointer}
+.acct-actions{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;margin-top:.3rem}
+.acct-actions .btn{border:0;cursor:pointer;font:700 .72rem/1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;letter-spacing:.1em;text-transform:uppercase;background:var(--btn);color:#0b0b0d;border-radius:4px;padding:.5rem 1.2rem;min-height:46px;box-shadow:0 0 0 1px #e6d3a066}
+.acct-actions .btn:disabled{opacity:.5;cursor:default}
+.acct-saved{margin:0;font-size:.82rem;line-height:1.45;color:var(--g)}
+.acct-h3{margin:1.6rem 0 .6rem;font-size:1.05rem;color:var(--g)}
+@media(max-width:400px){.acct{padding:1.1rem 1rem 1.2rem}}
