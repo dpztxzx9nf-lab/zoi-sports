@@ -25,15 +25,21 @@
    The token and address live in tools/zoi-lab-agent.json:
      { "endpoint": "https://zoisports.com/api/lab-sync", "token": "..." }
 
-   Register it at logon (PowerShell, one line; --once is what the task runs):
-     schtasks /Create /SC ONLOGON /TN "Zoi Lab Agent" /TR "\"%LOCALAPPDATA%\Programs\zoi\zoi-lab-agent.cmd\" --once" /F
+   It runs once at logon and stays up for the whole session; it is not a
+   --once task, because the watching is the point. The launcher is
+   zoi-lab-agent.cmd and the task starts it with a hidden window, so no
+   console ever flashes. See docs/INFRA.md for the registration line.
+
+   Every line it prints also goes to zoi-lab-agent.log beside itself,
+   because a hidden window shows nothing and a failure would otherwise
+   leave no trace on the machine.
 
    The parser below is a port of playbook/tools/parse.py, which stays the
    reference. Same tag layout, same 4-byte values, same float rounding, so both
    read a save to the same numbers. Nothing here is new logic. */
 
 import { readFile, readdir, stat } from "node:fs/promises";
-import { existsSync, realpathSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -47,6 +53,42 @@ const QUIET_MAX_MS = 5 * 60_000;
 const SEND_TRIES = 4;          // one try and three retries
 const BACKOFF_MS = [5_000, 15_000, 45_000];
 const HEARTBEAT_MS = 60 * 60_000;  // send anyway this often, even with no change
+
+/* ------------------------------------------------------------- the log ----
+   The logon task runs with no window, so anything written to stdout goes
+   nowhere and a failure on a gaming PC would be invisible after the fact.
+   Every line is also appended to zoi-lab-agent.log beside this file, stamped
+   with the machine's own local time. Bounded: past 512 KB the file is
+   rewritten with its last 200 lines, so a year of heartbeats cannot fill a
+   disk. A log that cannot be written is never allowed to stop a send. */
+const LOG_PATH = path.join(HERE, "zoi-lab-agent.log");
+/* A harness run sets this so the checks never write into the repo. */
+const LOG_OFF = process.env.ZOI_LAB_NO_LOG === "1";
+const LOG_MAX_BYTES = 512 * 1024;
+const LOG_KEEP_LINES = 200;
+
+const pad2 = (n) => String(n).padStart(2, "0");
+
+function logLine(text) {
+  if (LOG_OFF) return;
+  try {
+    if (existsSync(LOG_PATH) && statSync(LOG_PATH).size > LOG_MAX_BYTES) {
+      const kept = readFileSync(LOG_PATH, "utf8").split("\n").slice(-LOG_KEEP_LINES).join("\n");
+      writeFileSync(LOG_PATH, kept.endsWith("\n") ? kept : kept + "\n", "utf8");
+    }
+    const d = new Date();
+    const stamp = d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) +
+      " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds());
+    appendFileSync(LOG_PATH, stamp + "  " + text + "\n", "utf8");
+  } catch { /* the log is a convenience; a send must never fail over it */ }
+}
+
+/* One line: on screen when a person runs it, and in the file when the logon
+   task runs it with no console at all. */
+function log(text) {
+  console.log(text);
+  logLine(text);
+}
 
 /* --------------------------------------------------------------- INI ----
    Same key list as parse.py's INI_FIELDS. Duplicates there are harmless. */
@@ -205,18 +247,24 @@ export async function epicAccountId() {
     dirs.push({ name: e.name, mtimeMs: f ? f.mtimeMs : 0 });
   }
   dirs.sort((a, b) => b.mtimeMs - a.mtimeMs);
-  const newest = dirs[0];
-  if (!newest) return null;
-  if (!EPIC_ID.test(newest.name)) {
+  if (!dirs.length) return null;
+
+  /* The newest folder that actually looks like an account id. Picking the
+     newest folder and then rejecting it would mean a stray folder left over
+     from an older install could hide the real one forever, and Windows names
+     are case-insensitive, so an upper-case id is the same account and is
+     lowercased rather than dropped (the server compares it as written). */
+  const account = dirs.find((d) => EPIC_ID.test(d.name.toLowerCase()));
+  if (!account) {
     /* Said once per run, not once per poll, and the sync carries on without
        numbers rather than sending something the server would refuse. */
     if (!epicComplained) {
       epicComplained = true;
-      console.log("Ignoring the Cloud folder \"" + newest.name + "\": an Epic account id is 32 lowercase hex characters, so the settings go up without match numbers.");
+      log("No account folder under " + root + " looks like an Epic account id (32 hex characters), so the settings go up without match numbers.");
     }
     return null;
   }
-  return newest.name;
+  return account.name.toLowerCase();
 }
 
 async function info(p) {
@@ -258,7 +306,7 @@ export async function snapshot() {
       for (const [k, v] of Object.entries(fields)) settings["ini." + k] = v;
       for (const [k, v] of Object.entries(scalability)) settings["sg." + k] = v;
     } catch (e) {
-      console.log("Couldn't read GameUserSettings.ini: " + e.message);
+      log("Couldn't read GameUserSettings.ini: " + e.message);
     }
   }
 
@@ -269,7 +317,7 @@ export async function snapshot() {
       Object.assign(settings, readSav(b));
       bindings = parseBindings(b);
     } catch (e) {
-      console.log("Couldn't read ClientSettings.Sav: " + e.message);
+      log("Couldn't read ClientSettings.Sav: " + e.message);
     }
   }
 
@@ -290,24 +338,24 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function loadConfig() {
   if (!existsSync(CONFIG_PATH)) {
-    console.log("No config file at " + CONFIG_PATH + " - create it with the endpoint and the token from the lab page.");
+    log("No config file at " + CONFIG_PATH + " - create it with the endpoint and the token from the lab page.");
     process.exit(1);
   }
   let cfg;
   try {
     cfg = JSON.parse(await readFile(CONFIG_PATH, "utf8"));
   } catch {
-    console.log("The config file at " + CONFIG_PATH + " is not valid JSON.");
+    log("The config file at " + CONFIG_PATH + " is not valid JSON.");
     process.exit(1);
   }
   const token = typeof cfg?.token === "string" ? cfg.token.trim() : "";
   const endpoint = typeof cfg?.endpoint === "string" ? cfg.endpoint.trim() : "";
   if (!token) {
-    console.log("The config file at " + CONFIG_PATH + " has no token - paste the one the lab page shows.");
+    log("The config file at " + CONFIG_PATH + " has no token - paste the one the lab page shows.");
     process.exit(1);
   }
   if (!endpoint) {
-    console.log("The config file at " + CONFIG_PATH + " has no endpoint - use https://zoisports.com/api/lab-sync.");
+    log("The config file at " + CONFIG_PATH + " has no endpoint - use https://zoisports.com/api/lab-sync.");
     process.exit(1);
   }
   return { token, endpoint };
@@ -334,7 +382,7 @@ async function sendOnce(cfg, snap) {
   } catch (e) {
     note = " - " + (e && e.message ? e.message : "no connection");
   }
-  console.log(new Date().toLocaleTimeString() + " sent " + Object.keys(snap.settings).length + " settings, HTTP " + (status || "no reply") + note);
+  log("Sent " + Object.keys(snap.settings).length + " settings, HTTP " + (status || "no reply") + note);
   return status >= 200 && status < 300;
 }
 
@@ -343,11 +391,11 @@ async function send(cfg) {
   try {
     snap = await snapshot();
   } catch (e) {
-    console.log("Couldn't read the Fortnite config: " + (e && e.message ? e.message : e));
+    log("Couldn't read the Fortnite config: " + (e && e.message ? e.message : e));
     return false;
   }
   if (!snap) {
-    console.log("No Fortnite config found under " + savedDir + " - is the game installed for this user?");
+    log("No Fortnite config found under " + savedDir + " - is the game installed for this user?");
     return false;
   }
   for (let attempt = 0; attempt < SEND_TRIES; attempt++) {
@@ -377,7 +425,7 @@ async function waitQuiet() {
     if (now !== last) { last = now; stableSince = Date.now(); continue; }
     if (Date.now() - stableSince >= QUIET_MS) return true;
   }
-  console.log("The config kept changing; sending what is there now.");
+  log("The config kept changing; sending what is there now.");
   return false;
 }
 
@@ -393,9 +441,9 @@ export async function watch(cfg, opts = {}) {
   const sendNow = opts.send ?? send;
   const ticks = opts.ticks ?? Infinity;     // harness only: stop after N polls
 
-  console.log("Watching Fortnite's config. Sending when it changes and settles, and once an hour regardless.");
+  log("Watching Fortnite's config. Sending when it changes and settles, and once an hour regardless.");
   let last = await signature();
-  if (!last) console.log("No config found yet under " + savedDir + " - waiting for the game to run.");
+  if (!last) log("No config found yet under " + savedDir + " - waiting for the game to run.");
 
   /* A fresh start counts as just sent: the logon task runs --once, so nothing is
      due until a full heartbeat has gone by. */
@@ -417,7 +465,7 @@ export async function watch(cfg, opts = {}) {
          the only thing that moves games_played on a long session that never
          touched a setting. Said out loud so a send with no change is not a
          mystery in the log. */
-      console.log("Nothing changed in the last " + Math.round(heartbeatMs / 60_000) +
+      log("Nothing changed in the last " + Math.round(heartbeatMs / 60_000) +
         " minutes - sending anyway so the match numbers stay current.");
     }
 

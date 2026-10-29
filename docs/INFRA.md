@@ -67,6 +67,22 @@ Private settings log, filled from the player's own PC.
 - **Match numbers:** `functions/_lib/lab-stats.js` calls `fortnite-api.com/v2/stats/br/v2/<epicAccountId>?timeWindow=lifetime` with the `FORTNITE_API_KEY` secret in a bare `Authorization` header (no `Bearer`). 8 s timeout, no cache, every field treated as optional, controller play read from the `gamepad` group. A failed read never fails the settings sync: it is a note in the reply and nothing is stored.
 - **Secrets:** `FORTNITE_API_KEY` set with `wrangler pages secret put` (or the dashboard). Missing key means syncs still work with no numbers.
 - **Indexes/noindex:** every lab path sends `x-robots-tag: noindex, nofollow`.
+- **The PC agent:** `tools/zoi-lab-agent.mjs` reads `GameUserSettings.ini` and
+  `ClientSettings.Sav` (the cloud copy under `Saved\Cloud\<epicId>\` is the live
+  one; the `Config\` copy can sit days stale) and posts a flat snapshot. It never
+  writes to a Fortnite file. Token and endpoint live in `tools/zoi-lab-agent.json`
+  (gitignored). It sends on a change after the file goes quiet for 20 s, and once
+  an hour regardless, so `games_played` keeps moving through a long session that
+  never touched a setting; a repeat send is deduped and opens no tests, but the
+  stats read still runs. Every line is also appended to `zoi-lab-agent.log` beside
+  it, capped at 512 KB with the newest 200 lines kept, because the logon task is
+  hidden and stdout goes nowhere.
+- **Installing it on a PC:** copy `zoi-lab-agent.cmd`, `zoi-lab-agent.mjs` and the
+  JSON to `%LOCALAPPDATA%\Programs\zoi\`, run `node zoi-lab-agent.mjs --once` to
+  prove it posts, then register the watcher at logon:
+  `schtasks /Create /SC ONLOGON /TN "Zoi Lab Agent" /TR "powershell -NoProfile -WindowStyle Hidden -Command & '%LOCALAPPDATA%\Programs\zoi\zoi-lab-agent.cmd'" /F`
+  It is not a `--once` task: it runs for the whole session, and `schtasks /End`
+  plus `/Run` restarts it after a change to the agent.
 
 ## Operational notes
 
