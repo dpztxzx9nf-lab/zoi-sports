@@ -14,12 +14,12 @@
     {
       "name": "links",
       "result": "fail",
-      "details": "exit 2;  \ud83d\udd0d Total 30 ; \u2705 Successful 28 ; \ud83d\udc7b Excluded 0 ; \ud83d\udeab Errors 2 ;## Errors per input;### Errors in https://zoisports.com/; [404] <https://kick.com/zoi_sports_gg [404] <https://zoisports.com/cdn-cgi/l/email-protection#c2aaa7aeaead82b8adabb1b2adb0b6b1eca1adaf "
+      "details": "exit 2;  \ud83d\udd0d Total 29 ; \u2705 Successful 27 ; \ud83d\udc7b Excluded 0 ; \ud83d\udeab Errors 2 ;## Errors per input;### Errors in https://zoisports.com/; [404] <https://kick.com/zoi_sports_gg [404] <https://zoisports.com/cdn-cgi/l/email-protection#2c44494040436c5643455f5c435e585f024f4341 "
     },
     {
       "name": "denylist",
-      "result": "fail",
-      "details": "terms=Brock|Knechtel|Kindex|Liahona; scope=files + live HTML; file hits=1 public/settings.html(1) ; live hits=0"
+      "result": "pass",
+      "details": "terms=Brock|Knechtel|Kindex|Liahona; scope=files + live HTML; file hits=0 ; live hits=0"
     },
     {
       "name": "icons",
@@ -37,13 +37,13 @@
       "details": "no 'lint' script"
     }
   ],
-  "passing": 2,
+  "passing": 3,
   "total": 5,
-  "run_url": "https://github.com/dpztxzx9nf-lab/zoi-sports/actions/runs/40959959200",
-  "commit": "38017586715e52c7975adeaff1e7bf3ae4f6d84b",
+  "run_url": "https://github.com/dpztxzx9nf-lab/zoi-sports/actions/runs/40970402579",
+  "commit": "4e1a64a1cc5e1cde21db37723a06beb319b18953",
   "event": "push",
   "ref": "main",
   "pr": null,
   "mode": "report-only",
-  "updated_at": "2026-10-29T21:42:24Z"
+  "updated_at": "2026-10-29T23:03:43Z"
 }
