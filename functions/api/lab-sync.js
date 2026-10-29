@@ -277,15 +277,26 @@ export async function onRequest({ request, env }) {
 
   /* Past this point the snapshot is stored, so nothing below may fail the
      request: a stats problem is reported in the reply and nothing else. */
-  const stats = await syncStats(env, owner, tokenId, epicAccountId);
+  /* Whether this sync opened a test decides whether the stats read also writes
+     a boundary row: a reading exactly on the change, carrying the counters as
+     they stand, so the first evening on the new value is not swallowed by the
+     straddle rule. Only a test opening warrants one - an ordinary heartbeat that
+     did it too would fill lab_stats with rows that mark nothing. */
+  const stats = await syncStats(env, owner, tokenId, epicAccountId, created.map((t) => t.id));
   return json({ ok: true, created, skipped, closed, duplicate, stats, matches: matchResult });
 }
 
 /* ------------------------------------------------------------- the stats ---
    Runs after the snapshot is already stored, so every outcome here is a note
    in the reply rather than a failure. A token with no Epic id on it makes no
-   call at all: nobody has told the lab whose numbers to read. */
-async function syncStats(env, owner, tokenId, epicAccountId) {
+   call at all: nobody has told the lab whose numbers to read.
+
+   `boundaryTestIds` are the tests this sync opened, empty when it opened none.
+   With any, the read also writes one lab_stats row per test stamped at that
+   test's own start, so the change has a reading sitting exactly on it. Nothing
+   here can fail the sync: every path below returns a note, and the snapshot is
+   already stored by this point. */
+async function syncStats(env, owner, tokenId, epicAccountId, boundaryTestIds = []) {
   const id = epicIdOf(epicAccountId);
   if (!id) return { skipped: "no epic account id" };
 
@@ -304,7 +315,11 @@ async function syncStats(env, owner, tokenId, epicAccountId) {
     const summary = summarize(stats);
     if (!summary) return { ok: false, reason: "shape" };
 
-    const row = await recordStats(env, owner, id, summary);
+    /* A no-Epic-id token or a failed read above has already returned, so this
+       point is only reached with real counters. A missing boundary row is
+       therefore degraded rather than broken: the sync still succeeds and the
+       change simply loses its first evening, exactly as it did before. */
+    const row = await recordStats(env, owner, id, summary, boundaryTestIds.length ? { testIds: boundaryTestIds } : null);
     const updated = await updateGamesPlayed(env, owner);
 
     /* The id is learned from the PC, so record it the first time it arrives:
@@ -315,7 +330,8 @@ async function syncStats(env, owner, tokenId, epicAccountId) {
       ).bind(id, tokenId, owner, id).run();
     }
 
-    return { ok: true, group: summary.group, matches: summary.matches, deduped: row.deduped, tests: updated };
+    return { ok: true, group: summary.group, matches: summary.matches, deduped: row.deduped,
+      boundary: row.boundary === true, tests: updated };
   } catch (e) {
     console.error("lab stats store failed", e);
     return { ok: false, reason: "store" };
