@@ -137,6 +137,7 @@ html,body{overflow-x:clip}img{max-width:100%}
 .pf-bio{color:var(--m);font-style:italic}
 .pf-socials{list-style:none;display:flex;flex-wrap:wrap;justify-content:center;gap:.5rem;padding:0;margin:.8rem 0 0}.pf-socials a{display:inline-block;padding:.45rem .9rem;border:1px solid var(--g);border-radius:999px;color:var(--g);text-decoration:none;font-size:.8rem;letter-spacing:.06em}.pf-socials a:hover{background:var(--g);color:#0b0b0d}.pf-socials:empty{display:none}
 .pf-soon{color:var(--g);font-size:.75rem;text-transform:uppercase;letter-spacing:.14em;opacity:.75;margin-top:.8rem}
+.pf-settings{display:inline-block;margin-top:1.1rem;padding:.55rem 1.6rem;border:1px solid var(--g);border-radius:999px;color:var(--g);text-decoration:none;font-size:.8rem;letter-spacing:.14em;text-transform:uppercase}.pf-settings:hover{background:var(--g);color:#0b0b0d}.pf-settings:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
 .tag{text-wrap:balance}.tag-l1,.tag-l2{display:block;text-wrap:balance}.nw{white-space:nowrap}.pf-facts dd{text-wrap:balance}
 @media(max-width:759px){.hero{min-height:100vh;min-height:100svh;display:flex;flex-direction:column;justify-content:center;align-items:center;box-sizing:border-box;padding-top:2rem;padding-bottom:max(3rem,env(safe-area-inset-bottom))}}
 
@@ -228,12 +229,10 @@ html,body{overflow-x:clip}img{max-width:100%}
 .fn-below .legal li{margin:.45rem 0;font-size:.9rem;color:var(--m)}
 .fn-below .legal strong{color:var(--t)}
 
-/* change log table */
+/* results tables */
 .tbl{width:100%;border-collapse:collapse;margin:.5rem 0 0;font-size:.95rem}
 .tbl th{text-align:left;font:400 .68rem Graduate,Georgia,serif;letter-spacing:.16em;text-transform:uppercase;color:var(--g);border-bottom:1px solid #e6d3a055;padding:.45rem .5rem}
 .tbl td{padding:.5rem .5rem;border-bottom:1px solid #ffffff0f;color:var(--m);vertical-align:top}
-.tbl .empty{text-align:center;padding:1.2rem .6rem;color:var(--m);font-size:.86rem}
-@media(max-width:560px){.tbl.log{font-size:.72rem}.tbl.log th,.tbl.log td{padding:.4rem .22rem;letter-spacing:.04em}}
 
 /* mobile: label above, control below, values right-aligned */
 @media(max-width:640px){

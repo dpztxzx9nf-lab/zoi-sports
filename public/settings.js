@@ -33,3 +33,23 @@ rows.forEach(r=>{
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape')reset()});
 })();
+
+/* whose settings these are. ?p=<slug> names the player, and only a player marked
+   settings:true in roster.js has settings to show: these numbers are Kneczi's, so
+   anyone else - or no one - gets his tag line. The gamertag itself comes from
+   /api/roster so a rename shows up here too; a failed read leaves the baked-in
+   line alone. */
+(()=>{
+const tag=document.getElementById('set-tag');
+if(!tag)return;
+const R=window.ROSTER||{},want=new URLSearchParams(location.search).get('p');
+const slug=want&&R[want]&&R[want].settings?want:'kneczi';
+fetch('/api/roster',{headers:{accept:'application/json'}})
+ .then(r=>r.ok?r.json():null)
+ .then(j=>{
+  const list=j&&Array.isArray(j.players)?j.players:null;if(!list)return;
+  const row=list.find(x=>x&&x.slug===slug&&x.gamertag);if(!row)return;
+  tag.textContent=row.gamertag+"'s live Zero Build setup, read straight off the PC.";
+ })
+ .catch(()=>{});
+})();
