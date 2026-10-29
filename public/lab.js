@@ -222,6 +222,7 @@ function formCell(label, f) {
 
 function renderRecent() {
   const r = (state.perf && state.perf.recent) || {};
+  const floor = Number((state.perf && state.perf.min_games) || 25);
   nodes.recentGrid.replaceChildren();
   const sessions = r.sessions || null;
   const games = r.games || null;
@@ -230,23 +231,59 @@ function renderRecent() {
      says so rather than claiming a hundred and then showing a different number. */
   nodes.recentGrid.append(formCell('Last 10 sessions', sessions), formCell('Recent games', games));
 
-  /* Say out loud when the two disagree, because that is the honest reason the
-     strip exists: a hot last night is not a changed setting. */
+  /* The same floor the verdicts use, applied to the window's own game count. A
+     window of one game is not a reading: its kills a match is that game, and
+     saying "both windows agree" off it would be the same mistake the old
+     two-point rule made, only louder. A window under the floor takes part in
+     nothing and the note says how much more is needed. */
+  const played = (f) => (f && isNum(f.matches) ? f.matches : 0);
+  const shortBy = (f) => Math.max(0, floor - played(f));
+  const ready = [sessions, games].filter((f) => f && played(f) >= floor);
+
   let note = '';
-  if (sessions && games && isNum(sessions.kills_per_match) && isNum(games.kills_per_match)) {
+  if (!sessions && !games) {
+    note = 'Recent form appears once two syncs show games played between them.';
+  } else if (!ready.length) {
+    /* Neither window is old enough to say anything. Name the nearer one so the
+       number is a wait, not a mystery. */
+    const best = played(sessions) >= played(games) ? sessions : games;
+    const left = shortBy(best);
+    note = 'Not enough played yet to compare anything. The fuller window has ' + matchesWord(played(best))
+      + ', and it needs ' + matchesWord(floor) + ' before a number here means something'
+      + (left ? ': ' + matchesWord(left) + ' to go.' : '.');
+  } else if (ready.length === 1) {
+    /* One clears the floor and one does not. Compare nothing: a window still
+       filling is not a second opinion, and printing one against the other would
+       dress a handful of games up as a trend. */
+    const full = ready[0];
+    const thin = full === sessions ? games : sessions;
+    /* Both names are plural, so "have" reads right either way round. */
+    const thinName = thin === sessions ? 'The last ten sessions' : 'The recent games';
+    const fullName = full === sessions ? 'The last ten sessions' : 'The recent games';
+    note = thin
+      ? fullName + ' have the games to read. ' + thinName + ' have ' + matchesWord(played(thin))
+        + ' and need ' + matchesWord(floor) + ', so the two are not compared yet: '
+        + matchesWord(shortBy(thin)) + ' to go.'
+      : 'Only one window has enough games so far, so there is nothing to compare it with.';
+  } else if (isNum(sessions.kills_per_match) && isNum(games.kills_per_match)) {
+    /* Both clear the floor, so the comparison is fair. Say out loud when they
+       disagree, because that is the honest reason the strip exists: a hot last
+       night is not a changed setting. */
     const gap = games.kills_per_match - sessions.kills_per_match;
+    /* The games window is the recent end of the sessions window, so a higher
+       games figure means the last night or two is above the ten-session
+       average. That is a hot streak, not a changed setting, and it is why
+       neither number on its own is worth acting on. */
     if (Math.abs(gap) < 0.3) {
       note = 'Both windows agree, which means the last few sessions are ordinary for you. Nothing here to read as a change.';
     } else if (gap > 0) {
-      note = 'The recent games are better than the last ten sessions, so the run is older than this week. The longer window is the one to believe.';
+      note = 'The recent games are better than the last ten sessions, which is the shape of a hot streak rather than a changed setting. The longer window is the one to believe.';
     } else {
-      note = 'The last ten sessions are better than the recent games, which is the shape of a hot streak rather than a changed setting. The longer window is the one to believe.';
+      note = 'The recent games are below the last ten sessions, so the run is older than this week. The longer window is the one to believe.';
     }
     note = 'The two windows are here so a good night stays a good night. ' + note;
-  } else if (sessions || games) {
-    note = 'One window is still filling. It fills as you play.';
   } else {
-    note = 'Recent form appears once two syncs show games played between them.';
+    note = 'Both windows have the games, but one is missing the counters to work out kills a match.';
   }
   nodes.recentNote.textContent = note;
   show(nodes.recentNote);
@@ -370,7 +407,10 @@ function renderCharts() {
 
   const first = chart[0], last = chart[chart.length - 1];
   const firstLabel = fmtDay(first.to);
-  const lastLabel = fmtDay(last.to);
+  /* One session, or several inside one day, would print the same day at both
+     ends of the axis and read as a broken label rather than a short history. */
+  const sameDay = fmtDay(first.to) === fmtDay(last.to);
+  const lastLabel = sameDay ? '' : fmtDay(last.to);
   const series = v => chart.map(s => ({ v: v(s), mark: Boolean(s.change), thin: Boolean(s.thin) }));
 
   /* Kills a match leads, because it is the number a verdict can move on. */
