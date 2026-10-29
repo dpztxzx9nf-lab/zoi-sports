@@ -577,11 +577,32 @@ async function loadConfig() {
   return { token, endpoint };
 }
 
-/* One line per send, whatever happened. Returns true when the lab accepted it. */
-async function sendOnce(cfg, snap) {
+/* The reason the lab gave for refusing a snapshot, as one plain phrase, or "".
+   The endpoint explains itself - a locked save comes back as "That snapshot has
+   no settings from ClientSettings.Sav - was the save locked?" - and the log is
+   the only place anyone will ever see it. Dropping it left a bare
+   "HTTP 422" that says nothing about what to do. */
+export function refusalOf(body) {
+  if (!body || typeof body !== "object") return "";
+  const list = Array.isArray(body.errors) ? body.errors : [];
+  const first = list.find((e) => typeof e === "string" && e.trim());
+  if (first) return first.trim();
+  if (typeof body.error === "string" && body.error.trim()) return body.error.trim();
+  return "";
+}
+
+/* One line per send, whatever happened. Returns true when the lab accepted it.
+
+   `retry` says whether another attempt could plausibly change the answer. A
+   locked save cannot: the game is holding the file open and five seconds will
+   not change that, so the next heartbeat is early enough and the ladder below
+   is skipped. A refused token is the same shape. A network fault or a 5xx is
+   the case retrying is for. */
+export async function sendOnce(cfg, snap) {
   let status = 0;
   let note = "";
   let matches = 0;
+  let retry = true;
   try {
     const res = await fetch(cfg.endpoint, {
       method: "POST",
@@ -595,22 +616,34 @@ async function sendOnce(cfg, snap) {
       matches = Number(body?.matches?.stored) > 0 ? Number(body.matches.stored) : 0;
       note = body?.duplicate ? " (same as last time)" : made ? " (" + made + " new test" + (made === 1 ? "" : "s") + ")" : "";
       if (matches) note += " (" + matches + " new match" + (matches === 1 ? "" : "es") + ")";
-    } else if (status === 401) {
-      note = " - the token was refused; create a new one on the lab page";
+    } else {
+      const body = await res.json().catch(() => null);
+      const why = refusalOf(body);
+      if (status === 401) {
+        note = " - the token was refused; create a new one on the lab page";
+        retry = false;
+      } else if (why) {
+        note = " - " + why;
+      }
+      /* A 4xx is the lab saying what is wrong with this snapshot. Sending the
+         same bytes again cannot fix any of it, so it waits for the next
+         heartbeat rather than four attempts over the next minute. */
+      if (status >= 400 && status < 500) retry = false;
     }
   } catch (e) {
     note = " - " + (e && e.message ? e.message : "no connection");
   }
   const count = Object.keys(snap.settings || {}).length;
   log("Sent " + count + " settings, HTTP " + (status || "no reply") + note);
-  return { ok: status >= 200 && status < 300, matches };
+  return { ok: status >= 200 && status < 300, matches, retry };
 }
 
 /* A snapshot plus whatever the log has proved since the last read. The matches
    are additive: they do not decide whether a send is due, because a new match is
    not a settings change and must not open a test. They ride along with whatever
    send happens next, which the watch loop triggers when it sees one arrive. */
-async function send(cfg, prepared) {
+export async function send(cfg, prepared, deps = {}) {
+  const wait = deps.sleep ?? sleep;
   let snap = null;
   try {
     snap = await snapshot();
@@ -646,7 +679,11 @@ async function send(cfg, prepared) {
       await commitMatches(read.commit);
       return true;
     }
-    if (attempt < SEND_TRIES - 1) await sleep(BACKOFF_MS[attempt] || 45_000);
+    /* The lab has already said this snapshot is not acceptable, and the next
+       attempt would carry the same bytes. It goes again on the next heartbeat,
+       which costs one try an hour instead of four in a minute. */
+    if (out.retry === false) return false;
+    if (attempt < SEND_TRIES - 1) await wait(BACKOFF_MS[attempt] || 45_000);
   }
   return false;
 }

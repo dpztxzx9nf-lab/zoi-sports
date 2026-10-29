@@ -577,6 +577,22 @@ function winRateLine(c) {
     wrap.append(el('p', 'lab-c-fine', 'Ranges ' + pct(b.low) + ' to ' + pct(b.high) + ' before, ' + pct(a.low) + ' to ' + pct(a.high) + ' after.'));
   }
 
+  /* Same admission the kills line makes, for the other rate on the card. A win
+     count that came back missing on some reads leaves games in the window the
+     rate does not cover, and both the rate and its range are measured on the
+     rest. Without this the row silently implies every game is in the figure. */
+  const winsGap = (side, word) => {
+    const all = side && isNum(side.matches) ? side.matches : 0;
+    const counted = side && isNum(side.wins_matches) ? side.wins_matches : all;
+    if (!side || side.wins_partial !== true || counted >= all) return null;
+    return matchesWord(counted) + ' of the ' + matchesWord(all) + ' ' + word + ' carried a win count';
+  };
+  const winGaps = [winsGap(c.before, 'before the change'), winsGap(c.after, 'after it')].filter(Boolean);
+  if (winGaps.length) {
+    wrap.append(el('p', 'lab-c-fine', 'Win counts were missing on some reads: ' + winGaps.join(', and ') +
+      '. The rate and its range are measured on the games that had one; the rest are left out rather than counted as losses.'));
+  }
+
   /* The honest sentence, and it quotes a move worth having rather than the one
      that happened to show up. Sizing a half-point wobble gives hundreds of
      thousands of games: true, and useless. Three points is the smallest

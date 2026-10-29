@@ -143,7 +143,9 @@ export async function onRequest({ request, env }) {
      became the diff baseline, so the next complete read compared against a
      half-read and a real move (sensitivity 39 to 55) looked like a setting
      appearing from nowhere instead of changing. A 422 is the one answer the
-     agent can act on: it retries, and nothing half-read is ever stored.
+     agent can act on: the sentence below goes into its log, and it waits for the
+     next heartbeat rather than sending the same half-read bytes again, so
+     nothing half-read is ever stored.
 
      Only the total absence of save properties is refused. A save that genuinely
      holds nothing beyond the ini is not for this check to imagine - the real
