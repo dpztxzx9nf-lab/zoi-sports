@@ -1,0 +1,41 @@
+-- Settings lab: which kind of match a row is, and an island's own title.
+-- Apply once:
+--   wrangler d1 execute zoi-tryouts --remote --file migrations/0008_lab_match_kind.sql
+--
+-- Re-running is safe when applied the way the repo already applies an ADD COLUMN
+-- (0004, 0006): through `node tools/zoi-lab-migrate.mjs`, which reads
+-- pragma_table_info first and only issues the ALTER when the column is missing.
+-- SQLite has no "ADD COLUMN IF NOT EXISTS" - it is a syntax error, not a no-op -
+-- so the guard cannot live in this file. Applied twice by hand with
+-- `wrangler d1 execute`, the second run reports "duplicate column name" and
+-- changes nothing, which is the most SQLite offers for a bare ALTER.
+--
+-- Why the columns
+-- ---------------
+-- kind separates two things that must never be averaged together. A battle
+-- royale match is a ladder with a build mode and a team size; a Creative island
+-- has a title and none of those three. Before this, both were simply "a match",
+-- so a window holding an island and a battle royale could only be labelled
+-- "mixed" - honest, but it cannot say the one thing worth saying: the island was
+-- never the ladder's business.
+--
+--   'br'        a battle royale match
+--   'creative'  a Creative island match
+--   NULL        the log did not say which, and nothing here guesses
+--
+-- title is the island's title exactly as the log wrote it, non-ASCII characters
+-- included, and NULL for a battle royale. It is not a mode and it is not parsed:
+-- "Rapid 2V2V2 Zero Build" keeps its "2V2V2" as text. Three teams of two inside
+-- an island is not the battle-royale duo queue, and reading it as Duo would put
+-- a number in a column the log never put there.
+--
+-- ended_at stays nullable and now genuinely means "the log never stated an end".
+-- An island the log stops talking about is stored with a null end rather than
+-- discarded, because discarding it is what lost island matches before.
+--
+-- ranked / build_mode / team_size stay NULL for every 'creative' row. That is
+-- enforced on the way in (functions/api/lab-sync.js), not by a constraint here:
+-- the columns are shared with battle-royale rows, which do carry them.
+
+ALTER TABLE lab_matches ADD COLUMN kind TEXT;
+ALTER TABLE lab_matches ADD COLUMN title TEXT;

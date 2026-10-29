@@ -26,6 +26,11 @@ const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
 const RANKED = new Set(["Ranked", "Unranked"]);
 const BUILDS = new Set(["Zero", "Build"]);
 const TEAMS = new Set(["Solo", "Duo", "Trio", "Squad"]);
+/* 'br' or 'creative'. Two kinds of match that must never be averaged together:
+   a battle royale is a ranked ladder with a build mode and a team size, an island
+   has a title and none of those. Anything else is null and stays null. */
+const KINDS = new Set(["br", "creative"]);
+const TITLE_MAX = 80;
 
 const labels = new Map(CATALOG.map((c) => [c.id, c.label]));
 
@@ -313,9 +318,22 @@ function matchRecord(raw) {
   const count = (v) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.round(v) : null);
 
   const endedAt = when(raw.endedAt);
+  const kind = KINDS.has(raw.kind) ? raw.kind : null;
   /* No end time means no place on the timeline, which is the only thing a match
-     row is used for. It is refused rather than stored with a made-up stamp. */
-  if (!endedAt) return null;
+     row is used for. It is refused rather than stored with a made-up stamp.
+
+     One exception, and only one: an island match whose end this log never
+     states. An island DOES write an end-of-match report - his VK Play matches
+     close with the same Bad Match Attribute burst a battle royale does - so a
+     null end here is not the usual case. It is what is left when the log simply
+     stops: the agent sends a window that ends mid-match, or the game is killed
+     before the report lands. The start is certain in those rows and the end is
+     unknown, so the null is the truth, and storing it beats discarding a match
+     that certainly happened. It stays an island row either way, which is what
+     keeps it out of the ladder arithmetic. The exception is refused for anything
+     else: a battle royale with no end has no session id to prove it was ever one
+     match, and a nameless row cannot show it is an island at all. */
+  if (!endedAt && kind !== "creative") return null;
 
   const ranked = RANKED.has(raw.ranked) ? raw.ranked : null;
   const buildMode = BUILDS.has(raw.buildMode) ? raw.buildMode : null;
@@ -329,12 +347,16 @@ function matchRecord(raw) {
 
   return {
     matchId,
+    /* Which kind of match this was. An island never carries a mode: the log does
+       not state one for it, and the title is the only identity it has. */
+    kind,
+    title: kind === "creative" ? text(raw.title, TITLE_MAX) : null,
     playlist: text(raw.playlist),
     playlistType: text(raw.playlistType, 40),
-    ranked,
-    buildMode,
-    teamSize,
-    region: text(raw.region, 24),
+    ranked: kind === "creative" ? null : ranked,
+    buildMode: kind === "creative" ? null : buildMode,
+    teamSize: kind === "creative" ? null : teamSize,
+    region: kind === "creative" ? null : text(raw.region, 24),
     rankType: rank ? rankType : null,
     rank,
     playersLeftLow: count(raw.playersLeftLow),
@@ -343,6 +365,23 @@ function matchRecord(raw) {
     startedAt: when(raw.startedAt),
     endedAt,
   };
+}
+
+/* Whether lab_matches has a column. The table gains `kind` and `title` in
+   0008, and a database that has not had that migration applied - or a fake one
+   in a suite built from the older files - must still store matches. Asking the
+   table rather than assuming is cheaper than a failed insert, and it is the only
+   way the same code serves both.
+   The statement is spelled exactly as the lab spells every other introspection
+   so the fake D1's guard recognises it. */
+async function hasColumn(env, table, column) {
+  try {
+    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM pragma_table_info(?) WHERE name = ?")
+      .bind(table, column).first();
+    return Boolean(row && Number(row.n) > 0);
+  } catch {
+    return false;
+  }
 }
 
 async function storeMatches(env, owner, rawMatches) {
@@ -357,6 +396,9 @@ async function storeMatches(env, owner, rawMatches) {
 
   /* Newest last in, but the order does not matter: each row stands alone. A row
      that cannot be read is counted and skipped, never guessed at. */
+  /* Read once per sync rather than per match: whether 0008 has been applied. */
+  const withKind = await hasColumn(env, "lab_matches", "kind");
+
   let stored = 0;
   let bad = 0;
   for (const raw of rawMatches.slice(0, MATCH_MAX)) {
@@ -364,17 +406,29 @@ async function storeMatches(env, owner, rawMatches) {
     if (!m) { bad++; continue; }
 
     const key = await sha256Hex(owner + "\n" + m.matchId);
-    const row = await env.DB.prepare(
-      `INSERT INTO lab_matches
-         (owner,match_key,playlist,playlist_type,ranked,build_mode,team_size,region,rank_type,rank,
-          players_left_low,players_left_first,players_left_readings,started_at,ended_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-       ON CONFLICT (owner,match_key) DO NOTHING`
-    ).bind(
-      owner, key, m.playlist, m.playlistType, m.ranked, m.buildMode, m.teamSize, m.region,
-      m.rankType, m.rank, m.playersLeftLow, m.playersLeftFirst, m.playersLeftReadings,
-      m.startedAt, m.endedAt
-    ).run();
+    const row = withKind
+      ? await env.DB.prepare(
+        `INSERT INTO lab_matches
+           (owner,match_key,playlist,playlist_type,ranked,build_mode,team_size,region,rank_type,rank,
+            players_left_low,players_left_first,players_left_readings,started_at,ended_at,kind,title)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         ON CONFLICT (owner,match_key) DO NOTHING`
+      ).bind(
+        owner, key, m.playlist, m.playlistType, m.ranked, m.buildMode, m.teamSize, m.region,
+        m.rankType, m.rank, m.playersLeftLow, m.playersLeftFirst, m.playersLeftReadings,
+        m.startedAt, m.endedAt, m.kind, m.title
+      ).run()
+      : await env.DB.prepare(
+        `INSERT INTO lab_matches
+           (owner,match_key,playlist,playlist_type,ranked,build_mode,team_size,region,rank_type,rank,
+            players_left_low,players_left_first,players_left_readings,started_at,ended_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         ON CONFLICT (owner,match_key) DO NOTHING`
+      ).bind(
+        owner, key, m.playlist, m.playlistType, m.ranked, m.buildMode, m.teamSize, m.region,
+        m.rankType, m.rank, m.playersLeftLow, m.playersLeftFirst, m.playersLeftReadings,
+        m.startedAt, m.endedAt
+      ).run();
     if (row?.meta?.changes) stored += 1;
   }
   if (bad) dropped.push(bad + (bad === 1 ? " match could not be read" : " matches could not be read"));
