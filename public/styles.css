@@ -7,7 +7,22 @@ a{color:var(--g)}
 .nav{position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:.6rem 1rem;background:rgba(0,0,0,.85);backdrop-filter:blur(8px);border-bottom:1px solid #e6d3a033}
 .brand{display:flex;gap:.5rem;align-items:center;color:#fff;text-decoration:none;font:400 1.3rem Graduate,Georgia,serif;letter-spacing:.12em}
 .brand img{border-radius:6px}
-.nav nav{display:none;position:absolute;top:100%;left:0;right:0;flex-direction:column;background:#000;border-bottom:1px solid #e6d3a033}
+/* The drawer, on a phone.
+
+   The frame here is deliberate: a dashed outline on all four sides, so the panel
+   reads as a closed surface rather than as a dropdown hanging off the header.
+
+   It is worth saying why this is written out in full, because the dashed edge
+   that used to be here was NOT deliberate and was not even this rule. A stray
+   `.open{border-style:dashed}` - written for the "Open spot" roster cards, where
+   it did nothing at all - was also matching the open drawer, since the drawer
+   toggles the same class name. That rule set border STYLE on four sides while
+   this one set border WIDTH on the bottom only, so the browser filled in the
+   other three at its default 3px and left the bottom at the 1px hairline: three
+   heavy sides and an edge that vanished. The fix is both halves - the stray rule
+   is now scoped to the card it was written for (see .card.open below), and the
+   frame is declared here, once, where the drawer is. */
+.nav nav{display:none;position:absolute;top:100%;left:0;right:0;flex-direction:column;background:#000;border:3px dashed currentColor}
 .nav nav.open{display:flex}.nav nav a{padding:.8rem 1rem;color:var(--t);text-decoration:none;text-transform:uppercase;font-size:.85rem;letter-spacing:.15em}
 .nav nav a:hover{color:#fff}
 .menu{background:none;border:1px solid var(--g);color:var(--g);font-size:1.2rem;border-radius:6px;padding:.2rem .6rem}
@@ -56,7 +71,14 @@ h2::after{content:"";display:block;width:min(220px,56vw);height:10px;margin:.85r
 .glyph{font:400 2.4rem Graduate,Georgia,serif;background:linear-gradient(180deg,#fff,var(--g));-webkit-background-clip:text;background-clip:text;color:transparent}
 .player img{border-radius:50%;border:2px solid var(--g)}
 .role{text-transform:uppercase;font-size:.8rem;letter-spacing:.12em}
-.open{border-style:dashed}.slot{width:72px;height:72px;margin:0 auto;border-radius:50%;border:2px dashed var(--g);display:grid;place-items:center;font-size:2rem;color:var(--g)}
+/* An "Open spot" roster card carries .open as a marker, never as styling: the
+   card already has its own border from .card. This used to be a bare `.open`
+   selector, which meant every element that happened to use that class name -
+   including the mobile nav's open drawer - silently inherited a 3px dashed
+   border in the browser's default colour on three sides. Scoped to the cards it
+   was written for, so a class name shared with a nav state cannot dress it. */
+.card.open{border-style:dashed}
+.slot{width:72px;height:72px;margin:0 auto;border-radius:50%;border:2px dashed var(--g);display:grid;place-items:center;font-size:2rem;color:var(--g)}
 .list li{margin:.3rem 0}.note{text-align:left;margin-top:1.5rem}
 .soon{color:var(--g)!important;font-size:.85rem;text-transform:uppercase;letter-spacing:.12em}
 .socials{display:flex;flex-wrap:wrap;gap:.7rem;justify-content:center;margin-top:1rem}
