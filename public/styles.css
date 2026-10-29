@@ -436,10 +436,34 @@ html,body{overflow-x:clip}img{max-width:100%}
 .lab-tag-reverted{border-color:#ff6b8b88;color:#ff9aae}
 .lab-tag-inconclusive{border-color:#ffffff30;color:#b9b6ae}
 
+/* this PC — connecting the agent that fills the log in */
+.lab-pc-lede{margin:0 0 1rem;color:var(--m);font-size:.9rem;line-height:1.55;max-width:52ch}
+.lab-pc-stats{margin:0 0 1rem;font-size:.82rem;line-height:1.5;letter-spacing:.02em;color:var(--m);max-width:52ch}
+.lab-pc-stats b{font-weight:400;color:var(--g)}
+.lab-pc-connect{display:flex;align-items:flex-end;gap:.7rem;flex-wrap:wrap;margin:0 0 .9rem}
+.lab-pc-connect .lab-field{flex:1 1 12rem}
+.lab-pc-btn{border:0;cursor:pointer;font-size:.72rem;padding:.5rem 1.1rem;min-height:46px;white-space:nowrap}
+.lab-pc-btn:disabled{opacity:.5;cursor:default}
+.lab-pc-token{margin:0 0 1rem;padding:.85rem;border:1px solid #e6d3a055;border-left:2px solid var(--g);border-radius:5px;background:#e6d3a00f}
+.lab-pc-note{margin:0 0 .6rem;font-size:.85rem;line-height:1.5;color:var(--t)}
+.lab-pc-note code,.lab-code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.lab-pc-note code{font-size:.82rem;color:var(--g);overflow-wrap:anywhere}
+.lab-code{display:block;font-size:.78rem;line-height:1.5;color:var(--t);background:#000;border:1px solid #e6d3a044;border-radius:4px;padding:.6rem;overflow-wrap:anywhere;word-break:break-all}
+.lab-pc-token .lab-row{margin:.6rem 0 0}
+.lab-pc-copied{margin:.45rem 0 0;font-size:.78rem;letter-spacing:.06em;color:var(--g)}
+.lab-pc-list{list-style:none;margin:0;padding:0}
+.lab-pc-item{display:flex;align-items:baseline;justify-content:space-between;gap:.75rem;flex-wrap:wrap;padding:.7rem .9rem;border:1px solid #e6d3a01f;border-radius:5px;background:#ffffff04;margin:0 0 .5rem}
+.lab-pc-item:last-child{margin-bottom:0}
+.lab-pc-name{font:400 .88rem/1.3 Graduate,Georgia,serif;letter-spacing:.06em;color:var(--g);text-transform:uppercase;min-width:0;overflow-wrap:anywhere}
+.lab-pc-when{display:block;margin:.2rem 0 0;font-size:.76rem;letter-spacing:.04em;color:var(--m)}
+.lab-pc-gone{font-size:.76rem;letter-spacing:.06em;color:var(--m)}
+
 @media(max-width:420px){
  .lab{ padding-left:.9rem;padding-right:.9rem }
  .lab-form{padding:.85rem}
  .lab-card{padding:.85rem}
  .lab-v{font-size:.66rem;letter-spacing:.06em;padding:.5rem .2rem}
  .lab-pair{gap:.6rem}
+ .lab-pc-connect{flex-direction:column;align-items:stretch}
+ .lab-pc-btn{width:100%}
 }

@@ -9,6 +9,7 @@ Snapshot of live state as of 2026-10-16. Secret values are never recorded here; 
 | Worker | `zoi-tryout-notify` (send_email `EMAIL`, secret `NOTIFY_TO`) |
 | DNS/Email | Cloudflare Email Routing (hello@zoisports.com), SPF, DKIM `cf2024-1`, DMARC `p=none` |
 | Risk | Public repo; D1 database id visible in `wrangler.toml` |
+| Secret | Pages secret `FORTNITE_API_KEY` (fortnite-api.com stats key, read as `env.FORTNITE_API_KEY` by `functions/_lib/lab-stats.js`; never sent to the client) |
 
 ## 1. Worker: `zoi-tryout-notify`
 
@@ -56,6 +57,16 @@ The repo is **public**. `wrangler.toml` shows the D1 database id (`zoi-tryouts`,
 1. Keep public (current). Fine as long as no secrets or applicant data are committed; consider enabling GitHub secret scanning / push protection.
 2. Make the repo private. Pages uses Direct Upload, so deploys are not affected.
 3. Move ids out of git (e.g. a local, gitignored wrangler config). Little security value, more setup friction.
+
+## 4. Settings lab (`/lab`)
+
+Private settings log, filled from the player's own PC.
+
+- **Gating:** `/lab`, `/lab.html`, `/lab/*` and `/api/lab/*` need a verified Access JWT (`functions/_middleware.js`). The one exception is `POST /api/lab/sync`, which authenticates with a per-PC bearer token from `lab_tokens` instead, because a PC cannot sit through a sign-in. Cloudflare Access has its own protected-path list in the dashboard; **`/api/lab/sync` must be left out of it** or Access answers 302 before the Function runs. Every other lab path stays behind Access.
+- **Tables:** `lab_tests` (0003 + 0004), `lab_snapshots` and `lab_tokens` (0005), `lab_stats` (0006). All key on lowercased-email `owner`.
+- **Match numbers:** `functions/_lib/lab-stats.js` calls `fortnite-api.com/v2/stats/br/v2/<epicAccountId>?timeWindow=lifetime` with the `FORTNITE_API_KEY` secret in a bare `Authorization` header (no `Bearer`). 8 s timeout, no cache, every field treated as optional, controller play read from the `gamepad` group. A failed read never fails the settings sync: it is a note in the reply and nothing is stored.
+- **Secrets:** `FORTNITE_API_KEY` set with `wrangler pages secret put` (or the dashboard). Missing key means syncs still work with no numbers.
+- **Indexes/noindex:** every lab path sends `x-robots-tag: noindex, nofollow`.
 
 ## Operational notes
 

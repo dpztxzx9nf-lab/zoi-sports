@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#050506">
 <link rel="icon" href="favicon.ico" sizes="any"><link rel="icon" type="image/png" href="favicon-32.png">
-<link rel="stylesheet" href="styles.css?v=26">
+<link rel="stylesheet" href="styles.css?v=27">
 </head>
 <body class="lab-page">
 <header class="nav"><a href="/" class="brand"><img class="zw" src="/assets/zoi-wordmark-gold.png?v=10" alt="Zoi" width="600" height="320"></a>
@@ -60,6 +60,37 @@
 <section class="lab-block">
  <h2 class="lab-h2">History</h2>
  <div id="history"></div>
+</section>
+
+<section class="lab-block">
+ <h2 class="lab-h2">This PC</h2>
+ <div id="pc">
+  <p class="lab-pc-lede" id="pc-lede">The lab fills itself in from your PC. Connect one, and it sends Fortnite's own settings after every change, so a test opens by itself and nobody has to log it by hand.</p>
+
+  <p class="lab-pc-stats" id="pc-stats" hidden></p>
+
+  <form class="lab-pc-connect" id="pc-connect" novalidate>
+   <label class="lab-field lab-field-sm" for="pc-label">Name this PC
+    <input id="pc-label" name="label" maxlength="40" autocomplete="off" spellcheck="false" placeholder="This PC">
+   </label>
+   <button class="btn lab-pc-btn" type="submit" id="pc-add">Connect a PC</button>
+  </form>
+
+  <ul class="lab-errors" id="pc-errors" hidden></ul>
+
+  <div class="lab-pc-token" id="pc-token" hidden>
+   <p class="lab-pc-note">This is the token, shown once. Paste it into <code>tools/zoi-lab-agent.json</code> beside <code>"token"</code>, then run the agent.</p>
+   <code class="lab-code" id="pc-token-value"></code>
+   <div class="lab-row">
+    <button class="lab-mini" type="button" id="pc-copy">Copy token</button>
+    <button class="lab-mini" type="button" id="pc-done">Done</button>
+   </div>
+   <p class="lab-pc-copied" id="pc-copied" hidden>Copied.</p>
+  </div>
+
+  <ul class="lab-pc-list" id="pc-list"></ul>
+  <p class="lab-empty" id="pc-empty" hidden>No PC connected yet.</p>
+ </div>
 </section>
 
 </div>

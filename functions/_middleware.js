@@ -7,8 +7,24 @@
 // has, and the JWT is verified rather than trusted.
 import { gate } from "./_lib/lab.js";
 
-const isLabPath = (pathname) =>
-  pathname === "/lab" || pathname.startsWith("/lab/") || pathname === "/lab.html";
+/* One path is deliberately outside that check: /api/lab/sync, the endpoint the
+   PC agent posts to. A PC has no browser and cannot sit through a Google or
+   email sign-in, so gating it would mean the agent could never send anything.
+   What protects it instead is the bearer token in the request: sync.js hashes
+   it and looks the hash up in lab_tokens, and an unknown, revoked or missing
+   token is a 401 with the same body in every case. The token belongs to one
+   person and scopes everything it writes to that person's owner. It is the one
+   exclusion; every other lab path, page and API alike, still needs a JWT.
+
+   This check is the Worker's own. Cloudflare Access sits in front of it and
+   has its own list of protected paths, so /api/lab/sync has to be outside that
+   list too, or Access turns the agent away before this file runs. That is a
+   dashboard setting, not something here can change. */
+const SYNC_PATH = "/api/lab/sync";
+
+const isLabPage = (p) => p === "/lab" || p.startsWith("/lab/") || p === "/lab.html";
+const isLabApi = (p) => p === "/api/lab" || p.startsWith("/api/lab/");
+const isLabPath = (p) => isLabPage(p) || isLabApi(p);
 
 export async function onRequest({ request, env, next }) {
   const u = new URL(request.url);
@@ -17,7 +33,7 @@ export async function onRequest({ request, env, next }) {
     return Response.redirect(u.toString(), 301);
   }
 
-  if (isLabPath(u.pathname)) {
+  if (isLabPath(u.pathname) && u.pathname !== SYNC_PATH) {
     // On the apex, Access has already signed the person in and attached the JWT,
     // so a signed-in visit falls straight through to the page. On a preview
     // hostname this is the only thing between a stranger and the page shell.
