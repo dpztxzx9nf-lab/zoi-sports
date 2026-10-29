@@ -50,6 +50,7 @@ import { appendFileSync, existsSync, readFileSync, realpathSync, statSync, write
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { scanLog } from "./zoi-lab-mode.mjs";
+import { readReplayStats, replayRow } from "./zoi-replay.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = path.join(HERE, "zoi-lab-agent.json");
@@ -450,9 +451,24 @@ async function loadMatchState() {
   };
 }
 
+/* The state file holds two independent marks - how far the log has been read and
+   how far the replay folder has - and they move at different times: the log
+   mark only after a send the lab took, the replay mark after a different send.
+   Writing one therefore has to keep the other, so the file is read, the one key
+   is replaced and the rest is written back. A state file that will not parse is
+   replaced rather than fought with, which costs a re-read and nothing else. */
+async function saveStatePart(part) {
+  let current = {};
+  try {
+    const raw = JSON.parse(await readFile(STATE_PATH, "utf8"));
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) current = raw;
+  } catch { current = {}; }
+  await writeFile(STATE_PATH, JSON.stringify({ ...current, ...part }), "utf8");
+}
+
 async function saveMatchState(state) {
   try {
-    await writeFile(STATE_PATH, JSON.stringify(state), "utf8");
+    await saveStatePart(state);
   } catch (e) {
     /* Losing the offset costs a re-read, and a re-read is deduped by match key on
        the server, so this must never fail a send. */
@@ -544,6 +560,185 @@ export async function commitMatches(commit) {
   if (commit) await saveMatchState(commit);
 }
 
+/* ------------------------------------------------------------- replays ----
+   The replay file the game writes at the end of every match is the only
+   per-match record that exists. The stats API counts a whole account, so it
+   cannot say which side of a settings change a single game fell on; the replay
+   can, and that is what makes a session that straddles a change splittable
+   instead of "unplaced".
+
+   Two things make this different from the log read beside it, and both are why
+   it has its own high-water mark rather than sharing one. A replay is five to
+   seventeen megabytes, so a poll that re-read one to find out it had already
+   been sent would cost more than everything else this agent does all day. And a
+   replay lands on disk fifteen to ninety seconds AFTER the match ends, so it
+   cannot ride the send that carried the match: the log says the match is over,
+   the agent sends it, and the file that describes it is not written yet. Hence a
+   separate mark, advancing on its own clock, and a replay that goes up on
+   whichever heartbeat follows it.
+
+   Everything here is best-effort in the same way the log read is. A missing
+   Demos folder, a replay the game is still writing, a replay whose layout this
+   reader does not understand - each is one line in the log and nothing else. The
+   settings send is the whole point of this agent and no replay may cost it. */
+const DEMOS_DIR = path.join(savedDir, "Demos");
+/* Twenty, the same cap the endpoint takes. A number twice would be two numbers
+   that can disagree, and twenty is more than one evening's play: five replays an
+   hour for four hours is a marathon session. The batch is also bounded by bytes
+   in the end - a replay is never sent, only the couple of hundred bytes its
+   reader extracts - so the cap is really about how long one poll's reading may
+   take, and each file is a single read of a few megabytes. */
+const REPLAY_SEND_MAX = 20;
+/* The mark lives in the same state file as the log position, under its own key,
+   because the two move at different times and a failed send must roll back only
+   the one it was carrying. */
+let replayComplained = new Set();
+
+/* The replay mark from the state file, or null when nothing has ever been read. */
+async function loadReplayMark() {
+  let raw;
+  try { raw = JSON.parse(await readFile(STATE_PATH, "utf8")); } catch { return null; }
+  if (!raw || typeof raw !== "object" || raw.version !== STATE_VERSION) return null;
+  const mark = raw.replay;
+  if (!mark || typeof mark !== "object") return null;
+  const at = Number(mark.at);
+  if (!Number.isFinite(at) || at <= 0) return null;
+  return {
+    at,
+    names: Array.isArray(mark.names) ? mark.names.filter((n) => typeof n === "string") : [],
+  };
+}
+
+/* Every .replay in the Demos folder, newest last. A folder that is not there is
+   not an error: a machine that has never played has no Demos directory, and the
+   game creates it on the first match. */
+async function replayFiles() {
+  let names;
+  try { names = await readdir(DEMOS_DIR); } catch { return []; }
+  const found = [];
+  for (const name of names) {
+    if (!/\.replay$/i.test(name)) continue;
+    try {
+      const f = await stat(path.join(DEMOS_DIR, name));
+      if (f.isFile()) found.push({ name, path: path.join(DEMOS_DIR, name), mtimeMs: f.mtimeMs });
+    } catch {
+      /* A file that vanished between the listing and the stat is a file the game
+         removed. There is nothing to read and nothing to say. */
+    }
+  }
+  found.sort((a, b) => (a.mtimeMs - b.mtimeMs) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  return found;
+}
+
+/* The mark that lies past a list of files: the newest mtime, and every name
+   sitting exactly on it. The names are needed because Windows timestamps are
+   coarse enough that two replays written back to back can share an mtime, and a
+   plain "greater than" would then skip one of them for ever. */
+function markPast(files) {
+  if (!files.length) return null;
+  let at = 0;
+  for (const f of files) if (f.mtimeMs > at) at = f.mtimeMs;
+  return { at, names: files.filter((f) => f.mtimeMs === at).map((f) => f.name) };
+}
+
+/* Replays newer than the mark, read, plus the mark to commit once the lab has
+   taken them.
+
+   The mark does not move past a batch that was read: that is handed back and
+   written only after a send succeeded, so a refused token or a dropped
+   connection costs a re-read of the same handful of files rather than a batch of
+   numbers the lab will never hear about. The one exception is the same one the
+   log read makes - a first run, and a poll that found nothing to read, move the
+   mark immediately, so a quiet evening does not re-read the same folder every
+   minute.
+
+   Never throws: the caller is on a timer. */
+export async function readNewReplays() {
+  const note = (why) => {
+    if (!replayComplained.has("dir")) {
+      replayComplained.add("dir");
+      log("Not reading Fortnite's replays: " + why + ". Settings still sync exactly as before.");
+    }
+    return { replays: [], commit: null };
+  };
+
+  let files;
+  try { files = await replayFiles(); } catch { files = null; }
+  if (!files) return note("the Demos folder could not be listed");
+  if (!files.length) return { replays: [], commit: null };
+
+  const mark = await loadReplayMark();
+  if (!mark) {
+    /* Nothing has ever been read, so start at the end. A season of replays is
+       not news, and reading it would be a few hundred megabytes for matches the
+       lab already has from its own history. */
+    const commit = markPast(files);
+    await saveReplayMark(commit);
+    return { replays: [], commit: null };
+  }
+
+  const fresh = files.filter((f) => f.mtimeMs > mark.at || (f.mtimeMs === mark.at && !mark.names.includes(f.name)));
+  if (!fresh.length) return { replays: [], commit: null };
+
+  const picked = fresh.slice(-REPLAY_SEND_MAX);
+  const dropped = fresh.length - picked.length;
+
+  const rows = [];
+  for (const file of picked) {
+    let result;
+    try {
+      result = readReplayStats(file.path);
+    } catch (e) {
+      /* readReplayStats promises not to throw, and this is here so a future
+         change to that promise cannot cost the send. */
+      result = { ok: false, reason: "the replay reader threw (" + (e && e.message ? e.message : e) + ")" };
+    }
+    if (!result.ok) {
+      /* One line, once. The file is still marked past below, so a file this
+         reader cannot understand is looked at exactly once rather than on every
+         poll for the rest of the session. */
+      if (!replayComplained.has(file.name)) {
+        replayComplained.add(file.name);
+        log("Skipping replay " + file.name + ": " + (result.reason || "it could not be read") + ".");
+      }
+      continue;
+    }
+    /* The file's own name, not its path: the path carries the Windows account
+       name and the lab has no use for it. */
+    rows.push(replayRow(result, file.name));
+  }
+
+  /* The mark covers every file that was LOOKED at, including the unreadable
+     ones, because those are exactly the files that must not come round again. */
+  const beyond = markPast(picked);
+  const commit = beyond && beyond.at > mark.at ? beyond
+    : { at: mark.at, names: Array.from(new Set([...mark.names, ...(beyond ? beyond.names : [])])) };
+
+  return { replays: rows, dropped, commit };
+}
+
+/* Remember how far the replay folder has been read. Called only after the lab
+   took the batch, so an unsent one is read again next poll rather than lost. */
+export async function commitReplays(commit) {
+  if (!commit) return;
+  await saveReplayMark(commit);
+}
+
+async function saveReplayMark(commit) {
+  if (!commit) return;
+  try {
+    /* version travels with the mark: a state file written by a run that had
+       replays to read but no log to tail must still load, and loadReplayMark
+       refuses a file with no version on it. */
+    await saveStatePart({ version: STATE_VERSION, replay: { at: commit.at, names: commit.names } });
+  } catch (e) {
+    /* Losing the mark costs a re-read of a handful of files, and a re-read is
+       deduped on the server by the replay's own window, so this must never fail
+       a send. */
+    log("Couldn't save the replay position (" + (e && e.message ? e.message : e) + "); the next read may repeat a few replays.");
+  }
+}
+
 /* ------------------------------------------------------------- sending --- */
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -616,6 +811,8 @@ export async function sendOnce(cfg, snap) {
       matches = Number(body?.matches?.stored) > 0 ? Number(body.matches.stored) : 0;
       note = body?.duplicate ? " (same as last time)" : made ? " (" + made + " new test" + (made === 1 ? "" : "s") + ")" : "";
       if (matches) note += " (" + matches + " new match" + (matches === 1 ? "" : "es") + ")";
+      const replays = Number(body?.replayStats?.stored) > 0 ? Number(body.replayStats.stored) : 0;
+      if (replays) note += " (" + replays + " new replay" + (replays === 1 ? "" : "s") + ")";
     } else {
       const body = await res.json().catch(() => null);
       const why = refusalOf(body);
@@ -669,14 +866,42 @@ export async function send(cfg, prepared, deps = {}) {
   if (read.dropped) {
     log("Found " + read.dropped + " more matches than one sync carries; the newest " + MATCH_SEND_MAX + " go up and the rest are skipped.");
   }
-  const wire = read.matches.length ? { ...snap, matches: read.matches } : snap;
+
+  /* Replays ride along on the same POST as the matches and the settings, read
+     under their own mark. They are additive in exactly the way matches are: a
+     replay is not a settings change, it never decides that a send is due, and a
+     replay that will not read is one line and not a fault. The `prepared`
+     argument carries a batch already read by the watch loop so a poll does not
+     read the same files twice; a caller that hands one over is trusted, which
+     is what the harness uses. */
+  let replayed = prepared && prepared.replays ? { replays: prepared.replays, commit: prepared.replayCommit || null }
+    : { replays: [], commit: null };
+  if (!(prepared && prepared.replays)) {
+    try {
+      replayed = await readNewReplays();
+    } catch (e) {
+      log("Couldn't read Fortnite's replays: " + (e && e.message ? e.message : e) + ". Settings still synced.");
+      replayed = { replays: [], commit: null };
+    }
+  }
+  if (replayed.dropped) {
+    log("Found " + replayed.dropped + " more replays than one sync carries; the newest " + REPLAY_SEND_MAX + " go up and the rest are skipped.");
+  }
+
+  const wire = {
+    ...snap,
+    ...(read.matches.length ? { matches: read.matches } : {}),
+    ...(replayed.replays.length ? { replayStats: replayed.replays } : {}),
+  };
 
   for (let attempt = 0; attempt < SEND_TRIES; attempt++) {
     const out = await sendOnce(cfg, wire);
     if (out.ok) {
-      /* Only now does the read position move. A failed send leaves it where it
-         was, so the same matches are read again rather than lost. */
+      /* Only now do the read positions move. A failed send leaves them where
+         they were, so the same matches and replays are read again rather than
+         lost. */
       await commitMatches(read.commit);
+      await commitReplays(replayed.commit);
       return true;
     }
     /* The lab has already said this snapshot is not acceptable, and the next
@@ -754,9 +979,10 @@ export async function watch(cfg, opts = {}) {
   const waitForQuiet = opts.quiet ?? waitQuiet;
   const sendNow = opts.send ?? send;
   const readLog = opts.readLog ?? readNewMatches;
+  const readReplays = opts.readReplays ?? readNewReplays;
   const ticks = opts.ticks ?? Infinity;     // harness only: stop after N polls
 
-  log("Watching Fortnite's config and log. Sending when the config changes and settles, when a match finishes, and once an hour regardless.");
+  log("Watching Fortnite's config, log and replays. Sending when the config changes and settles, when a match finishes, when its replay lands, and once an hour regardless.");
   let last = await signature();
   /* What was last sent, in values rather than bytes. A file the game rewrote
      without changing any setting it sends must not produce a post. */
@@ -806,11 +1032,29 @@ export async function watch(cfg, opts = {}) {
     }
     const played = Array.isArray(read.matches) ? read.matches.length : 0;
 
+    /* Replays are read on every poll too, and are a reason to send on their own.
+       A replay is written fifteen to ninety seconds after the match ends, so the
+       send that carried the match almost never carries its numbers; without a
+       poll that notices the file, those numbers would wait for the next
+       heartbeat - up to an hour - and the whole point of per-match data is that
+       it arrives with the match. */
+    let replayRead = { replays: [], commit: null };
+    try {
+      replayRead = await readReplays();
+    } catch (e) {
+      log("Couldn't read Fortnite's replays: " + (e && e.message ? e : e) + ". Settings still synced.");
+    }
+    const replayed = Array.isArray(replayRead.replays) ? replayRead.replays.length : 0;
+
     const due = clock() - lastSentAt >= heartbeatMs;
-    if (!changed && !due && !played) continue;   // nothing happened: say nothing
+    if (!changed && !due && !played && !replayed) continue;   // nothing happened: say nothing
 
     if (changed) {
       /* fall through to the send: a real value moved */
+    } else if (replayed && !played) {
+      /* A replay landed without a match beside it, which is the ordinary shape:
+         the match went up on an earlier poll and the file arrived after it. */
+      log("A replay arrived - sending it with the current settings.");
     } else if (played) {
       /* A match ended. There is no settings change in this, so no test is opened
          and nothing is deduped away - the matches are additive and the lab files
@@ -827,7 +1071,7 @@ export async function watch(cfg, opts = {}) {
         " minutes - sending anyway so the match numbers stay current.");
     }
 
-    const delivered = await sendNow(cfg, read);
+    const delivered = await sendNow(cfg, { ...read, replays: replayRead.replays, replayCommit: replayRead.commit });
     /* Any attempt restarts the clock, so a refused token or a dropped connection
        costs one line a heartbeat rather than one a poll. */
     lastSentAt = clock();
