@@ -23,8 +23,24 @@
    this module needs sits in a type 3 event that is stored in the clear.
 
    The header also carries the match's start as a .NET tick count and the match's
-   length in milliseconds, which together give the wall-clock end of the match.
-   That end, not anything written in local time, is what the lab joins on.
+   length in milliseconds, which together give the end of the match.
+
+   The start clock is in local time wearing a UTC label
+   ----------------------------------------------------
+   The tick count is the match start in the PLAYING MACHINE'S OWN local time, but
+   it is a bare tick count, so reading it as UTC produces a time off by the zone's
+   offset. This is the same trap recordedAtUtc sets in the replay header and the
+   same one that was caught joining replays to matches once already: in Denver it
+   is six hours, and a six-hour-wrong end silently attaches every replay to
+   nothing at all - the join has a three-second window - so the reader would look
+   like it worked while storing rows no game ever claimed.
+
+   The tick count cannot be corrected by a constant: Denver is -6 in summer and
+   -7 in winter, and the game is played either side of a change. So the ticks are
+   read as the wall clock they are, then that wall clock is resolved through the
+   machine's own zone. The agent runs on the machine that recorded the replay, so
+   that zone is the right one. `localWallClockToUtc` is the conversion and the
+   test pins it against the real matches the lab already stored.
 
    The encryption
    --------------
@@ -190,10 +206,38 @@ export function readReplayHeader(buf) {
 
 /* Ticks to a Date. Number() on the difference rather than on the tick count
    itself, because a tick count does not survive a double but a difference of
-   under a century does. */
+   under a century does.
+
+   The Date this returns is not the instant the match started. The replay writes
+   a local wall-clock reading into a field with no zone, so the value comes out
+   with the local time sitting in the UTC fields: 00:34 in Denver in October
+   reads back as "2026-10-29T00:34:37Z", six hours before the match was actually
+   played. `localWallClockToUtc` is what turns it into a real instant, and
+   everything that leaves this module goes through it. */
 export function ticksToDate(ticks) {
   const ms = Number((BigInt(ticks) - DOTNET_EPOCH_TICKS) / 10000n);
   return new Date(ms);
+}
+
+/* The local wall-clock reading in `naive`'s UTC fields, resolved as an instant.
+   Constructing a Date from local components is what applies the zone: the four
+   numbers are read back out as they were written, then handed to the Date
+   constructor that interprets them where the machine is standing, summer time
+   and all. Nothing here assumes an offset, so a match played in March and one
+   played in November both land correctly.
+
+   One consequence worth naming: this is the only place in the module whose
+   answer depends on the machine it runs on. That is not an accident to be
+   engineered away - the file carries no zone, so the machine that recorded it is
+   the only source of truth there is - but it does mean the result has to be
+   checked against matches in a real database rather than against a number
+   written down here. The suite does exactly that. */
+export function localWallClockToUtc(naive) {
+  return new Date(
+    naive.getUTCFullYear(), naive.getUTCMonth(), naive.getUTCDate(),
+    naive.getUTCHours(), naive.getUTCMinutes(), naive.getUTCSeconds(),
+    naive.getUTCMilliseconds(),
+  );
 }
 
 /* Every chunk in the stream, in order, with where its payload starts.
@@ -483,7 +527,10 @@ export function readReplayBuffer(buf, path = "(in memory)") {
     return { ...base, reason: "the replay has no start clock, so the match cannot be placed in time" };
   }
 
-  const started = ticksToDate(header.startTicks);
+  /* The tick count is local wall clock; this resolves it to the real instant.
+     See localWallClockToUtc - a six-hour error here does not fail loudly, it
+     makes every replay miss its match by six hours and attach to nothing. */
+  const started = localWallClockToUtc(ticksToDate(header.startTicks));
   const startedMs = started.getTime();
   if (!Number.isFinite(startedMs) || startedMs < EARLIEST_MS || startedMs > LATEST_MS) {
     return { ...base, reason: "the replay's start clock is not a date this century" };

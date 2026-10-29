@@ -1,6 +1,6 @@
 -- Settings lab: what the replay file says about one match.
 -- Apply once:
---   wrangler d1 execute zoi-tryouts --remote --file migrations/0009_add_replay_stats.sql
+--   wrangler d1 execute zoi-tryouts --remote --file migrations/0010_add_replay_stats.sql
 -- (both statements are CREATE ... IF NOT EXISTS, so running it again is harmless)
 --
 -- Why a second table rather than columns on lab_matches
