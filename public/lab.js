@@ -18,7 +18,7 @@ const nodes = {
   who: $('who'),
   loadError: $('load-error'), loadErrorText: $('load-error-text'), retry: $('retry'),
   app: $('app'), figures: $('figures'), figuresNote: $('figures-note'),
-  current: $('current'), currentNote: $('current-note'),
+  current: $('current'), currentNote: $('current-note'), currentMode: $('current-mode'),
   chartKpm: $('chart-kpm'), chartKpmBox: $('chart-kpm-box'),
   chartWin: $('chart-win'), chartWinBox: $('chart-win-box'),
   chartKey: $('chart-key'), chartEmpty: $('chart-empty'),
@@ -202,9 +202,40 @@ function renderFigures() {
    The tracked settings only, one row each. The page already knows every label
    from the change cards, and the payload carries the value as the save holds
    it, so this is a read rather than a second settings page. */
+/* ---------- the mode the last match was played in ----------
+   One line, and only when the log actually proved it. The mode comes from the
+   settings block the match was queued under, so it is a fact rather than an
+   inference; a match joined in progress has no such block and stores nothing, and
+   then this line is not drawn at all rather than reading "unknown". */
+function modeWord(value, fallback) {
+  const v = typeof value === 'string' ? value.trim() : '';
+  return v || fallback;
+}
+
+function renderMode() {
+  const m = state.perf && state.perf.lastMatch;
+  nodes.currentMode.replaceChildren();
+  const key = m && typeof m === 'object' ? modeText(m) : '';
+  if (!key) { hide(nodes.currentMode); return; }
+  nodes.currentMode.textContent = key;
+  show(nodes.currentMode);
+}
+
+/* "Ranked · Zero Build · Solo". The three fields are the mode; a field the log did
+   not name is left out rather than shown as a blank or a guess. The playlist name
+   is not shown: it is an internal identifier he did not ask to read. */
+function modeText(m) {
+  const ranked = modeWord(m.ranked, '');
+  const build = modeWord(m.build_mode !== undefined ? m.build_mode : m.buildMode, '');
+  const team = modeWord(m.team_size !== undefined ? m.team_size : m.teamSize, '');
+  const buildWord = build === 'Zero' ? 'Zero Build' : build === 'Build' ? 'Build' : build;
+  return [ranked, buildWord, team].filter(Boolean).join(' \u00b7 ');
+}
+
 function renderCurrent() {
   const c = state.perf && state.perf.current;
   nodes.current.replaceChildren();
+  renderMode();
   if (!c || !Array.isArray(c.settings) || !c.settings.length) {
     nodes.current.append(el('p', 'lab-empty', 'Nothing yet. Your PC sends the whole config with every sync, so this fills in on its own.'));
     hide(nodes.currentNote);
@@ -534,6 +565,17 @@ function beforeAfterRows(c) {
   return wrap;
 }
 
+/* Which games the comparison was run on. A mode split is a narrower sample and a
+   stronger claim, so it is named; a blended comparison says it is blended rather
+   than leaving the reader to assume the games were all one mode. */
+function scopeNote(c) {
+  if (c.scope === 'ranked' || c.scope === 'unranked') {
+    const named = modeText({ ranked: c.scope === 'ranked' ? 'Ranked' : 'Unranked', build_mode: '', team_size: '' });
+    return 'Compared in ' + named + ' only';
+  }
+  return 'All modes together';
+}
+
 function changeCard(c) {
   const card = el('article', 'lab-change lab-change-' + c.verdict);
   const head = el('div', 'lab-change-head');
@@ -550,6 +592,8 @@ function changeCard(c) {
   const meta = el('p', 'lab-change-meta');
   if (when) meta.append(el('span', 'lab-change-when', when));
   meta.append(el('span', 'lab-change-primary-name', 'Judged on kills a match'));
+  const scope = scopeNote(c);
+  if (scope) meta.append(el('span', 'lab-change-scope', scope));
   card.append(meta);
 
   card.append(killsLine(c));

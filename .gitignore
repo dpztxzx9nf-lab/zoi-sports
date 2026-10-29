@@ -18,3 +18,7 @@ __pycache__/
 
 # The agent's own log: it lives on the player's PC, not in the repo.
 tools/zoi-lab-agent.log
+
+# How far into Fortnite's log the agent has read. Machine state, written beside
+# the agent on the player's PC, never part of the site.
+tools/zoi-lab-agent-state.json

@@ -17,6 +17,15 @@ import { epicIdOf, fetchStats, recordStats, summarize, updateGamesPlayed } from 
 
 const TAKEN_AT_MAX = 40;
 const SOURCE_MAX = 40;
+/* A match carries a handful of short strings from the log. Anything longer than
+   this is not one of those strings, so it is refused rather than stored. */
+const MATCH_MAX = 50;
+const MATCH_TEXT_MAX = 80;
+const MATCH_ID = /^[0-9a-f]{32}$/;
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
+const RANKED = new Set(["Ranked", "Unranked"]);
+const BUILDS = new Set(["Zero", "Build"]);
+const TEAMS = new Set(["Solo", "Duo", "Trio", "Squad"]);
 
 const labels = new Map(CATALOG.map((c) => [c.id, c.label]));
 
@@ -131,6 +140,7 @@ export async function onRequest({ request, env }) {
   const skipped = [];
   const closed = [];
   let duplicate = false;
+  let matchResult = { stored: 0, seen: 0, dropped: [] };
 
   try {
     /* The newest row decides both the duplicate check and the diff baseline.
@@ -213,10 +223,23 @@ export async function onRequest({ request, env }) {
     return json({ ok: false, error: "Couldn't save that snapshot." }, 500);
   }
 
+  /* Matches are separate from the snapshot in every way that matters. They are
+     validated on their own, they are stored on their own, and a bad one is
+     dropped with a note rather than failing the send: an agent that has a
+     parse bug in its log reader must not lose the settings sync over it. The
+     array is optional, so an older agent that sends none behaves exactly as
+     before. */
+  try {
+    matchResult = await storeMatches(env, owner, body.matches);
+  } catch (e) {
+    console.error("lab sync matches failed", e);
+    matchResult = { stored: 0, seen: 0, dropped: ["the matches could not be stored"] };
+  }
+
   /* Past this point the snapshot is stored, so nothing below may fail the
      request: a stats problem is reported in the reply and nothing else. */
   const stats = await syncStats(env, owner, tokenId, epicAccountId);
-  return json({ ok: true, created, skipped, closed, duplicate, stats });
+  return json({ ok: true, created, skipped, closed, duplicate, stats, matches: matchResult });
 }
 
 /* ------------------------------------------------------------- the stats ---
@@ -258,4 +281,102 @@ async function syncStats(env, owner, tokenId, epicAccountId) {
     console.error("lab stats store failed", e);
     return { ok: false, reason: "store" };
   }
+}
+
+/* ----------------------------------------------------------- the matches ---
+   One row per match, keyed by a hash of the owner and the game's own
+   GameSessionID. The hash rather than the raw id, because the owner is part of
+   the key: two people on the same machine must not collapse onto one row, and the
+   unique index has to be a single column pair for ON CONFLICT to work.
+
+   Every field is written as the log said it or as NULL. Nothing here fills a gap
+   with a zero, an average or the mode of the match before: a match joined in
+   progress has no settings block behind it and is stored with a null mode, which
+   is the truth about what is known and reads differently from "unranked".
+
+   The log does not contain kills, damage, accuracy, headshots or placement, so
+   none of those are here and none are derived. players_left_* is the presence
+   line's own count, which goes both ways during a match; it is carried as a
+   low-water mark, and it is not a finishing position. */
+function matchRecord(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+
+  const matchId = typeof raw.matchId === "string" ? raw.matchId.trim().toLowerCase() : "";
+  if (!MATCH_ID.test(matchId)) return null;
+
+  const text = (v, max = MATCH_TEXT_MAX) => {
+    if (typeof v !== "string") return null;
+    const s = v.trim();
+    return s && s.length <= max ? s : null;
+  };
+  const when = (v) => (typeof v === "string" && ISO.test(v.trim()) ? v.trim() : null);
+  const count = (v) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.round(v) : null);
+
+  const endedAt = when(raw.endedAt);
+  /* No end time means no place on the timeline, which is the only thing a match
+     row is used for. It is refused rather than stored with a made-up stamp. */
+  if (!endedAt) return null;
+
+  const ranked = RANKED.has(raw.ranked) ? raw.ranked : null;
+  const buildMode = BUILDS.has(raw.buildMode) ? raw.buildMode : null;
+  const teamSize = TEAMS.has(raw.teamSize) ? raw.teamSize : null;
+
+  /* A rank is only stored beside the ladder it belongs to. A number alone would
+     be read as one rank when the log's two ladders are counted differently. */
+  const rankType = text(raw.rankType, 64);
+  const rankNum = count(raw.rank);
+  const rank = rankType && rankNum !== null ? rankNum : null;
+
+  return {
+    matchId,
+    playlist: text(raw.playlist),
+    playlistType: text(raw.playlistType, 40),
+    ranked,
+    buildMode,
+    teamSize,
+    region: text(raw.region, 24),
+    rankType: rank ? rankType : null,
+    rank,
+    playersLeftLow: count(raw.playersLeftLow),
+    playersLeftFirst: count(raw.playersLeftFirst),
+    playersLeftReadings: count(raw.playersLeftReadings),
+    startedAt: when(raw.startedAt),
+    endedAt,
+  };
+}
+
+async function storeMatches(env, owner, rawMatches) {
+  if (rawMatches === undefined || rawMatches === null) return { stored: 0, seen: 0, dropped: [] };
+  if (!Array.isArray(rawMatches)) return { stored: 0, seen: 0, dropped: ["matches has to be a list"] };
+
+  const seen = rawMatches.slice(0, MATCH_MAX).length;
+  const dropped = [];
+  if (rawMatches.length > MATCH_MAX) {
+    dropped.push("only the newest " + MATCH_MAX + " matches were read");
+  }
+
+  /* Newest last in, but the order does not matter: each row stands alone. A row
+     that cannot be read is counted and skipped, never guessed at. */
+  let stored = 0;
+  let bad = 0;
+  for (const raw of rawMatches.slice(0, MATCH_MAX)) {
+    const m = matchRecord(raw);
+    if (!m) { bad++; continue; }
+
+    const key = await sha256Hex(owner + "\n" + m.matchId);
+    const row = await env.DB.prepare(
+      `INSERT INTO lab_matches
+         (owner,match_key,playlist,playlist_type,ranked,build_mode,team_size,region,rank_type,rank,
+          players_left_low,players_left_first,players_left_readings,started_at,ended_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       ON CONFLICT (owner,match_key) DO NOTHING`
+    ).bind(
+      owner, key, m.playlist, m.playlistType, m.ranked, m.buildMode, m.teamSize, m.region,
+      m.rankType, m.rank, m.playersLeftLow, m.playersLeftFirst, m.playersLeftReadings,
+      m.startedAt, m.endedAt
+    ).run();
+    if (row?.meta?.changes) stored += 1;
+  }
+  if (bad) dropped.push(bad + (bad === 1 ? " match could not be read" : " matches could not be read"));
+  return { stored, seen, dropped };
 }

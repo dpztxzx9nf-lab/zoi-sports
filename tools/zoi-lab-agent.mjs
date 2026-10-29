@@ -34,15 +34,22 @@
    because a hidden window shows nothing and a failure would otherwise
    leave no trace on the machine.
 
+   It also tails Fortnite's own log and sends the matches it can prove, so the
+   lab knows which mode a stretch of play was in. The log is never sent, only the
+   handful of fields about each match; see tools/zoi-lab-mode.mjs for what the
+   log does and does not say. The read is by stored byte offset, so a 50 MB log
+   costs a few KB a minute and nothing is parsed twice.
+
    The parser below is a port of playbook/tools/parse.py, which stays the
    reference. Same tag layout, same 4-byte values, same float rounding, so both
    read a save to the same numbers. Nothing here is new logic. */
 
 import { inflateSync } from "node:zlib";
-import { readFile, readdir, stat } from "node:fs/promises";
+import { open, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { appendFileSync, existsSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { scanLog } from "./zoi-lab-mode.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = path.join(HERE, "zoi-lab-agent.json");
@@ -365,6 +372,178 @@ export async function snapshot() {
   };
 }
 
+/* ------------------------------------------------------------- matches ----
+   Fortnite's own log says which mode each match was played in, and the lab needs
+   that to keep a ranked evening out of the same pile as an unranked one. The log
+   is read here and turned into a handful of match records, which are the only
+   thing that leaves this machine. See tools/zoi-lab-mode.mjs for what the log
+   does and does not say; the short version is that it says the mode, the start,
+   the end, the rank the game reported afterwards, and a noisy count of players
+   left - and nothing else at all.
+
+   Read by byte offset, not by re-reading the file. His log is 50 MB after a few
+   evenings and a full parse every minute would be a silly thing to ask of a
+   gaming PC, so the offset and the parser's own carried state go in a small JSON
+   beside the agent. Everything here is best-effort: a missing log, a log the
+   game is halfway through writing, or a state file that will not parse all leave
+   the settings sync working exactly as it did before. */
+const LOGS_DIR = path.join(savedDir, "Logs");
+/* Beside the agent, like its config and its log. A harness overrides it so the
+   checks never write into the repo. */
+const STATE_PATH = process.env.ZOI_LAB_STATE || path.join(HERE, "zoi-lab-agent-state.json");
+const STATE_VERSION = 1;
+/* A poll reads at most this much, however far behind it is. A first run starts at
+   the end anyway; this only bounds the case where the game wrote a great deal
+   while the agent was not running. */
+const READ_MAX_BYTES = 8 * 1024 * 1024;
+const MATCH_SEND_MAX = 50;         // newest first is what the lab reads; the rest can wait for dedupe
+let logComplained = false;
+
+/* The file to tail: FortniteGame.log, or the newest rotated backup when the live
+   one is not there. Rotation renames the live file and starts a fresh one, so by
+   mtime the live file is the newest whenever the game has run at all; the tie
+   break keeps it that way if the two ever land on the same clock tick. */
+async function logFile() {
+  let names;
+  try { names = await readdir(LOGS_DIR); } catch { return null; }
+  const found = [];
+  for (const name of names) {
+    if (name !== "FortniteGame.log" && !/^FortniteGame-backup-.*\.log$/i.test(name)) continue;
+    const f = await info(path.join(LOGS_DIR, name));
+    if (f) found.push({ ...f, name });
+  }
+  if (!found.length) return null;
+  found.sort((a, b) => (b.mtimeMs - a.mtimeMs) || (a.name === "FortniteGame.log" ? -1 : b.name === "FortniteGame.log" ? 1 : 0));
+  return found[0];
+}
+
+/* Bytes from `from` to `to`. Only the new tail is ever read. */
+async function readRange(p, from, to) {
+  const length = Math.max(0, to - from);
+  if (!length) return "";
+  const fh = await open(p, "r");
+  try {
+    const buf = Buffer.alloc(length);
+    const { bytesRead } = await fh.read(buf, 0, length, from);
+    return buf.subarray(0, bytesRead).toString("utf8");
+  } finally {
+    await fh.close();
+  }
+}
+
+/* Offsets are kept in a file rather than in memory, because the logon task runs
+   --once and exits: an offset held in memory would be forgotten between runs and
+   every run would re-read the whole log. A state file that will not parse is
+   treated as a first run, which starts at the end rather than replaying a season
+   of matches at once. */
+async function loadMatchState() {
+  const fresh = { version: STATE_VERSION, file: null, offset: 0, parser: null };
+  let raw;
+  try { raw = JSON.parse(await readFile(STATE_PATH, "utf8")); } catch { return fresh; }
+  if (!raw || typeof raw !== "object" || raw.version !== STATE_VERSION) return fresh;
+  const offset = Number(raw.offset);
+  return {
+    version: STATE_VERSION,
+    file: typeof raw.file === "string" ? raw.file : null,
+    offset: Number.isFinite(offset) && offset >= 0 ? offset : 0,
+    parser: raw.parser && typeof raw.parser === "object" ? raw.parser : null,
+  };
+}
+
+async function saveMatchState(state) {
+  try {
+    await writeFile(STATE_PATH, JSON.stringify(state), "utf8");
+  } catch (e) {
+    /* Losing the offset costs a re-read, and a re-read is deduped by match key on
+       the server, so this must never fail a send. */
+    log("Couldn't save the log position (" + (e && e.message ? e.message : e) + "); the next read may repeat a few matches.");
+  }
+}
+
+/* New matches since the last read, plus the state to commit once they are safely
+   at the lab. Nothing is written to disk here: the position only moves after a
+   send succeeded, so a refused token or a dropped connection costs a re-read
+   rather than a batch of matches the lab will never hear about.
+
+   Never throws: the caller is on a timer and a broken log must not stop it. */
+export async function readNewMatches() {
+  const note = (why) => {
+    if (!logComplained) {
+      logComplained = true;
+      log("Not reading Fortnite's log: " + why + ". Settings still sync exactly as before.");
+    }
+    return { matches: [], commit: null };
+  };
+
+  let file;
+  try { file = await logFile(); } catch { file = null; }
+  if (!file) return note("no FortniteGame.log under " + LOGS_DIR);
+
+  const saved = await loadMatchState();
+
+  let offset;
+  if (saved.file === null) {
+    /* Nothing has ever been read, so start at the end: a match already played is
+       not news, and the lab has enough history to catch up on without a season
+       of it arriving at once. */
+    offset = file.size;
+  } else if (saved.file !== file.name) {
+    /* A different file, which means the log was rotated: the new one is short and
+       its first lines are the ones that say what is being queued for, so it is
+       read from the start. A match that arrives twice is dropped by its key. */
+    offset = 0;
+  } else if (file.size < saved.offset) {
+    offset = 0;                                  // truncated or replaced in place
+  } else {
+    offset = saved.offset;
+  }
+
+  const start = file.size - offset > READ_MAX_BYTES ? file.size - READ_MAX_BYTES : offset;
+  let text;
+  try { text = await readRange(file.path, start, file.size); } catch (e) {
+    return note("the log could not be read (" + (e && e.message ? e.message : e) + ")");
+  }
+
+  /* Only whole lines are consumed. The game writes as it plays, so the last line
+     in the file can be half written; parsing it would drop a match-end marker and
+     the offset would move past it. Leaving it for the next read costs nothing. */
+  let consumed = file.size;
+  if (text.length && !text.endsWith("\n")) {
+    const cut = text.lastIndexOf("\n");
+    consumed = cut < 0 ? start : start + cut + 1;
+    text = cut < 0 ? "" : text.slice(0, cut + 1);
+  }
+
+  let result;
+  try {
+    /* settle: the agent reads in one-minute slices and the rank line for a match
+       lands a minute or three after it, so a closed match is held until its rank
+       arrives or the window for one closes. */
+    result = scanLog(text.split(/\r?\n/), { state: saved.parser, settle: true });
+  } catch (e) {
+    return note("the log could not be parsed (" + (e && e.message ? e.message : e) + ")");
+  }
+
+  logComplained = false;
+  const all = Array.isArray(result.matches) ? result.matches : [];
+  const commit = { version: STATE_VERSION, file: file.name, offset: consumed, parser: result.state };
+  /* Nothing to send means nothing to lose: the position moves now, so a quiet
+     evening does not re-read the same tail on every poll. A poll that did find
+     matches hands the commit back instead, and it is only written once the lab
+     has taken them. */
+  if (!all.length) {
+    await saveMatchState(commit);
+    return { matches: [], dropped: 0, commit: null };
+  }
+  return { matches: all.slice(-MATCH_SEND_MAX), dropped: Math.max(0, all.length - MATCH_SEND_MAX), commit };
+}
+
+/* Remember how far the log has been read. Called only after the lab took the
+   matches, so an unsent batch is read again next poll instead of vanishing. */
+export async function commitMatches(commit) {
+  if (commit) await saveMatchState(commit);
+}
+
 /* ------------------------------------------------------------- sending --- */
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -402,6 +581,7 @@ async function loadConfig() {
 async function sendOnce(cfg, snap) {
   let status = 0;
   let note = "";
+  let matches = 0;
   try {
     const res = await fetch(cfg.endpoint, {
       method: "POST",
@@ -412,18 +592,25 @@ async function sendOnce(cfg, snap) {
     if (res.ok) {
       const body = await res.json().catch(() => null);
       const made = Array.isArray(body?.created) ? body.created.length : 0;
+      matches = Number(body?.matches?.stored) > 0 ? Number(body.matches.stored) : 0;
       note = body?.duplicate ? " (same as last time)" : made ? " (" + made + " new test" + (made === 1 ? "" : "s") + ")" : "";
+      if (matches) note += " (" + matches + " new match" + (matches === 1 ? "" : "es") + ")";
     } else if (status === 401) {
       note = " - the token was refused; create a new one on the lab page";
     }
   } catch (e) {
     note = " - " + (e && e.message ? e.message : "no connection");
   }
-  log("Sent " + Object.keys(snap.settings).length + " settings, HTTP " + (status || "no reply") + note);
-  return status >= 200 && status < 300;
+  const count = Object.keys(snap.settings || {}).length;
+  log("Sent " + count + " settings, HTTP " + (status || "no reply") + note);
+  return { ok: status >= 200 && status < 300, matches };
 }
 
-async function send(cfg) {
+/* A snapshot plus whatever the log has proved since the last read. The matches
+   are additive: they do not decide whether a send is due, because a new match is
+   not a settings change and must not open a test. They ride along with whatever
+   send happens next, which the watch loop triggers when it sees one arrive. */
+async function send(cfg, prepared) {
   let snap = null;
   try {
     snap = await snapshot();
@@ -435,8 +622,30 @@ async function send(cfg) {
     log("No Fortnite config found under " + savedDir + " - is the game installed for this user?");
     return false;
   }
+
+  /* The log read is not allowed to matter: if anything in it fails the snapshot
+     goes up on its own, exactly as it did before matches existed. */
+  let read = prepared || { matches: [], commit: null };
+  if (!prepared) {
+    try {
+      read = await readNewMatches();
+    } catch (e) {
+      log("Couldn't read Fortnite's log: " + (e && e.message ? e : e) + ". Settings still synced.");
+    }
+  }
+  if (read.dropped) {
+    log("Found " + read.dropped + " more matches than one sync carries; the newest " + MATCH_SEND_MAX + " go up and the rest are skipped.");
+  }
+  const wire = read.matches.length ? { ...snap, matches: read.matches } : snap;
+
   for (let attempt = 0; attempt < SEND_TRIES; attempt++) {
-    if (await sendOnce(cfg, snap)) return true;
+    const out = await sendOnce(cfg, wire);
+    if (out.ok) {
+      /* Only now does the read position move. A failed send leaves it where it
+         was, so the same matches are read again rather than lost. */
+      await commitMatches(read.commit);
+      return true;
+    }
     if (attempt < SEND_TRIES - 1) await sleep(BACKOFF_MS[attempt] || 45_000);
   }
   return false;
@@ -476,9 +685,10 @@ export async function watch(cfg, opts = {}) {
   const sleepFor = opts.sleep ?? sleep;
   const waitForQuiet = opts.quiet ?? waitQuiet;
   const sendNow = opts.send ?? send;
+  const readLog = opts.readLog ?? readNewMatches;
   const ticks = opts.ticks ?? Infinity;     // harness only: stop after N polls
 
-  log("Watching Fortnite's config. Sending when it changes and settles, and once an hour regardless.");
+  log("Watching Fortnite's config and log. Sending when the config changes and settles, when a match finishes, and once an hour regardless.");
   let last = await signature();
   if (!last) log("No config found yet under " + savedDir + " - waiting for the game to run.");
 
@@ -490,12 +700,31 @@ export async function watch(cfg, opts = {}) {
     await sleepFor(pollMs);
     const sig = await signature();
     const changed = sig !== last;
+
+    /* The log is read on every poll, not only when a send is due: that is how a
+       finished match is noticed at all, since playing a match does not touch the
+       config. A failed read leaves matches empty and the loop behaves exactly as
+       it did before this existed. */
+    let read = { matches: [], commit: null };
+    try {
+      read = await readLog();
+    } catch (e) {
+      log("Couldn't read Fortnite's log: " + (e && e.message ? e : e) + ". Settings still synced.");
+    }
+    const played = Array.isArray(read.matches) ? read.matches.length : 0;
+
     const due = clock() - lastSentAt >= heartbeatMs;
-    if (!changed && !due) continue;          // nothing changed and not due: say nothing
+    if (!changed && !due && !played) continue;   // nothing happened: say nothing
 
     if (changed) {
       last = sig;
       await waitForQuiet();
+    } else if (played) {
+      /* A match ended. There is no settings change in this, so no test is opened
+         and nothing is deduped away - the matches are additive and the lab files
+         them by their own key. Worth a line, because an evening of play with no
+         settings touched would otherwise look like the agent doing nothing. */
+      log("A match finished - sending it with the current settings.");
     } else {
       /* Nothing moved. The snapshot is identical to the last one, so the lab
          dedupes it and opens no tests - but the stats read still runs, which is
@@ -506,7 +735,7 @@ export async function watch(cfg, opts = {}) {
         " minutes - sending anyway so the match numbers stay current.");
     }
 
-    await sendNow(cfg);
+    await sendNow(cfg, read);
     /* Any attempt restarts the clock, so a refused token or a dropped connection
        costs one line a heartbeat rather than one a poll. */
     lastSentAt = clock();

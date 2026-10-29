@@ -15,6 +15,25 @@
    finding. Kills per match moves enough to read, so that is the metric a change
    is judged on. Win rate is still carried, as a slow second opinion.
 
+   What a session was played in
+   ---------------------------
+   A session is a gap between two cumulative readings, and the counters in it are
+   one pile for every mode played. The log says which mode each match was in, so
+   each session carries a label: the one mode if every match inside it was that
+   mode, "mixed" if more than one was played, "unknown" if nothing in the window
+   proves a mode at all. A change's before/after comparison then prefers sessions
+   of the same mode as the games after it, because that is the comparison the
+   person actually asked for - did this setting help at the mode I play. When
+   there are not enough same-mode games on both sides it falls back to the
+   blended comparison and says so, rather than quietly comparing a ranked evening
+   with an unranked one.
+
+   Nothing here splits a session between modes, and nothing attributes a session
+   to a mode it cannot prove: a window that mixed two modes is excluded from a
+   mode-split comparison, not divided in half. That is why a mode-split verdict
+   is built on fewer sessions and takes longer to arrive - which is the honest
+   cost of the only claim the log can support.
+
    Pure: takes rows and a clock, returns a payload. No database, no fetch, and no
    imports, so lookups arrive as arguments. */
 
@@ -30,6 +49,12 @@ export const OVERDISPERSION = 2.5; /* see killsInterval */
 export const PRIMARY = "kills_per_match";
 export const MAX_SEGMENTS = 60;    /* what the chart draws */
 export const MAX_READINGS = 400;
+export const MAX_MATCHES = 400;    /* matches read for labelling; a window never needs more */
+
+/* The three labels a session can carry besides a real mode. Spelled out rather
+   than inlined so a caller can test against them without copying the strings. */
+export const MODE_MIXED = "mixed";
+export const MODE_UNKNOWN = "unknown";
 
 /* Why MIN_GAMES is 25 rather than a round 10.
    A verdict needs the two kills-per-match intervals to separate. At this
@@ -294,6 +319,92 @@ export function judge(before, after) {
   return { ...out, verdict: "even" };
 }
 
+/* ---------- what a session was played in ---------- */
+
+/* The mode a match was played in, as one short key, or null when the log never
+   said. Deliberately the same rule as modeKeyOf in tools/zoi-lab-mode.mjs, and
+   deliberately not imported from it: this file takes its lookups as arguments
+   and imports nothing, and a Pages function should not reach outside its own
+   tree. Two matches with the same key were played in the same mode; that is the
+   only claim it makes. Accepts a row D1 hands back and a record the agent sends,
+   hence both spellings. */
+export function modeKeyOf(match) {
+  if (!match || typeof match !== "object") return null;
+  const ranked = match.ranked;
+  const build = match.buildMode !== undefined ? match.buildMode : match.build_mode;
+  const team = match.teamSize !== undefined ? match.teamSize : match.team_size;
+  const parts = [ranked, build, team].filter((v) => typeof v === "string" && v);
+  return parts.length ? parts.join("|") : null;
+}
+
+/* The three values scope may take, and nothing else. A mode that is neither
+   provably ranked nor provably unranked is not given one of these two words: it
+   is compared blended, because the alternative is filing games under a ranked
+   heading the log never put them under. */
+function scopeOfMode(key) {
+  if (typeof key !== "string") return null;
+  if (key.startsWith("Ranked|")) return "ranked";
+  if (key.startsWith("Unranked|")) return "unranked";
+  return null;
+}
+
+/* Which mode each session was played in.
+
+   A match belongs to the session whose window it ended inside. The reading at the
+   end of a window counts every match finished by then and the reading at its
+   start counts none of them, so end time is the one honest placement - no
+   interpolation, and no dividing a session between modes.
+
+   The label is a mode only when every match in the window has a mode and they are
+   all the same one. Anything else is MODE_MIXED, which here means "not provably
+   one mode" and covers both a window that genuinely held two modes and a window
+   holding a match the log could not attribute - the second case is why a
+   conservative label is the only safe one. A session with no matches in it at
+   all is MODE_UNKNOWN, which is different from mixed and is said differently:
+   nothing was played, or nothing was logged, and either way there is no claim to
+   make. */
+function labelSessions(segments, matches) {
+  const list = (Array.isArray(matches) ? matches : [])
+    .slice(-MAX_MATCHES)
+    .map((m) => ({
+      key: modeKeyOf(m),
+      ms: timeOf(m && (m.ended_at !== undefined && m.ended_at !== null ? m.ended_at : m.endedAt)),
+    }))
+    .filter((m) => Number.isFinite(m.ms))
+    .sort((a, b) => a.ms - b.ms);
+
+  for (const s of segments) {
+    const keys = new Set();
+    let any = 0;
+    let unproven = false;
+    for (const m of list) {
+      if (!(m.ms > s.fromMs && m.ms <= s.toMs)) continue;
+      any += 1;
+      if (m.key === null) unproven = true;
+      else keys.add(m.key);
+    }
+    if (!any) s.mode = MODE_UNKNOWN;
+    else if (unproven || keys.size !== 1) s.mode = MODE_MIXED;
+    else s.mode = [...keys][0];
+  }
+  return segments;
+}
+
+/* The one mode every match in these sessions shares, or null when there is not
+   one. Null is the answer for a mix, for a session whose mode is unknown, and for
+   an empty sample: none of those is a mode to compare on. */
+function singleModeOf(segments) {
+  const modes = new Set();
+  let matches = 0;
+  for (const s of segments || []) {
+    matches += Number(s.matches) || 0;
+    if (s.mode === MODE_MIXED || s.mode === MODE_UNKNOWN || typeof s.mode !== "string") return null;
+    modes.add(s.mode);
+  }
+  if (!(matches > 0) || modes.size !== 1) return null;
+  return [...modes][0];
+}
+
 /* ---------- the whole payload ---------- */
 
 /* watchFor is the lookup the caller threads in: a Map or a plain object keyed
@@ -309,8 +420,8 @@ function watcherFor(watch) {
   return (id) => (Object.prototype.hasOwnProperty.call(watch, id) ? clean(watch[id]) : null);
 }
 
-export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_SEGMENTS, watch = null }) {
-  const segments = segmentsOf((rows || []).slice(-MAX_READINGS));
+export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_SEGMENTS, watch = null, matches = null }) {
+  const segments = labelSessions(segmentsOf((rows || []).slice(-MAX_READINGS)), matches);
   const watchFor = watcherFor(watch);
   const changes = [];
 
@@ -322,12 +433,44 @@ export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_S
   for (let i = 0; i < ordered.length; i++) {
     const t = ordered[i];
     const nextMs = i + 1 < ordered.length ? ordered[i + 1].startedMs : null;
-    const afterSegs = sampleAfter(segments, t.startedMs, nextMs);
-    const after = totalsOf(afterSegs);
-    /* Matched sample: the same number of games before the change as after it,
-       so a long run before and a short run after are not compared as if equal. */
-    const beforeSegs = after.matches > 0 ? sampleBefore(segments, t.startedMs, after.matches) : [];
-    const before = totalsOf(beforeSegs);
+
+    /* The blended sample first, exactly as it was before any of this existed. It
+       is what an agent sending no matches still gets, and it is the fallback. */
+    const blendedAfterSegs = sampleAfter(segments, t.startedMs, nextMs);
+    const blendedAfter = totalsOf(blendedAfterSegs);
+    const blendedBeforeSegs = blendedAfter.matches > 0 ? sampleBefore(segments, t.startedMs, blendedAfter.matches) : [];
+    const blendedBefore = totalsOf(blendedBeforeSegs);
+
+    /* Then the same question asked of one mode. The games after the change are
+       what decide which mode that is: they are the ones just played, so they are
+       the ones the answer is wanted for. If they are not provably one mode there
+       is nothing to narrow to and the blended comparison is the only honest one. */
+    const afterMode = singleModeOf(blendedAfterSegs);
+    let scope = "blended";
+    let after = blendedAfter;
+    let before = blendedBefore;
+
+    if (afterMode !== null) {
+      const scopedAfterSegs = blendedAfterSegs.filter((x) => x.mode === afterMode);
+      const scopedAfter = totalsOf(scopedAfterSegs);
+      const scopedBeforeSegs = scopedAfter.matches > 0
+        ? sampleBefore(segments.filter((x) => x.mode === afterMode), t.startedMs, scopedAfter.matches)
+        : [];
+      const scopedBefore = totalsOf(scopedBeforeSegs);
+
+      /* Same mode on both sides only if both sides can stand on their own. A
+         mode split that drops one side under MIN_GAMES would answer "too soon"
+         where a blended answer was already available, which trades a real answer
+         for a narrower one that is not there yet. So it falls back, and the
+         fallback is labelled blended rather than passed off as a mode result. */
+      const enough = scopedBefore.matches >= MIN_GAMES && scopedAfter.matches >= MIN_GAMES;
+      if (enough) {
+        scope = scopeOfMode(afterMode) || "blended";
+        after = scopedAfter;
+        before = scopedBefore;
+      }
+    }
+
     const j = judge(before, after);
 
     const winBefore = before.wins !== null && before.matches > 0 ? wilson(before.wins, before.matches) : null;
@@ -411,6 +554,15 @@ export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_S
       win_games_target,
       win_rate_effect: WIN_RATE_EFFECT,
       primary: PRIMARY,
+      /* Which mode this comparison was run in. 'ranked' and 'unranked' mean both
+         sides were proved to be entirely that mode; 'blended' means they were
+         not, and the numbers are the old all-modes-together ones. Said out loud
+         on the page, because a mode split is a narrower sample and the reader
+         should know which they are looking at. */
+      scope,
+      /* The mode key the split was run on, for a caller that wants to name it
+         ("Ranked · Zero Build · Solo"). Null when the comparison is blended. */
+      mode: scope === "blended" ? null : afterMode,
     });
   }
 
@@ -464,6 +616,9 @@ export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_S
          draws it as a hollow mark rather than on the line. */
       thin: s.matches < CHART_MIN_GAMES,
       change: ordered.some((x) => x.startedMs >= s.fromMs && x.startedMs < s.toMs),
+      /* What this session was played in, so a reader can see that a dot they are
+         comparing came from a different mode. */
+      mode: s.mode,
     };
   });
 
