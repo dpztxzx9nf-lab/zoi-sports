@@ -827,7 +827,16 @@ export function scanLog(lines, opts = {}) {
     const session = ISLAND_SESSION.exec(text);
     if (session) {
       const sessionId = session[1].toLowerCase();
-      if (island && island.linkId) {
+      /* Only a real island code binds a session to an island. EVERY matchmaking
+         update writes an "Island:" block, battle royale included, and for a
+         battle royale the LinkId there is a placeholder mnemonic -
+         "experience_reload" or "experience_br" - not a code. Binding those
+         would file every battle-royale match as island (Creative) play, which
+         it did: on the real 382,267-line log all 12 matches came back
+         "creative", the 8 battle-royale ones included. A four-dash-four code
+         is the only shape an island's own LinkId has, and on that log it binds
+         exactly the 4 Creative sessions and nothing else. */
+      if (island && island.linkId && ISLAND_CODE.test(island.linkId)) {
         islands.set(sessionId, { sessionId, linkId: island.linkId, at: newestIso });
       }
       continue;
