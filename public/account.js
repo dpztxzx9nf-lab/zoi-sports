@@ -81,8 +81,8 @@ const MARKUP_PROFILE = `
     <label class="lab-field" for="pf-x">X<input id="pf-x" name="x" inputmode="url" autocomplete="off" placeholder="https://x.com/you"></label>
     <label class="lab-field" for="pf-tiktok">TikTok<input id="pf-tiktok" name="tiktok" inputmode="url" autocomplete="off" placeholder="https://tiktok.com/@you"></label>
     <label class="lab-field" for="pf-youtube">YouTube<input id="pf-youtube" name="youtube" inputmode="url" autocomplete="off" placeholder="https://youtube.com/@you"></label>
-    <label class="lab-field" for="pf-twitch">Twitch<input id="pf-twitch" name="twitch" inputmode="url" autocomplete="off" placeholder="https://twitch.tv/you"></label>
     <label class="lab-field" for="pf-instagram">Instagram<input id="pf-instagram" name="instagram" inputmode="url" autocomplete="off" placeholder="https://instagram.com/you"></label>
+    <label class="lab-field" for="pf-twitch">Twitch<input id="pf-twitch" name="twitch" inputmode="url" autocomplete="off" placeholder="https://twitch.tv/you"></label>
     <label class="lab-field" for="pf-kick">Kick<input id="pf-kick" name="kick" inputmode="url" autocomplete="off" placeholder="https://kick.com/you"></label>
    </div>
 
@@ -222,7 +222,7 @@ async function api(path, options) {
 
 const NETWORK_LABEL = {
   x: 'X', tiktok: 'TikTok', youtube: 'YouTube',
-  twitch: 'Twitch', instagram: 'Instagram', kick: 'Kick',
+  instagram: 'Instagram', twitch: 'Twitch', kick: 'Kick',
 };
 
 const errorsFrom = (data, fallback) => {

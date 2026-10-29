@@ -49,7 +49,7 @@ fetch('/api/roster',{headers:{accept:'application/json'}})
 })();
 
 (()=>{const dlg=document.getElementById('profile');if(!dlg||!window.ROSTER)return;
-const NET={x:'X',tiktok:'TikTok',youtube:'YouTube',twitch:'Twitch',instagram:'Instagram',kick:'Kick'};
+const NET={x:'X',tiktok:'TikTok',youtube:'YouTube',instagram:'Instagram',twitch:'Twitch',kick:'Kick'};
 const $=id=>document.getElementById(id);let opener=null;
 const safe=u=>{try{const x=new URL(u);return x.protocol==='https:'?x.href:null}catch{return null}};
 function open(card){const k=card.dataset.player,p=ROSTER[k];if(!p)return;opener=card;
