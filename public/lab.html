@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Settings Lab — Zoi</title>
-<meta name="description" content="A private log for testing one Fortnite setting at a time: what you're watching for before you play, and the verdict after.">
+<meta name="description" content="Your settings, measured. Every change is compared against the games you played before it.">
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#050506">
 <link rel="icon" href="favicon.ico" sizes="any"><link rel="icon" type="image/png" href="favicon-32.png">
-<link rel="stylesheet" href="styles.css?v=27">
+<link rel="stylesheet" href="styles.css?v=28">
 </head>
 <body class="lab-page">
 <header class="nav"><a href="/" class="brand"><img class="zw" src="/assets/zoi-wordmark-gold.png?v=10" alt="Zoi" width="600" height="320"></a>
@@ -16,7 +16,7 @@
 <main class="lab">
 <h1 class="lab-h1">Settings Lab</h1>
 <p class="lab-who" id="who" hidden></p>
-<p class="lab-lede">One change at a time. Say what you're watching for before you play, then log what it did.</p>
+<p class="lab-lede">Your settings, measured. Change one, play, and the lab compares those games with the ones before it.</p>
 
 <div class="lab-error" id="load-error" hidden>
  <p id="load-error-text">Couldn't reach the log. It may be the connection.</p>
@@ -26,46 +26,39 @@
 <div id="app" hidden>
 
 <section class="lab-block">
- <h2 class="lab-h2">Start a test</h2>
- <form class="lab-form" id="start-form" novalidate>
-  <label class="lab-field" for="f-setting">Setting
-   <select id="f-setting" name="setting"></select>
-  </label>
-  <div class="lab-pair">
-   <label class="lab-field" for="f-from">From
-    <input id="f-from" name="from_value" inputmode="decimal" autocomplete="off" spellcheck="false">
-   </label>
-   <label class="lab-field" for="f-to">To
-    <input id="f-to" name="to_value" inputmode="decimal" autocomplete="off" spellcheck="false">
-   </label>
-  </div>
-  <label class="lab-field" for="f-watch">What you're watching for
-   <textarea id="f-watch" name="watch_for" rows="4"></textarea>
-   <small>Worth writing before you play, not after. One thing you'll be able to see in a fight.</small>
-  </label>
-  <label class="lab-field lab-field-sm" for="f-games">Games planned
-   <input type="number" id="f-games" name="games_planned" inputmode="numeric" min="1" max="50" step="1" value="3">
-  </label>
-  <p class="lab-repeat" id="repeat" hidden></p>
-  <ul class="lab-errors" id="start-errors" hidden></ul>
-  <button class="btn lab-submit" type="submit">Start test</button>
- </form>
+ <h2 class="lab-h2">Lifetime</h2>
+ <div class="lab-figures" id="figures"></div>
+ <p class="lab-fine" id="figures-note" hidden></p>
 </section>
 
 <section class="lab-block">
- <h2 class="lab-h2">Testing now</h2>
- <div id="testing"></div>
+ <h2 class="lab-h2">Over time</h2>
+ <div class="lab-chart" id="chart-win">
+  <p class="lab-chart-k">Win rate</p>
+  <div class="lab-chart-box" id="chart-win-box"></div>
+ </div>
+ <div class="lab-chart" id="chart-kd">
+  <p class="lab-chart-k">Kills per death</p>
+  <div class="lab-chart-box" id="chart-kd-box"></div>
+ </div>
+ <p class="lab-chart-key" id="chart-key" hidden></p>
+ <p class="lab-empty" id="chart-empty" hidden></p>
 </section>
 
 <section class="lab-block">
- <h2 class="lab-h2">History</h2>
- <div id="history"></div>
+ <h2 class="lab-h2">Changes</h2>
+ <div id="changes"></div>
+</section>
+
+<section class="lab-block">
+ <h2 class="lab-h2">What's worked</h2>
+ <div id="ranked"></div>
 </section>
 
 <section class="lab-block">
  <h2 class="lab-h2">This PC</h2>
  <div id="pc">
-  <p class="lab-pc-lede" id="pc-lede">The lab fills itself in from your PC. Connect one, and it sends Fortnite's own settings after every change, so a test opens by itself and nobody has to log it by hand.</p>
+  <p class="lab-pc-lede" id="pc-lede">The lab fills itself in from your PC. Connect one, and it sends Fortnite's own settings after every change, so a change opens by itself and nobody has to log it by hand.</p>
 
   <p class="lab-pc-stats" id="pc-stats" hidden></p>
 

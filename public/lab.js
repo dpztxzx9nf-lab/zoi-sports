@@ -1,48 +1,8 @@
-/* Settings Lab: a private log for one aim change at a time.
-   Sign-in happens at the edge (Cloudflare Access), so this file only reads the log. */
+/* Settings Lab: what the readings add up to.
+   Sign-in happens at the edge (Cloudflare Access). This file only reads:
+   the changes recorded, and the numbers measured around them. */
 (() => {
 
-const CATALOG = [
-  { id: 'look_horizontal_speed', label: 'Look Horizontal Speed', value: '42', type: 'int', step: 2, min: 1, max: 100,
-    watch: "How a turn across your body lands. Overshooting the doorway or the corner you swung for means it's too fast; not being able to cover the angle at all means it's too slow." },
-  { id: 'look_vertical_speed', label: 'Look Vertical Speed', value: '42', type: 'int', step: 2, min: 1, max: 100,
-    watch: 'Whether you can follow someone jumping, gliding or dropping without sliding past them, and whether looking up from a crouch takes more push than you expect.' },
-  { id: 'look_boost_speed', label: 'Look Boost Speed', value: '0', type: 'int', step: 2, min: 0, max: 100,
-    watch: "Whether the end of the stick's travel adds speed you didn't ask for. A hard hold turning on someone behind you either stops where you meant it to or runs past them." },
-  { id: 'look_boost_ramp', label: 'Look Boost Ramp', value: '0.0', type: 'decimal', step: 0.1, min: 0,
-    watch: 'How long the extra speed takes to arrive. Watch whether a held turn builds smoothly or shows up as a jolt partway through.' },
-  { id: 'look_ease_time', label: 'Look Ease Time', value: '0.0', type: 'decimal', step: 0.05, min: 0,
-    watch: 'Whether the view arrives with your thumb or trails behind it. Lag shows up as the crosshair still sliding a moment after you stop pushing.' },
-  { id: 'ads_look_horizontal_speed', label: 'ADS Look Horizontal Speed', value: '12', type: 'int', step: 2, min: 1, max: 100,
-    watch: 'Whether you can stay on a strafing target at mid range, and whether turning while aimed in a close fight feels sluggish or overshoots.' },
-  { id: 'ads_look_vertical_speed', label: 'ADS Look Vertical Speed', value: '12', type: 'int', step: 2, min: 1, max: 100,
-    watch: 'Whether you can track someone dropping or strafing up a ramp while aimed, and whether pulling up onto a head takes more stick than it should.' },
-  { id: 'ads_boost_speed', label: 'ADS Boost Speed', value: '0', type: 'int', step: 2, min: 0, max: 100,
-    watch: 'Whether the far end of the aim stick swings too far in a close fight. Watch a quick correction past the target and whether it comes back cleanly or bounces.' },
-  { id: 'ads_boost_ramp', label: 'ADS Boost Ramp', value: '0.0', type: 'decimal', step: 0.1, min: 0,
-    watch: 'How fast the extra aim speed kicks in during a hold. Watch for a turn that starts steady and then surges past the target.' },
-  { id: 'ads_look_ease_time', label: 'ADS Look Ease Time', value: '0.0', type: 'decimal', step: 0.05, min: 0,
-    watch: 'Whether the aim point follows your thumb directly while aimed. Any smoothing shows up as the scope drifting on after you stop moving the stick.' },
-  { id: 'scoped_multiplier', label: 'Scope Multiplier', value: '0.95', type: 'decimal', step: 0.05, min: 0,
-    watch: 'Whether a scoped flick overshoots up close or falls short at distance. Watch the first shot after you scope in: past the head, on it, or behind it.' },
-  { id: 'move_stick_deadzone', label: 'Move Stick Deadzone', value: '0.06', type: 'decimal', step: 0.01, min: 0,
-    watch: 'Whether your character starts moving the moment you push, or stays put while the stick takes up slack. Pan the camera sideways and watch for a step that arrives late.' },
-  { id: 'look_stick_deadzone', label: 'Look Stick Deadzone', value: '0.05', type: 'decimal', step: 0.01, min: 0,
-    watch: 'Whether the view drifts with your thumb off the stick, or whether the stick feels dead at the start of travel. Small aim corrections show it first.' },
-  { id: 'left_trigger_release', label: 'Left Trigger Release', value: '0.05', type: 'decimal', step: 0.01, min: 0,
-    watch: 'Whether letting off aim drops the scope straight away or hangs on for a moment. Watch a quick scope in and out on a moving target.' },
-  { id: 'right_trigger_release', label: 'Right Trigger Release', value: '0.05', type: 'decimal', step: 0.01, min: 0,
-    watch: 'Whether the gun stops the instant you let off, or keeps the last shot going. Watch a single tap in a fight and see whether a second round goes off.' },
-];
-
-const VERDICTS = [
-  { status: 'kept', text: 'Kept' },
-  { status: 'reverted', text: 'Reverted' },
-  { status: 'inconclusive', text: 'Inconclusive' },
-];
-const VERDICT_WORD = { kept: 'kept', reverted: 'reverted', inconclusive: 'inconclusive', testing: 'testing' };
-
-/* ---------- tiny DOM helpers (no innerHTML, no inline attributes) ---------- */
 const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
@@ -53,14 +13,15 @@ const el = (tag, cls, text) => {
 const show = n => { n.hidden = false; };
 const hide = n => { n.hidden = true; };
 
-/* ---------- state ---------- */
-const state = { tests: [], settings: [] };
+const state = { perf: null, tokens: [] };
 const nodes = {
   who: $('who'),
   loadError: $('load-error'), loadErrorText: $('load-error-text'), retry: $('retry'),
-  app: $('app'), startForm: $('start-form'), setting: $('f-setting'), from: $('f-from'),
-  to: $('f-to'), watch: $('f-watch'), games: $('f-games'), repeat: $('repeat'),
-  startErrors: $('start-errors'), testing: $('testing'), history: $('history'),
+  app: $('app'), figures: $('figures'), figuresNote: $('figures-note'),
+  chartWin: $('chart-win'), chartWinBox: $('chart-win-box'),
+  chartKd: $('chart-kd'), chartKdBox: $('chart-kd-box'),
+  chartKey: $('chart-key'), chartEmpty: $('chart-empty'),
+  changes: $('changes'), ranked: $('ranked'),
   pcConnect: $('pc-connect'), pcLabel: $('pc-label'), pcAdd: $('pc-add'),
   pcErrors: $('pc-errors'), pcToken: $('pc-token'), pcTokenValue: $('pc-token-value'),
   pcCopy: $('pc-copy'), pcDone: $('pc-done'), pcCopied: $('pc-copied'),
@@ -70,7 +31,6 @@ const nodes = {
 class AuthError extends Error {}
 class NetError extends Error {}
 
-/* ---------- transport ---------- */
 async function api(path, options) {
   const opt = options || {};
   const headers = {};
@@ -90,18 +50,58 @@ const errorsFrom = (data, fallback) => {
   if (data && typeof data.error === 'string' && data.error) return [data.error];
   return [fallback];
 };
-
-function showErrors(list, messages) {
+const showErrors = (list, messages) => {
   list.replaceChildren();
   for (const m of messages) list.append(el('li', null, m));
   show(list);
-}
+};
 const clearErrors = list => { list.replaceChildren(); hide(list); };
 
+/* ---------- formatting ---------- */
+
+/* D1 writes UTC with no marker on it; add one so the browser converts it. */
+const timeOf = value => {
+  const s = String(value || '').trim();
+  if (!s) return NaN;
+  const iso = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(s) ? s.replace(' ', 'T') + 'Z' : s;
+  return Date.parse(iso);
+};
+
+const fmtDay = value => {
+  const ms = timeOf(value);
+  if (!Number.isFinite(ms)) return '';
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'America/Denver' }).format(new Date(ms));
+};
+
+const fmtDayYear = value => {
+  const ms = timeOf(value);
+  if (!Number.isFinite(ms)) return '';
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Denver' }).format(new Date(ms));
+};
+
+const group = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+/* A rate as a percentage with one decimal below 10%: an aim change often moves
+   win rate by a point or two, and rounding 8.4% to 8% would hide it. */
+const pct = v => {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return '\u2014';
+  const p = v * 100;
+  return (p >= 10 ? Math.round(p) : Math.round(p * 10) / 10) + '%';
+};
+
+const points = d => {
+  if (typeof d !== 'number' || !Number.isFinite(d)) return '';
+  const p = Math.abs(d) * 100;
+  const shown = p >= 10 ? Math.round(p) : Math.round(p * 10) / 10;
+  return (d > 0 ? '+' : '\u2212') + shown;
+};
+
+const kd = v => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(2) : '\u2014');
+
+const matchesWord = n => group(n) + (n === 1 ? ' game' : ' games');
 
 /* ---------- load ---------- */
-/* A 401 means the Access session is gone, and retrying the fetch would fail the
-   same way, so the retry button reloads the page to go back through sign-in. */
+
 let signInNeeded = false;
 
 function failLoad(message) {
@@ -112,8 +112,6 @@ function failLoad(message) {
 
 function needSignIn() {
   signInNeeded = true;
-  state.tests = [];
-  state.settings = [];
   hide(nodes.who);
   failLoad('Your sign-in expired. Reload the page to sign in again.');
 }
@@ -122,18 +120,17 @@ async function load() {
   hide(nodes.loadError);
   let r;
   try {
-    r = await api('/api/lab');
+    r = await api('/api/lab/performance');
   } catch (e) {
     if (e instanceof AuthError) { needSignIn(); return false; }
-    failLoad("Couldn't reach the log. Check the connection and try again.");
+    failLoad("Couldn't reach the lab. Check the connection and try again.");
     return false;
   }
   if (!r.ok) {
-    failLoad(errorsFrom(r.data, "Couldn't load the log. Try again.").join(' '));
+    failLoad(errorsFrom(r.data, "Couldn't load the numbers. Try again.").join(' '));
     return false;
   }
-  state.tests = Array.isArray(r.data && r.data.tests) ? r.data.tests : [];
-  state.settings = Array.isArray(r.data && r.data.settings) ? r.data.settings : [];
+  state.perf = r.data || {};
   showWho(r.data && r.data.me);
   signInNeeded = false;
   hide(nodes.loadError);
@@ -142,374 +139,284 @@ async function load() {
   return true;
 }
 
-/* Who this log belongs to, straight from the API's read-only copy of the
-   verified token. Purely a label: the server never takes a name from here. */
 function showWho(me) {
-  const seen = me && typeof me === 'object'
-    ? String(me.email || me.name || '').trim()
-    : '';
-  nodes.who.textContent = seen ? 'Your log \u2014 signed in as ' + seen + '.' : '';
+  const seen = me && typeof me === 'object' ? String(me.email || me.name || '').trim() : '';
+  nodes.who.textContent = seen ? 'Signed in as ' + seen + '.' : '';
   if (seen) show(nodes.who); else hide(nodes.who);
 }
 
-/* ---------- catalog ---------- */
-const entryFor = id => CATALOG.find(c => c.id === id) || null;
+/* ---------- lifetime figures ---------- */
 
-const decimalsOf = v => {
-  const s = String(v);
-  const i = s.indexOf('.');
-  return i < 0 ? 0 : s.length - i - 1;
+function figure(k, v, sub) {
+  const box = el('div', 'lab-fig');
+  box.append(el('span', 'lab-fig-k', k), el('span', 'lab-fig-v', v));
+  if (sub) box.append(el('span', 'lab-fig-sub', sub));
+  return box;
+}
+
+function renderFigures() {
+  const L = state.perf && state.perf.lifetime;
+  nodes.figures.replaceChildren();
+  if (!L || !(L.matches > 0)) {
+    nodes.figures.append(el('p', 'lab-empty', 'No numbers yet. They arrive with the first sync from your PC.'));
+    hide(nodes.figuresNote);
+    return;
+  }
+  const sub = L.wins !== null ? group(L.wins) + (L.wins === 1 ? ' win' : ' wins') : '';
+  nodes.figures.append(
+    figure('Games', group(L.matches), sub),
+    figure('Win rate', pct(L.win_rate)),
+    figure('K/D', kd(L.kd)),
+    figure('Kills', L.kills !== null ? group(L.kills) : '\u2014'),
+  );
+
+  const sessions = state.perf.sessions || 0;
+  const note = sessions
+    ? 'Split into ' + sessions + (sessions === 1 ? ' session' : ' sessions') + ' so far, one per gap between syncs.'
+    : 'Still one reading. Play a few games and it splits into sessions.';
+  nodes.figuresNote.textContent = note;
+  show(nodes.figuresNote);
+}
+
+/* ---------- charts ----------
+   Hand-drawn SVG with presentation attributes, because the page's CSP allows no
+   inline styles and no third-party chart script. */
+const NS = 'http://www.w3.org/2000/svg';
+const svg = (tag, attrs) => {
+  const n = document.createElementNS(NS, tag);
+  for (const k of Object.keys(attrs || {})) n.setAttribute(k, String(attrs[k]));
+  return n;
+};
+const svgText = (attrs, text) => {
+  const n = svg('text', attrs);
+  n.textContent = text;
+  return n;
 };
 
-/* Next value to try: a step for numbers, a flip for on/off, a cycle for a list. */
-function nextValue(entry) {
-  if (!entry) return '';
-  if (entry.type === 'onoff') return /^(on|true|1|yes)$/i.test(entry.value) ? (entry.offLabel || 'Off') : (entry.onLabel || 'On');
-  if (entry.type === 'enum') {
-    const opts = Array.isArray(entry.options) ? entry.options : [];
-    if (!opts.length) return entry.value;
-    const i = opts.indexOf(entry.value);
-    return opts[(i + 1) % opts.length];
+const W = 320, H = 132;
+const PAD = { l: 34, r: 8, t: 10, b: 20 };
+
+/* series: [{ v: number|null, mark: bool }]. x is the session index: a handful of
+   sessions spaced evenly reads better than the same handful squashed against a
+   date axis, and the axis still names the days underneath. */
+function lineChart(series, opts) {
+  const box = el('div');
+  const points = series.filter(s => typeof s.v === 'number' && Number.isFinite(s.v));
+  if (!points.length) {
+    box.append(el('p', 'lab-empty', opts.empty || 'Nothing measured yet.'));
+    return box;
   }
-  const cur = Number(entry.value);
-  const step = Number(entry.step);
-  if (!isFinite(cur) || !isFinite(step) || step === 0) return entry.value;
-  const places = Math.max(decimalsOf(entry.value), decimalsOf(entry.step));
-  let next = cur + step;
-  if (isFinite(entry.min)) next = Math.max(entry.min, next);
-  if (isFinite(entry.max)) next = Math.min(entry.max, next);
-  return next.toFixed(places);
-}
+  const values = points.map(s => s.v);
+  const top = Math.max(opts.max || 0, ...values);
+  const yMax = top <= 0 ? 1 : top * 1.15;
+  const yMin = opts.min || 0;
 
-/* Where the setting stands now: the value from the last test that was kept,
-   otherwise the value on the settings page. */
-function currentValue(entry) {
-  if (!entry) return '';
-  const kept = state.tests.find(t => t.setting === entry.id && t.status === 'kept');
-  return kept ? String(kept.to_value) : entry.value;
-}
+  const plotW = W - PAD.l - PAD.r;
+  const plotH = H - PAD.t - PAD.b;
+  const xAt = i => PAD.l + (series.length <= 1 ? plotW / 2 : (plotW * i) / (series.length - 1));
+  const yAt = v => PAD.t + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
 
-/* ---------- repeat warning ---------- */
-const timesWord = n => (n === 1 ? 'once' : n === 2 ? 'twice' : n + ' times');
+  const root = svg('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': opts.label || '' });
 
-function repeatNotice(setting) {
-  const decided = state.tests.filter(t => t.setting === setting && t.status !== 'testing');
-  if (!decided.length) return '';
-  const counts = { kept: 0, reverted: 0, inconclusive: 0 };
-  for (const t of decided) if (counts[t.status] !== undefined) counts[t.status] += 1;
-  const parts = [];
-  for (const k of ['kept', 'reverted', 'inconclusive']) {
-    if (counts[k]) parts.push(counts[k] + ' ' + VERDICT_WORD[k]);
+  /* three gridlines, labelled: enough to read a value off, few enough to stay
+     legible on a 390px screen. */
+  for (let g = 0; g <= 2; g++) {
+    const v = yMin + ((yMax - yMin) * g) / 2;
+    const y = yAt(v);
+    root.append(svg('line', { x1: PAD.l, y1: y, x2: W - PAD.r, y2: y, stroke: '#ffffff14', 'stroke-width': 1 }));
+    root.append(svgText({ x: PAD.l - 5, y: y + 3.5, fill: '#a29f97', 'font-size': 8, 'text-anchor': 'end' }, opts.axis(v)));
   }
-  const total = decided.length;
-  const allSame = parts.length === 1;
-  let line = allSame
-    ? 'Tried ' + timesWord(total) + ' before, ' + VERDICT_WORD[decided[0].status] + ' ' + timesWord(total) + '.'
-    : 'Tried ' + timesWord(total) + ' before: ' + parts.join(', ') + '.';
-  const reverted = decided.find(t => t.status === 'reverted');
-  if (reverted) line += ' You already tried ' + reverted.from_value + ' to ' + reverted.to_value + ' and reverted it.';
-  return line;
-}
 
-function updateRepeat() {
-  const line = repeatNotice(nodes.setting.value);
-  nodes.repeat.textContent = line;
-  if (line) show(nodes.repeat); else hide(nodes.repeat);
-}
+  /* a dashed upright at every session that contains a setting change */
+  series.forEach((s, i) => {
+    if (!s.mark) return;
+    const x = xAt(i);
+    root.append(svg('line', { x1: x, y1: PAD.t, x2: x, y2: PAD.t + plotH, stroke: '#e6d3a055', 'stroke-width': 1, 'stroke-dasharray': '2 3' }));
+  });
 
-/* ---------- the start form ---------- */
-function fillCatalog() {
-  const frag = document.createDocumentFragment();
-  for (const c of CATALOG) {
-    const o = el('option', null, c.label);
-    o.value = c.id;
-    frag.append(o);
-  }
-  nodes.setting.replaceChildren(frag);
-}
-
-function applySetting(resetWatch) {
-  const entry = entryFor(nodes.setting.value);
-  if (!entry) return;
-  const from = currentValue(entry);
-  nodes.from.value = from;
-  nodes.to.value = nextValue(Object.assign({}, entry, { value: from }));
-  if (resetWatch) nodes.watch.value = entry.watch;
-  updateRepeat();
-}
-
-nodes.setting.addEventListener('change', () => { clearErrors(nodes.startErrors); applySetting(true); });
-
-nodes.startForm.addEventListener('submit', async e => {
-  e.preventDefault();
-  clearErrors(nodes.startErrors);
-  const entry = entryFor(nodes.setting.value);
-  const body = {
-    setting: nodes.setting.value,
-    label: entry ? entry.label : '',
-    from_value: nodes.from.value.trim(),
-    to_value: nodes.to.value.trim(),
-    watch_for: nodes.watch.value.trim(),
-    games_planned: nodes.games.value.trim(),
+  /* the line, broken wherever a value is missing rather than bridged */
+  let run = [];
+  const flush = () => {
+    if (run.length > 1) {
+      const d = run.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join(' ');
+      root.append(svg('path', { d, fill: 'none', stroke: '#ffe08a', 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+    }
+    run = [];
   };
-  const btn = nodes.startForm.querySelector('button[type=submit]');
-  btn.disabled = true;
-  try {
-    const r = await api('/api/lab', { method: 'POST', body });
-    if (!r.ok) { showErrors(nodes.startErrors, errorsFrom(r.data, 'Could not save that test.')); return; }
-    await load();
-    applySetting(true);
-    nodes.games.value = '3';
-  } catch (err) {
-    if (err instanceof AuthError) { needSignIn(); return; }
-    showErrors(nodes.startErrors, ["Couldn't reach the log. Nothing was saved. Try again."]);
-  } finally {
-    btn.disabled = false;
-  }
-});
+  series.forEach((s, i) => {
+    if (typeof s.v !== 'number' || !Number.isFinite(s.v)) { flush(); return; }
+    run.push({ x: xAt(i), y: yAt(s.v) });
+  });
+  flush();
 
-/* ---------- testing cards ---------- */
-function verdictPanel(test) {
-  const row = el('div', 'lab-verdicts');
-  const panel = el('div', 'lab-note-panel');
-  hide(panel);
-  const label = el('label', 'lab-field', 'What changed?');
-  const note = el('textarea');
-  note.rows = 2;
-  note.placeholder = 'One sentence is plenty.';
-  label.append(note);
-  const errs = el('ul', 'lab-errors');
-  hide(errs);
-  const actions = el('div', 'lab-row');
-  const save = el('button', 'btn lab-save', 'Save');
-  save.type = 'button';
-  const cancel = el('button', 'lab-cancel', 'Cancel');
-  cancel.type = 'button';
-  actions.append(save, cancel);
-  panel.append(label, errs, actions);
-
-  let chosen = '';
-  let busy = false;
-
-  for (const v of VERDICTS) {
-    const b = el('button', 'lab-v lab-v-' + v.status, v.text);
-    b.type = 'button';
-    b.setAttribute('aria-pressed', 'false');
-    b.addEventListener('click', () => {
-      chosen = v.status;
-      for (const other of row.children) other.setAttribute('aria-pressed', other === b ? 'true' : 'false');
-      show(panel);
-      note.focus();
-    });
-    row.append(b);
-  }
-
-  cancel.addEventListener('click', () => {
-    hide(panel);
-    clearErrors(errs);
-    for (const b of row.children) b.setAttribute('aria-pressed', 'false');
-    chosen = '';
+  series.forEach((s, i) => {
+    if (typeof s.v !== 'number' || !Number.isFinite(s.v)) return;
+    root.append(svg('circle', { cx: xAt(i).toFixed(1), cy: yAt(s.v).toFixed(1), r: s.mark ? 2.8 : 2, fill: s.mark ? '#fffbe0' : '#ffe08a' }));
   });
 
-  const saveVerdict = async () => {
-    if (!chosen || busy) return;
-    clearErrors(errs);
-    busy = true;
-    save.disabled = true;
-    try {
-      const r = await api('/api/lab/' + test.id, { method: 'PATCH', body: { status: chosen, result_note: note.value.trim() } });
-      if (!r.ok) { showErrors(errs, errorsFrom(r.data, 'Could not save that verdict.')); return; }
-      await load();
-    } catch (err) {
-      if (err instanceof AuthError) { needSignIn(); return; }
-      showErrors(errs, ["Couldn't reach the log. Nothing was saved. Try again."]);
-    } finally {
-      busy = false;
-      save.disabled = false;
-    }
+  if (opts.firstLabel) {
+    root.append(svgText({ x: PAD.l, y: H - 6, fill: '#a29f97', 'font-size': 8 }, opts.firstLabel));
+  }
+  if (opts.lastLabel) {
+    root.append(svgText({ x: W - PAD.r, y: H - 6, fill: '#a29f97', 'font-size': 8, 'text-anchor': 'end' }, opts.lastLabel));
+  }
+
+  box.append(root);
+  return box;
+}
+
+function renderCharts() {
+  const p = state.perf || {};
+  const chart = Array.isArray(p.chart) ? p.chart : [];
+  nodes.chartWinBox.replaceChildren();
+  nodes.chartKdBox.replaceChildren();
+
+  if (!chart.length) {
+    hide(nodes.chartWin);
+    hide(nodes.chartKd);
+    nodes.chartEmpty.textContent = 'No sessions yet. A session appears once two syncs show different match counts, which means you played in between.';
+    show(nodes.chartEmpty);
+    hide(nodes.chartKey);
+    return;
+  }
+
+  show(nodes.chartWin);
+  show(nodes.chartKd);
+  hide(nodes.chartEmpty);
+
+  const first = chart[0], last = chart[chart.length - 1];
+  const firstLabel = fmtDay(first.to);
+  const lastLabel = fmtDay(last.to);
+
+  nodes.chartWinBox.append(lineChart(
+    chart.map(s => ({ v: s.win_rate, mark: Boolean(s.change) })),
+    {
+      min: 0,
+      max: 0.15,
+      label: 'Win rate by session',
+      axis: v => Math.round(v * 100) + '%',
+      firstLabel, lastLabel,
+      empty: 'Win rate needs a win recorded in a session.',
+    },
+  ));
+
+  /* K/D comes from the same rows; the endpoint carries it per session only when
+     the counters allow it, so a session without a death count is a gap. */
+  nodes.chartKdBox.append(lineChart(
+    chart.map(s => ({ v: typeof s.kd === 'number' ? s.kd : null, mark: Boolean(s.change) })),
+    {
+      min: 0,
+      max: 2,
+      label: 'Kills per death by session',
+      axis: v => (Math.round(v * 10) / 10).toFixed(1),
+      firstLabel, lastLabel,
+      empty: 'K/D needs a death counted in a session.',
+    },
+  ));
+
+  const marks = chart.filter(s => s.change).length;
+  nodes.chartKey.textContent = marks
+    ? 'Each point is one session. The dashed uprights are where a setting changed.'
+    : 'Each point is one session. A dashed upright appears where a setting changes.';
+  show(nodes.chartKey);
+}
+
+/* ---------- the changes ---------- */
+
+const VERDICT_WORD = { better: 'Better', worse: 'Worse', even: 'No change', 'too-soon': 'Too soon' };
+
+function deltaLine(c) {
+  if (c.verdict === 'too-soon') {
+    const need = state.perf && state.perf.min_games ? state.perf.min_games : 10;
+    const seen = c.after && c.after.matches ? c.after.matches : 0;
+    return el('p', 'lab-c-note', 'Not enough games to call it: ' + matchesWord(seen) + ' since the change, ' + need + ' needed on each side.');
+  }
+  const d = points(c.delta);
+  const bits = ['Win rate ' + (c.delta > 0 ? 'up ' : c.delta < 0 ? 'down ' : 'level at ') + d.replace('+', '') + (d === '0' ? '' : ' points')];
+  if (typeof c.kd_delta === 'number' && Number.isFinite(c.kd_delta)) {
+    const k = c.kd_delta;
+    bits.push('K/D ' + (Math.abs(k) < 0.005 ? 'level' : (k > 0 ? 'up ' : 'down ') + Math.abs(k).toFixed(2)));
+  }
+  return el('p', 'lab-c-note', bits.join('. ') + '.');
+}
+
+function beforeAfterRows(c) {
+  const wrap = el('div', 'lab-ba');
+  const row = (name, b, a) => {
+    const line = el('div', 'lab-ba-row');
+    line.append(el('span', 'lab-ba-k', name), el('span', 'lab-ba-v', b), el('span', 'lab-ba-arrow', '\u2192'), el('span', 'lab-ba-v', a));
+    return line;
   };
-  save.addEventListener('click', saveVerdict);
-
-  return { row, panel };
-}
-
-function addGameButton(test) {
-  const played = Number.isInteger(test.games_played) ? test.games_played : 0;
-  const inc = el('button', 'lab-mini', '+1 game');
-  inc.type = 'button';
-  inc.addEventListener('click', async () => {
-    inc.disabled = true;
-    try {
-      const r = await api('/api/lab/' + test.id, { method: 'PATCH', body: { games_played: played + 1 } });
-      if (!r.ok) { showErrors(errs, errorsFrom(r.data, 'Could not add a game.')); return; }
-      await load();
-    } catch (err) {
-      if (err instanceof AuthError) { needSignIn(); return; }
-      showErrors(errs, ["Couldn't reach the log. Nothing was saved."]);
-    } finally {
-      inc.disabled = false;
-    }
-  });
-  const errs = el('ul', 'lab-errors');
-  hide(errs);
-  return { inc, errs };
-}
-
-function dropControl(test) {
-  const wrap = el('div', 'lab-drop-wrap');
-  const drop = el('button', 'lab-drop', 'Drop this test');
-  drop.type = 'button';
-  const confirmRow = el('div', 'lab-row');
-  hide(confirmRow);
-  const yes = el('button', 'lab-v lab-v-reverted', 'Drop it');
-  yes.type = 'button';
-  const no = el('button', 'lab-cancel', 'Keep it');
-  no.type = 'button';
-  const errs = el('ul', 'lab-errors');
-  hide(errs);
-  confirmRow.append(yes, no);
-  drop.addEventListener('click', () => { hide(drop); show(confirmRow); });
-  no.addEventListener('click', () => { hide(confirmRow); show(drop); clearErrors(errs); });
-  yes.addEventListener('click', async () => {
-    yes.disabled = true;
-    try {
-      const r = await api('/api/lab/' + test.id, { method: 'DELETE' });
-      if (!r.ok) { showErrors(errs, errorsFrom(r.data, 'Could not drop that test.')); return; }
-      await load();
-    } catch (err) {
-      if (err instanceof AuthError) { needSignIn(); return; }
-      showErrors(errs, ["Couldn't reach the log. Nothing was removed."]);
-    } finally {
-      yes.disabled = false;
-    }
-  });
-  wrap.append(drop, confirmRow, errs);
+  wrap.append(
+    row('Games', String(c.before.matches), String(c.after.matches)),
+    row('Win rate', pct(c.before.win_rate), pct(c.after.win_rate)),
+    row('K/D', kd(c.before.kd), kd(c.after.kd)),
+  );
   return wrap;
 }
 
-function testingCard(test) {
-  const card = el('article', 'lab-card');
-  card.append(el('p', 'lab-card-k', test.label));
+function changeCard(c) {
+  const card = el('article', 'lab-change lab-change-' + c.verdict);
+  const head = el('div', 'lab-change-head');
+  head.append(el('p', 'lab-card-k', c.label || c.setting));
+  const badge = el('span', 'lab-tag lab-tag-' + c.verdict, VERDICT_WORD[c.verdict] || c.verdict);
+  head.append(badge);
+  card.append(head);
+
   const values = el('p', 'lab-values');
-  values.append(el('span', null, test.from_value), el('span', 'lab-arrow', '\u2192'), el('span', null, test.to_value));
+  values.append(el('span', null, c.from_value), el('span', 'lab-arrow', '\u2192'), el('span', null, c.to_value));
   card.append(values);
-  if (test.watch_for) {
-    const w = el('p', 'lab-watch');
-    w.append(el('span', 'lab-watch-k', 'Watching for: '), document.createTextNode(test.watch_for));
-    card.append(w);
-  }
 
-  const played = Number.isInteger(test.games_played) ? test.games_played : 0;
-  const planned = Number.isInteger(test.games_planned) ? test.games_planned : null;
-  const foot = el('div', 'lab-card-foot');
-  foot.append(el('span', 'lab-games', planned ? played + ' of ' + planned + ' games' : played + ' played'));
-  const game = addGameButton(test);
-  foot.append(game.inc);
-  card.append(foot, game.errs);
+  const when = fmtDayYear(c.started_at);
+  if (when) card.append(el('span', 'lab-change-when', when));
 
-  const v = verdictPanel(test);
-  card.append(v.row, v.panel);
-  card.append(dropControl(test));
+  card.append(deltaLine(c));
+  card.append(beforeAfterRows(c));
+
   return card;
 }
 
-function renderTesting() {
-  const list = state.tests.filter(t => t.status === 'testing');
-  nodes.testing.replaceChildren();
-  if (!list.length) { nodes.testing.append(el('p', 'lab-empty', 'Nothing in testing right now.')); return; }
-  for (const t of list) nodes.testing.append(testingCard(t));
-}
-
-/* ---------- history ---------- */
-/* D1's datetime('now') writes "2026-10-28 22:24:00", which is UTC but carries no
-   marker. Add one so the browser converts it, then show the day in the player's
-   zone. Strings that already carry a zone are left as they are. */
-const dateParts = value => {
-  let s = String(value || '').trim();
-  if (!s) return null;
-  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(s)) s = s.replace(' ', 'T') + 'Z';
-  const d = new Date(s);
-  if (!d || isNaN(d.getTime())) return null;
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Denver',
-  }).formatToParts(d);
-  const get = t => { const f = parts.find(p => p.type === t); return f ? f.value : ''; };
-  return { day: get('day'), month: get('month'), year: get('year') };
-};
-
-const fmtDate = value => {
-  const p = dateParts(value);
-  return p ? p.day + ' ' + p.month + ' ' + p.year : '';
-};
-
-const verdictTag = status => el('span', 'lab-tag lab-tag-' + status, VERDICT_WORD[status] || status);
-
-function historyRow(test) {
-  const row = el('li', 'lab-hist');
-  const head = el('div', 'lab-hist-head');
-  const values = el('span', 'lab-hist-values');
-  values.append(el('span', null, test.from_value), ' ', el('span', 'lab-arrow', '\u2192'), ' ', el('span', null, test.to_value));
-  head.append(values, verdictTag(test.status));
-  row.append(head);
-  const date = fmtDate(test.decided_at || test.started_at);
-  if (date) row.append(el('span', 'lab-hist-date', date));
-  if (test.result_note) row.append(el('p', 'lab-hist-note', test.result_note));
-  return row;
-}
-
-/* Groups come from the API's settings array (which counts every test), and each
-   block lists that setting's decided tests newest first. */
-function renderHistory() {
-  const decided = state.tests.filter(t => t.status !== 'testing');
-  nodes.history.replaceChildren();
-
-  if (!state.tests.length) {
-    nodes.history.append(el('p', 'lab-empty', 'Nothing tested yet. The first one starts above.'));
+function renderChanges() {
+  const list = (state.perf && Array.isArray(state.perf.changes)) ? state.perf.changes : [];
+  nodes.changes.replaceChildren();
+  if (!list.length) {
+    nodes.changes.append(el('p', 'lab-empty', 'No changes recorded yet. Change a setting in Fortnite and the next sync logs it by itself.'));
     return;
   }
-  if (!decided.length) {
-    nodes.history.append(el('p', 'lab-empty', 'Nothing decided yet. Verdicts show up here once you save one.'));
-    return;
-  }
-
-  const seen = new Set();
-  const groups = [];
-  for (const t of decided) {
-    if (seen.has(t.setting)) continue;
-    seen.add(t.setting);
-    const summary = state.settings.find(s => s.setting === t.setting);
-    groups.push({ setting: t.setting, label: (summary && summary.label) || t.label, kept: summary ? summary.kept : 0, reverted: summary ? summary.reverted : 0 });
-  }
-
-  const frag = document.createDocumentFragment();
-  for (const g of groups) {
-    const rows = decided.filter(t => t.setting === g.setting);
-    const det = el('details', 'lab-group');
-    const sum = el('summary', 'lab-sum');
-    sum.append(el('span', 'lab-sum-t', g.label || g.setting), el('span', 'lab-sum-m', g.kept + ' kept \u00b7 ' + g.reverted + ' reverted'));
-    const inner = el('ul', 'lab-hist-list');
-    for (const t of rows) inner.append(historyRow(t));
-    det.append(sum, inner);
-    frag.append(det);
-  }
-  nodes.history.append(frag);
+  for (const c of list) nodes.changes.append(changeCard(c));
 }
 
-/* ---------- connected PCs ----------
-   A PC holds a token instead of a sign-in, so it can post a snapshot without a
-   browser. The token is shown once, here, and is never readable again. */
+/* ---------- which setting actually helped ---------- */
+
+function renderRanked() {
+  const ranked = (state.perf && Array.isArray(state.perf.ranked)) ? state.perf.ranked : [];
+  nodes.ranked.replaceChildren();
+  if (!ranked.length) {
+    nodes.ranked.append(el('p', 'lab-empty', 'Nothing to rank yet. This fills in once a change has enough games on both sides.'));
+    return;
+  }
+  const list = el('ol', 'lab-rank');
+  for (const g of ranked) {
+    const li = el('li', 'lab-rank-row');
+    const name = el('span', 'lab-rank-name', g.label || g.setting);
+    const d = el('span', 'lab-rank-d', (g.delta > 0 ? '+' : g.delta < 0 ? '\u2212' : '\u00b1') + (Math.round(Math.abs(g.delta) * 1000) / 10) + ' pts');
+    const meta = el('span', 'lab-rank-meta', g.better + ' of ' + g.changes + ' better \u00b7 ' + matchesWord(g.matches));
+    const line = el('div', 'lab-rank-head');
+    line.append(name, d);
+    li.append(line, meta);
+    list.append(li);
+  }
+  nodes.ranked.append(list);
+}
+
+/* ---------- connected PCs ---------- */
 let pcTokens = [];
 
-/* D1's datetime('now') is UTC with no marker on it, so add one before parsing. */
 function whenFrom(value) {
-  const s = String(value || '').trim();
-  if (!s) return null;
-  const iso = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(s) ? s.replace(' ', 'T') + 'Z' : s;
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? null : d;
+  const ms = timeOf(value);
+  return Number.isFinite(ms) ? new Date(ms) : null;
 }
 
-/* Plain words rather than a timestamp: "3 minutes ago", "2 days ago". */
 function agoText(value) {
   const d = whenFrom(value);
   if (!d) return 'not yet';
@@ -541,7 +448,6 @@ function renderPc() {
   const live = pcTokens.filter(t => !t.revoked);
   if (!live.length) { show(nodes.pcEmpty); return; }
   hide(nodes.pcEmpty);
-
   const frag = document.createDocumentFragment();
   for (const t of live) {
     const li = el('li', 'lab-pc-item');
@@ -558,22 +464,16 @@ function renderPc() {
   nodes.pcList.append(frag);
 }
 
-/* One line, only when the lab has numbers: how many matches the account has
-   played, the win rate, and how long ago the lab last read them. No line at
-   all is better than a line saying zero. */
 const groupThousands = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
 function pcStatsLine(stats) {
   if (!stats || !Number.isFinite(stats.matches)) return '';
   const bits = [groupThousands(stats.matches) + (stats.matches === 1 ? ' match' : ' matches') + ' from your Epic account'];
   if (Number.isFinite(stats.win_rate)) {
-    const pct = stats.win_rate * 100;
-    const shown = pct >= 10 ? Math.round(pct) : Math.round(pct * 10) / 10;
-    bits.push(shown + '% won');
+    const p = stats.win_rate * 100;
+    bits.push((p >= 10 ? Math.round(p) : Math.round(p * 10) / 10) + '% won');
   }
-  if (Number.isFinite(stats.wins)) {
-    bits.push(groupThousands(stats.wins) + (stats.wins === 1 ? ' win' : ' wins'));
-  }
+  if (Number.isFinite(stats.wins)) bits.push(groupThousands(stats.wins) + (stats.wins === 1 ? ' win' : ' wins'));
   const when = stats.taken_at ? agoText(stats.taken_at) : '';
   return bits.join(' \u00b7 ') + (when ? ', updated ' + when : '') + '.';
 }
@@ -624,8 +524,6 @@ async function revokePc(token, btn) {
   }
 }
 
-/* Only reached from a click on the Connect button, and only where the browser
-   allows it. A refusal is not worth a message: the token is on screen to copy. */
 async function copyToken(btn) {
   const text = nodes.pcTokenValue.textContent || '';
   if (!text || !navigator.clipboard || !navigator.clipboard.writeText) return;
@@ -669,20 +567,19 @@ function bootPc() {
   nodes.pcDone.addEventListener('click', hideToken);
 }
 
+/* ---------- boot ---------- */
 function render() {
-  renderTesting();
-  renderHistory();
-  updateRepeat();
+  renderFigures();
+  renderCharts();
+  renderChanges();
+  renderRanked();
 }
 
-/* ---------- boot ---------- */
 function boot() {
-  fillCatalog();
   nodes.retry.addEventListener('click', () => {
     if (signInNeeded) { location.reload(); return; }
     load();
   });
-  applySetting(true);
   bootPc();
   load();
   loadPc();
