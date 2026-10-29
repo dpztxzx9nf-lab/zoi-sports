@@ -31,6 +31,27 @@ const TEAMS = new Set(["Solo", "Duo", "Trio", "Squad"]);
    has a title and none of those. Anything else is null and stays null. */
 const KINDS = new Set(["br", "creative"]);
 const TITLE_MAX = 80;
+/* A replay row is small - a couple of hundred bytes of numbers - so the cap is
+   about how many matches one send can carry, not about bytes. Twenty is a whole
+   evening's play; the agent caps its own batch at the same number. */
+const REPLAY_MAX = 20;
+const REPLAY_TEXT_MAX = 80;
+/* Two numbers that a wrong reader would produce and a right one cannot: a match
+   no longer than six hours, and a per-match damage total that is not a season's. */
+const REPLAY_MAX_MS = 6 * 60 * 60 * 1000;
+const REPLAY_COUNT_MAX = 10_000_000;
+const REPLAY_SHOTS_MAX = 3000;
+/* How far a replay's own end may sit from the match the log recorded. The five
+   replays on this box land 0.3 to 2.3 seconds from their match, because the log's
+   end marker and the replay's start clock are written by different parts of the
+   game, so the tolerance has to be wider than that spread. Three seconds leaves
+   headroom for that jitter and still cannot reach the wrong match: matches are
+   minutes apart, and the statement below takes the nearest one rather than the
+   first one inside the window. */
+const REPLAY_JOIN_SECONDS = 3.0;
+/* The reason a headshot count carries while nothing can count them. The number
+   is in the per-cue damage stream, not in either event this reader understands. */
+const HEADSHOTS_REASON = "needs-damage-cue-reader";
 
 const labels = new Map(CATALOG.map((c) => [c.id, c.label]));
 
@@ -290,6 +311,18 @@ export async function onRequest({ request, env }) {
     matchResult = { stored: 0, seen: 0, dropped: ["the matches could not be stored"] };
   }
 
+  /* Replays are their own half again: their own table, their own validation, and
+     their own failure. A replay the reader could not parse must never cost the
+     settings send, and a database without the 0009 table must still take the
+     settings. */
+  let replayResult = { stored: 0, seen: 0, attached: 0, dropped: [] };
+  try {
+    replayResult = await storeReplayStats(env, owner, body.replayStats);
+  } catch (e) {
+    console.error("lab sync replay stats failed", e);
+    replayResult = { stored: 0, seen: 0, attached: 0, dropped: ["the replay stats could not be stored"] };
+  }
+
   /* Past this point the snapshot is stored, so nothing below may fail the
      request: a stats problem is reported in the reply and nothing else. */
   /* Whether this sync opened a test decides whether the stats read also writes
@@ -298,7 +331,7 @@ export async function onRequest({ request, env }) {
      straddle rule. Only a test opening warrants one - an ordinary heartbeat that
      did it too would fill lab_stats with rows that mark nothing. */
   const stats = await syncStats(env, owner, tokenId, epicAccountId, created.map((t) => t.id));
-  return json({ ok: true, created, skipped, closed, duplicate, stats, matches: matchResult });
+  return json({ ok: true, created, skipped, closed, duplicate, stats, matches: matchResult, replayStats: replayResult });
 }
 
 /* ------------------------------------------------------------- the stats ---
@@ -531,4 +564,262 @@ async function storeMatches(env, owner, rawMatches) {
   }
   if (bad) dropped.push(bad + (bad === 1 ? " match could not be read" : " matches could not be read"));
   return { stored, seen, dropped };
+}
+
+/* -------------------------------------------------------- the replay stats ---
+   One row per replay file, joined to the match it recorded. This is the only
+   per-match record the lab has: the stats API counts a whole account, so it
+   cannot say which side of a settings change a single game fell on, and the log
+   does not carry kills, damage, accuracy or placement at all. The replay does.
+
+   Three rules here, all of them from the lab's own history.
+
+   Nothing is invented. A number arrives as a measurement or as null, and the
+   row's `recorded` flag says which. A Creative island writes an
+   AthenaMatchStats event that is empty and writes no AthenaMatchTeamStats at
+   all, so its row carries recorded = 0 with every measurement null and the
+   reader's reason beside it - not eight zeros that a page would draw as a bad
+   game. A payload that claims measurements for a Creative replay is not
+   believed: the flag and the numbers are checked against each other.
+
+   Nothing is dropped for want of a match. A replay whose match the log has not
+   reached yet is stored with a null match_id and attached later, by the second
+   statement below. The order is usually that one, in fact: the replay lands on
+   disk seconds after the match ends, while the log's match record is held until
+   its rank line arrives a minute or three later, so the replay very often gets
+   here first. Discarding it then would lose the numbers for the ordinary case.
+
+   Nothing here can take the settings down. The caller wraps this in its own
+   try/catch, and this function returns a note rather than throwing when the
+   table is missing. */
+function replayRecord(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+
+  const text = (v, max = REPLAY_TEXT_MAX) => {
+    if (typeof v !== "string") return null;
+    const s = v.trim();
+    return s && s.length <= max ? s : null;
+  };
+  /* A date this column can be joined on. The shape is not enough: "2026-13-45"
+     has the right shape and is not a date, and julianday() answers NULL for it,
+     which would leave a row that can never attach for a reason nobody could see
+     in the table. So the value has to parse as well as match. */
+  const when = (v) => {
+    if (typeof v !== "string") return null;
+    const t = v.trim();
+    return ISO.test(t) && Number.isFinite(Date.parse(t)) ? t : null;
+  };
+  /* A whole number the game could have written. A negative one, a fractional one
+     and one larger than any match's counter are all refused to null rather than
+     rounded into something plausible. */
+  const count = (v) => (typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= REPLAY_COUNT_MAX
+    ? Math.round(v) : null);
+
+  /* The end is the join key, and a row with no end has no place on the timeline
+     and could never be attached to anything. The module always fills it on a
+     file it could read; a row without one is a sender bug, and dropping it is
+     how that bug gets noticed in the reply instead of silently filling a table
+     with rows nothing can use. */
+  const endedAt = when(raw.endedAtUtc);
+  if (!endedAt) return null;
+  const startedAt = when(raw.startedAtUtc);
+
+  /* The length the file states, which is what makes ended_at checkable against
+     started_at. Six hours is far past any match. */
+  const lengthMs = count(raw.lengthMs);
+  const length = lengthMs !== null && lengthMs > 0 && lengthMs <= REPLAY_MAX_MS ? lengthMs : null;
+
+  const recorded = raw.recorded === true;
+  const creative = raw.creative === true && !recorded;
+
+  /* Accuracy is a fraction because that is what the event stores. Anything
+     outside none-to-all is a misread, not a very good player. */
+  const accuracy = recorded && typeof raw.accuracy === "number" && Number.isFinite(raw.accuracy)
+    && raw.accuracy >= 0 && raw.accuracy <= 1 ? raw.accuracy : null;
+
+  /* The recovered pair is only a fact as a pair. One without the other, shots
+     smaller than hits, or a shot count past the search window is not a pair. */
+  const hits = recorded ? count(raw.accuracyHits) : null;
+  const shots = recorded ? count(raw.accuracyShots) : null;
+  const pair = hits !== null && shots !== null && shots >= hits && shots <= REPLAY_SHOTS_MAX
+    ? { hits, shots } : { hits: null, shots: null };
+  /* How many pairs would have produced the stored percentage. Kept beside a
+     null pair so the row says "fourteen fractions fit" rather than looking like
+     a reader that could not count. Zero when there is no accuracy to explain. */
+  const pairs = recorded ? count(raw.accuracyPairs) : null;
+
+  const placement = recorded ? count(raw.placement) : null;
+  const totalPlayers = recorded ? count(raw.totalPlayers) : null;
+  /* A placement of zero, or a placement past the field, describes no match. */
+  const placed = placement !== null && totalPlayers !== null && placement >= 1 && totalPlayers >= placement
+    ? { placement, totalPlayers } : { placement: null, totalPlayers: null };
+
+  /* Headshots come from the damage-cue stream, which is a different reader with
+     a different cost; today's agent sends null and a reason, and the column is
+     here for the reader that will fill it. A number is taken as sent, and its
+     reason with it, so that reader needs no migration. */
+  const headshots = recorded ? count(raw.headshots) : null;
+  const headshotsReason = headshots === null ? (text(raw.headshotsReason) || HEADSHOTS_REASON) : null;
+
+  const weaponDamage = recorded ? count(raw.weaponDamage) : null;
+  const otherDamage = recorded ? count(raw.otherDamage) : null;
+  /* The sum is exact and the screen shows it as one number, so it is computed
+     rather than trusted: a sender that adds it up wrong sends nothing that
+     survives. When either half is missing there is no sum. */
+  const damageToPlayers = weaponDamage !== null && otherDamage !== null
+    ? weaponDamage + otherDamage
+    : (recorded ? count(raw.damageToPlayers) : null);
+
+  return {
+    endedAt, startedAt, length,
+    recorded, creative,
+    reason: text(raw.reason, 240) || (recorded ? null : "the reader did not say why"),
+    source: text(raw.source),
+    accuracy,
+    hits: pair.hits, shots: pair.shots, pairs,
+    assists: recorded ? count(raw.assists) : null,
+    eliminations: recorded ? count(raw.eliminations) : null,
+    headshots, headshotsReason,
+    weaponDamage, otherDamage, damageToPlayers,
+    damageTaken: recorded ? count(raw.damageTaken) : null,
+    damageToStructures: recorded ? count(raw.damageToStructures) : null,
+    totalTraveled: recorded ? count(raw.totalTraveled) : null,
+    placement: placed.placement, totalPlayers: placed.totalPlayers,
+  };
+}
+
+/* Whether a table is in this database. The probe is the same pragma the column
+   check uses - a column cannot exist on a table that does not - so a database
+   built before 0009 answers false instead of throwing on every sync. */
+async function hasTable(env, table) {
+  try {
+    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM pragma_table_info(?) WHERE name = ?")
+      .bind(table, "id").first();
+    return Boolean(row && Number(row.n) > 0);
+  } catch {
+    return false;
+  }
+}
+
+/* The join, in one statement. A replay is attached to the nearest match this
+   person has whose end lies within REPLAY_JOIN_SECONDS of the replay's own end,
+   and to nothing when none does. Nearest rather than first: matches are minutes
+   apart and the window is seconds, so in practice at most one qualifies, but a
+   replayed evening can hold a match the log dated twice and picking the closest
+   is the only choice that does not depend on row order.
+
+   Every row that has no match is re-offered this statement on every sync, which
+   is the ordinary path rather than a repair: the replay file lands on disk
+   seconds after the match ends while the log's match record is held until its
+   rank line arrives a minute or three later, so a first sync of an evening
+   usually stores replays whose matches do not exist yet. Without it those rows
+   would stay unattached for ever, and the per-match numbers would never reach
+   the game they belong to. The WHERE is bounded to unattached rows, so on a
+   quiet sync it reads nothing and changes nothing.
+
+   A match is only ever read here. Nothing in this statement can create a
+   lab_matches row: a replay with no match is stored unattached and stays that
+   way until a real match arrives.
+
+   Why a window function rather than a scalar subquery: the obvious form of this
+   statement - a correlated subquery in the SET with ORDER BY on the replay's own
+   column - does not run. SQLite refuses an outer reference inside a subquery's
+   ORDER BY ("no such column"), so the nearest match cannot be chosen there. The
+   CTE ranks the candidates in a place where both tables are in scope, which
+   also makes "nearest" explicit rather than a side effect of ordering. */
+const ATTACH_REPLAYS = `WITH candidate AS (
+    SELECT r.id AS rid, m.id AS mid,
+           ROW_NUMBER() OVER (PARTITION BY r.id
+                              ORDER BY ABS(julianday(m.ended_at) - julianday(r.ended_at)) ASC, m.id DESC) AS pick
+      FROM lab_replay_stats r
+      JOIN lab_matches m ON m.owner = r.owner AND m.ended_at IS NOT NULL
+     WHERE r.owner = ? AND r.match_id IS NULL AND r.ended_at IS NOT NULL
+       AND ABS((julianday(m.ended_at) - julianday(r.ended_at)) * 86400.0) <= ?
+  )
+  UPDATE lab_replay_stats
+     SET match_id = (SELECT mid FROM candidate WHERE candidate.rid = lab_replay_stats.id AND candidate.pick = 1)
+   WHERE id IN (SELECT rid FROM candidate WHERE pick = 1)`;
+
+/* The attach pass on its own, for a sync that carried no replays. A replay is
+   usually stored at least one sync before its match exists, so the sync that
+   finally brings the match is the one that has to go looking for it - and that
+   sync has nothing in `replayStats` at all. Without this, those rows would only
+   ever attach on the next evening's first send, or never. */
+async function attachStoredReplays(env, owner) {
+  if (!(await hasTable(env, "lab_replay_stats"))) return 0;
+  try {
+    const late = await env.DB.prepare(ATTACH_REPLAYS).bind(owner, REPLAY_JOIN_SECONDS).run();
+    return late?.meta?.changes ? Number(late.meta.changes) : 0;
+  } catch (e) {
+    /* A row that could not be attached is still stored, and the next sync tries
+       again. Nothing about this is worth failing over. */
+    console.error("lab sync replay attach failed", e);
+    return 0;
+  }
+}
+
+async function storeReplayStats(env, owner, rawReplays) {
+  /* No replays in this batch is not "nothing to do": earlier replays may be
+     waiting for the match this very sync is carrying. */
+  if (rawReplays === undefined || rawReplays === null) {
+    return { stored: 0, seen: 0, attached: await attachStoredReplays(env, owner), dropped: [] };
+  }
+  if (!Array.isArray(rawReplays)) return { stored: 0, seen: 0, attached: 0, dropped: ["replayStats has to be a list"] };
+
+  const dropped = [];
+  if (rawReplays.length > REPLAY_MAX) {
+    /* Newest last is what the agent sends, but position is not what decides
+       which rows are kept: the newest are taken by end time, because a reader
+       that trusted position would keep the oldest twenty and lose the games just
+       played while telling the agent the opposite. */
+    dropped.push("only the newest " + REPLAY_MAX + " replays were read");
+  }
+  const kept = rawReplays.slice().sort((a, b) => {
+    const at = a && typeof a.endedAtUtc === "string" ? a.endedAtUtc : "";
+    const bt = b && typeof b.endedAtUtc === "string" ? b.endedAtUtc : "";
+    return at === bt ? 0 : at < bt ? -1 : 1;
+  }).slice(-REPLAY_MAX);
+  const seen = kept.length;
+
+  if (!(await hasTable(env, "lab_replay_stats"))) {
+    return { stored: 0, seen, attached: 0, dropped: dropped.concat(["lab_replay_stats is not in this database yet"]) };
+  }
+
+  let stored = 0;
+  let bad = 0;
+  for (const raw of kept) {
+    const r = replayRecord(raw);
+    if (!r) { bad++; continue; }
+
+    /* The key is the replay's own window: one replay file describes one match,
+       so its start and end identify it. The owner is part of the hash for the
+       same reason the match key includes it - two people sharing a PC must not
+       collapse onto one row - and the unique index is what makes that true under
+       concurrency, not just on the happy path. */
+    const key = await sha256Hex([owner, r.startedAt || "", r.endedAt, String(r.length || "")].join("\n"));
+
+    /* match_id is written NULL and filled by ATTACH_REPLAYS below. One statement
+       decides the join, so a row cannot be attached by one tolerance on the way
+       in and a different one on the way back. */
+    const row = await env.DB.prepare(
+      `INSERT INTO lab_replay_stats
+         (owner,replay_key,match_id,source,recorded,creative,reason,started_at,ended_at,length_ms,
+          accuracy,accuracy_hits,accuracy_shots,accuracy_pairs,assists,eliminations,headshots,headshots_reason,
+          weapon_damage,other_damage,damage_to_players,damage_taken,damage_to_structures,
+          total_traveled,placement,total_players)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       ON CONFLICT (owner,replay_key) DO NOTHING`
+    ).bind(
+      owner, key, null,
+      r.source, r.recorded ? 1 : 0, r.creative ? 1 : 0, r.reason, r.startedAt, r.endedAt, r.length,
+      r.accuracy, r.hits, r.shots, r.pairs, r.assists, r.eliminations, r.headshots, r.headshotsReason,
+      r.weaponDamage, r.otherDamage, r.damageToPlayers, r.damageTaken, r.damageToStructures,
+      r.totalTraveled, r.placement, r.totalPlayers
+    ).run();
+    if (row?.meta?.changes) stored += 1;
+  }
+  if (bad) dropped.push(bad + (bad === 1 ? " replay could not be read" : " replays could not be read"));
+
+  const attached = await attachStoredReplays(env, owner);
+  return { stored, seen, attached, dropped };
 }
