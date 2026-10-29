@@ -36,6 +36,7 @@ export async function onRequest({ request, env }) {
        card is not on it at all. */
     const { results } = await env.DB.prepare(
       `SELECT p.slug,p.gamertag,p.role,p.region,p.platform,p.bio,p.socials,p.updated_at,
+              p.avatar_at,p.banner_at,
               CASE WHEN s.owner IS NULL THEN 0 ELSE 1 END AS has_settings
        FROM player_profiles p
        LEFT JOIN player_settings s ON s.owner = p.owner

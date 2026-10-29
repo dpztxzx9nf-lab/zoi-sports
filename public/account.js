@@ -64,6 +64,27 @@ ${MARKUP_TABS}
  <div class="acct-pane" role="tabpanel" id="acct-profile" aria-labelledby="acct-tab-profile" tabindex="0">
   <p class="acct-lede">This is your card on the <a href="/#roster">roster</a>. Saved here, it replaces what the public page shows.</p>
   <form class="acct-form" id="pf-form" novalidate>
+   <!-- The two pictures, above the fields: they save on their own, so a big
+        file never holds up a bio edit. Nothing is typed here but a file. -->
+   <div class="acct-media">
+    <div class="acct-banner" id="pf-banner">
+     <img id="pf-banner-img" alt="" hidden>
+     <div class="acct-media-acts">
+      <button type="button" class="acct-media-btn" id="pf-banner-pick">Choose banner</button>
+      <button type="button" class="acct-media-btn" id="pf-banner-remove" hidden>Remove</button>
+     </div>
+    </div>
+    <div class="acct-face">
+     <span class="avatar" id="pf-avatar-box"><span id="pf-avatar-initial"></span><img id="pf-avatar-img" alt="" hidden></span>
+     <div class="acct-media-acts">
+      <button type="button" class="acct-media-btn" id="pf-avatar-pick">Choose picture</button>
+      <button type="button" class="acct-media-btn" id="pf-avatar-remove" hidden>Remove</button>
+     </div>
+    </div>
+    <input type="file" class="acct-file" id="pf-avatar-file" accept="image/*">
+    <input type="file" class="acct-file" id="pf-banner-file" accept="image/*">
+    <p class="acct-media-status" id="pf-media-status" role="status" hidden></p>
+   </div>
    <label class="lab-field" for="pf-gamertag">Gamertag
     <input id="pf-gamertag" name="gamertag" maxlength="32" autocomplete="off" spellcheck="false" required>
    </label>
@@ -191,6 +212,14 @@ const nodes = {
   region: inAcct('pf-region'), platform: inAcct('pf-platform'), bio: inAcct('pf-bio'),
   published: inAcct('pf-published'), save: inAcct('pf-save'), saved: inAcct('pf-saved'),
   errors: inAcct('pf-errors'),
+  bannerBox: inAcct('pf-banner'), bannerImg: inAcct('pf-banner-img'),
+  bannerPick: inAcct('pf-banner-pick'), bannerRemove: inAcct('pf-banner-remove'),
+  bannerFile: inAcct('pf-banner-file'),
+  avatarBox: inAcct('pf-avatar-box'), avatarImg: inAcct('pf-avatar-img'),
+  avatarInitial: inAcct('pf-avatar-initial'),
+  avatarPick: inAcct('pf-avatar-pick'), avatarRemove: inAcct('pf-avatar-remove'),
+  avatarFile: inAcct('pf-avatar-file'),
+  mediaStatus: inAcct('pf-media-status'),
   socials: {
     x: inAcct('pf-x'), tiktok: inAcct('pf-tiktok'), youtube: inAcct('pf-youtube'),
     twitch: inAcct('pf-twitch'), instagram: inAcct('pf-instagram'), kick: inAcct('pf-kick'),
@@ -378,6 +407,9 @@ function fillProfile(p, force) {
   for (const net of Object.keys(nodes.socials)) {
     put(nodes.socials[net], 'social:' + net, typeof socials[net] === 'string' ? socials[net] : '');
   }
+  /* The pictures follow the card, not the typing: they are never "dirty", because
+     they are not typed into. */
+  showMedia(has ? { gamertag: p.gamertag, avatar: p.avatar || null, banner: p.banner || null } : null);
 }
 
 /* Wire the dirty flags once. Any keystroke in a field marks it, and a field the
@@ -397,6 +429,178 @@ function watchProfileFields() {
     if (input) input.addEventListener('input', () => pfTouched.add('social:' + net));
   }
   nodes.published.addEventListener('change', () => pfTouched.add('published'));
+}
+
+/* ---------- the two pictures ---------- */
+
+/* A picture saves the moment it is picked, in its own request, so a slow upload
+   never sits between a reader and a bio edit. The crop happens here because the
+   server should only ever see one shape: the avatar is a centre square, the
+   banner is a centre 3:1 strip, both scaled down and exported as JPEG. The bytes
+   are re-checked on the other side, so this is about size, not trust. */
+const MEDIA = {
+  avatar: { w: 512, h: 512, limit: 600 * 1024 },
+  banner: { w: 1600, h: 533, limit: 1200 * 1024 },
+};
+
+/* What the pane is showing. The picture fields arrive from the server on the
+   same read as the text ones, and later on their own after an upload, so they
+   are merged rather than replaced: an upload answers with two addresses, not
+   with the whole card. */
+let mediaView = null;
+
+function paintMedia(p) {
+  const has = Boolean(p);
+  const pic = has && typeof p.avatar === 'string' && p.avatar ? p.avatar : '';
+  const strip = has && typeof p.banner === 'string' && p.banner ? p.banner : '';
+  const tag = has && p.gamertag ? String(p.gamertag) : '';
+
+  if (nodes.avatarInitial) nodes.avatarInitial.textContent = tag ? tag.charAt(0).toUpperCase() : '';
+  if (nodes.avatarImg) {
+    if (pic) { nodes.avatarImg.src = pic; nodes.avatarImg.hidden = false; }
+    else { nodes.avatarImg.removeAttribute('src'); nodes.avatarImg.hidden = true; }
+  }
+  if (nodes.avatarBox) nodes.avatarBox.classList.toggle('has-pic', Boolean(pic));
+  if (nodes.bannerImg) {
+    if (strip) { nodes.bannerImg.src = strip; nodes.bannerImg.hidden = false; }
+    else { nodes.bannerImg.removeAttribute('src'); nodes.bannerImg.hidden = true; }
+  }
+  if (nodes.bannerBox) nodes.bannerBox.classList.toggle('has-pic', Boolean(strip));
+  if (nodes.avatarRemove) nodes.avatarRemove.hidden = !pic;
+  if (nodes.bannerRemove) nodes.bannerRemove.hidden = !strip;
+}
+
+function showMedia(p) {
+  mediaView = p ? Object.assign({}, mediaView || {}, p) : null;
+  paintMedia(mediaView);
+}
+
+function mediaStatus(text) {
+  if (!nodes.mediaStatus) return;
+  if (!text) { nodes.mediaStatus.textContent = ''; hide(nodes.mediaStatus); return; }
+  nodes.mediaStatus.textContent = text;
+  show(nodes.mediaStatus);
+}
+
+/* Centre-crop to the target shape, scale down to the largest size that is still
+   sharp, and hand back a JPEG data URL. createImageBitmap is the fast path; an
+   Image over an object URL is the one that works everywhere else. */
+async function cropToJpeg(file, spec) {
+  let bitmap = null;
+  let width = 0;
+  let height = 0;
+  if (typeof createImageBitmap === 'function') {
+    bitmap = await createImageBitmap(file);
+    width = bitmap.width;
+    height = bitmap.height;
+  } else {
+    const url = URL.createObjectURL(file);
+    try {
+      bitmap = await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('not an image'));
+        img.src = url;
+      });
+      width = bitmap.naturalWidth || bitmap.width;
+      height = bitmap.naturalHeight || bitmap.height;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+  if (!width || !height) throw new Error('not an image');
+
+  const ratio = spec.w / spec.h;
+  let sw = width;
+  let sh = height;
+  if (sw / sh > ratio) sw = Math.round(sh * ratio);
+  else sh = Math.round(sw / ratio);
+  const sx = Math.round((width - sw) / 2);
+  const sy = Math.round((height - sh) / 2);
+  const scale = Math.min(1, spec.w / sw);
+  const w = Math.max(1, Math.round(sw * scale));
+  const h = Math.max(1, Math.round(sh * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('no canvas');
+  ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, w, h);
+  if (bitmap && typeof bitmap.close === 'function') bitmap.close();
+
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+  if (!blob) throw new Error('no blob');
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('unreadable'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function mediaAnswer(data) {
+  showMedia({
+    avatar: data && typeof data.avatar === 'string' ? data.avatar : null,
+    banner: data && typeof data.banner === 'string' ? data.banner : null,
+  });
+}
+
+async function uploadPicked(kind) {
+  const input = kind === 'banner' ? nodes.bannerFile : nodes.avatarFile;
+  const file = input && input.files && input.files[0] ? input.files[0] : null;
+  if (!file) return;
+  if (file.type && !/^image\//i.test(file.type)) {
+    mediaStatus('That file is not an image.');
+    input.value = '';
+    return;
+  }
+  mediaStatus('Uploading…');
+  try {
+    const data = await cropToJpeg(file, MEDIA[kind]);
+    const r = await api('/api/lab/media', { method: 'PUT', body: { kind, data } });
+    if (!r.ok) {
+      mediaStatus(errorsFrom(r.data, "Couldn't save that picture.")[0]);
+      return;
+    }
+    mediaAnswer(r.data);
+    mediaStatus('Saved.');
+  } catch (e) {
+    if (e instanceof AuthError) { mediaStatus('Sign in to change your pictures.'); return; }
+    if (e instanceof NetError) { mediaStatus("Couldn't reach the lab."); return; }
+    mediaStatus('That file could not be read as an image.');
+  } finally {
+    input.value = '';
+  }
+}
+
+async function removePicked(kind) {
+  mediaStatus('Removing…');
+  try {
+    const r = await api('/api/lab/media', { method: 'DELETE', body: { kind } });
+    if (!r.ok) {
+      mediaStatus(errorsFrom(r.data, "Couldn't remove that picture.")[0]);
+      return;
+    }
+    mediaAnswer(r.data);
+    mediaStatus('');
+  } catch (e) {
+    if (e instanceof AuthError) { mediaStatus('Sign in to change your pictures.'); return; }
+    mediaStatus("Couldn't reach the lab.");
+  }
+}
+
+function watchMedia() {
+  if (nodes.avatarPick && nodes.avatarFile) {
+    nodes.avatarPick.addEventListener('click', () => nodes.avatarFile.click());
+    nodes.avatarFile.addEventListener('change', () => uploadPicked('avatar'));
+  }
+  if (nodes.bannerPick && nodes.bannerFile) {
+    nodes.bannerPick.addEventListener('click', () => nodes.bannerFile.click());
+    nodes.bannerFile.addEventListener('change', () => uploadPicked('banner'));
+  }
+  if (nodes.avatarRemove) nodes.avatarRemove.addEventListener('click', () => removePicked('avatar'));
+  if (nodes.bannerRemove) nodes.bannerRemove.addEventListener('click', () => removePicked('banner'));
 }
 
 async function loadProfile() {
@@ -701,6 +905,7 @@ function bootAccount() {
   nodes.form.addEventListener('submit', saveProfile);
   nodes.gsForm.addEventListener('submit', saveSettings);
   watchProfileFields();
+  watchMedia();
   watchSettingsFields();
   whoAmI().then(showAccount);
 }

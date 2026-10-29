@@ -14,7 +14,7 @@
 import { identity, json, readBody } from "../../_lib/lab.js";
 import { LIMITS, NETWORKS, slugOf, socialUrl, socialsFromText, publicProfile, textField } from "../../_lib/profile.js";
 
-const SELECT = "SELECT owner,slug,gamertag,role,region,platform,bio,socials,published,updated_at FROM player_profiles";
+const SELECT = "SELECT owner,slug,gamertag,role,region,platform,bio,socials,published,updated_at,avatar_at,banner_at FROM player_profiles";
 
 /* A slug that is not already taken by somebody else. The base is the gamertag;
    a collision gets -2, -3, ... so two players called the same thing still both

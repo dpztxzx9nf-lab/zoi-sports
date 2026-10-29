@@ -132,7 +132,22 @@ html,body{overflow-x:clip}img{max-width:100%}
 .profile{width:min(420px,calc(100vw - 2rem));max-height:calc(100dvh - 2rem);overflow:auto;background:var(--card);color:var(--t);border:1px solid #e6d3a044;border-top:3px solid var(--g);border-radius:10px;padding:2rem 1.5rem 1.5rem;text-align:center;box-shadow:0 0 60px #ffd63c22}
 .profile::backdrop{background:#000c;backdrop-filter:blur(3px)}
 .pf-close{position:absolute;top:.5rem;right:.5rem;width:44px;height:44px;border:0;background:none;color:var(--g);font-size:1.8rem;line-height:1;cursor:pointer;border-radius:50%}.pf-close:hover{color:#fff}.pf-close:focus-visible{outline:2px solid var(--gold)}
+/* ---------- player pictures ----------
+   A banner is a 3:1 strip that only joins the layout once a picture has actually
+   loaded. The element ships empty on every card, so an empty strip must take no
+   space: a card without a banner looks exactly as it did before, and a card with
+   one grows by the strip and nothing else. */
+.card.player{position:relative;overflow:hidden}
+.card.player>.banner{display:none}
+.card.player>.banner:not(:empty){display:block;aspect-ratio:3/1;margin:-1.3rem -1.3rem 1rem;background:#000;border-bottom:1px solid #e6d3a033}
+.card.player>.banner img{display:block;width:100%;height:100%;object-fit:cover;border:0;border-radius:0}
 .pf-avatar{width:96px;height:96px;font-size:2.4rem}
+/* The banner sits above the avatar and the avatar rides up over its lower edge,
+   so the pair reads as one card rather than a picture with a circle under it. */
+.profile .pf-banner{display:none}
+.profile .pf-banner:not([hidden]){display:block;aspect-ratio:3/1;margin:-2rem -1.5rem 1.2rem;background:#000;border-bottom:1px solid #e6d3a044}
+.profile .pf-banner img{display:block;width:100%;height:100%;object-fit:cover;border:0;border-radius:0}
+.profile.has-banner .pf-avatar{margin-top:-3rem;position:relative;z-index:1;box-shadow:0 0 0 3px var(--card),0 0 0 5px #e6d3a066,0 0 18px #ffd63c22}
 .pf-facts{display:grid;grid-template-columns:auto 1fr;gap:.35rem 1rem;text-align:left;margin:1.2rem auto;max-width:280px;font-size:.9rem}.pf-facts dt{color:var(--m);text-transform:uppercase;letter-spacing:.1em;font-size:.72rem;align-self:center}.pf-facts dd{margin:0;color:var(--t)}
 .pf-bio{color:var(--m);font-style:italic}
 .pf-socials{list-style:none;display:flex;flex-wrap:wrap;justify-content:center;gap:.5rem;padding:0;margin:.8rem 0 0}.pf-socials a{display:inline-block;padding:.45rem .9rem;border:1px solid var(--g);border-radius:999px;color:var(--g);text-decoration:none;font-size:.8rem;letter-spacing:.06em}.pf-socials a:hover{background:var(--g);color:#0b0b0d}.pf-socials:empty{display:none}
@@ -618,6 +633,28 @@ html,body{overflow-x:clip}img{max-width:100%}
 .acct-hint{margin-bottom:0;font-size:.8rem}
 .acct-socials{display:grid;grid-template-columns:1fr;gap:.7rem}
 @media(min-width:520px){.acct-socials{grid-template-columns:1fr 1fr}}
+/* ---------- the two pictures in the account menu ----------
+   A file picker cannot look like a file picker and still match anything else on
+   the page, so the input is the hidden mechanism and the button is the control.
+   The status line is one line of text that is only ever set from JS. */
+.acct-media{display:flex;flex-direction:column;gap:.7rem;margin-bottom:.4rem}
+.acct-banner{position:relative;display:flex;align-items:flex-end;justify-content:center;min-height:0;padding:.5rem;border:1px dashed #e6d3a044;border-radius:8px;background:#000}
+.acct-banner.has-pic{border-style:solid;padding:0;aspect-ratio:3/1;overflow:hidden}
+.acct-banner img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border:0;border-radius:0}
+.acct-banner.has-pic img{position:static}
+.acct-banner.has-pic .acct-media-acts{position:absolute;right:.5rem;bottom:.5rem;z-index:1}
+.acct-face{display:flex;align-items:center;gap:.9rem}
+.acct-face .avatar{width:72px;height:72px;margin:0;flex:0 0 auto;font-size:1.9rem}
+.acct-face .avatar img{width:100%;height:100%;object-fit:cover;border:0;border-radius:50%}
+.acct-media-acts{display:flex;flex-wrap:wrap;gap:.5rem}
+.acct-media-btn{font:700 .68rem/1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--g);background:#000c;border:1px solid var(--g);border-radius:999px;padding:.45rem .9rem;min-height:36px;cursor:pointer}
+.acct-media-btn:hover{background:var(--g);color:#0b0b0d}
+.acct-media-btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.acct-media-btn[hidden]{display:none}
+.acct-file{position:absolute!important;left:-9999px;width:1px;height:1px;overflow:hidden}
+.acct-media-status{margin:0;font-size:.82rem;line-height:1.4;color:var(--m);min-height:1.2em}
+.acct-media-status[hidden]{display:none}
+.acct-media img[hidden]{display:none}
 .acct-check{display:flex;align-items:center;gap:.6rem;font-size:.88rem;line-height:1.4;color:var(--t);cursor:pointer;margin-top:.2rem}
 .acct-check input{width:20px;height:20px;flex:0 0 auto;accent-color:var(--g);cursor:pointer}
 .acct-actions{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;margin-top:.3rem}

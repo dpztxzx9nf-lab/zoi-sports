@@ -34,7 +34,12 @@ CREATE TABLE IF NOT EXISTS player_profiles (
   socials TEXT,
   published INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  -- When each picture was last saved. The picture itself lives in the
+  -- zoi-media bucket under <slug>/<kind>; the timestamp is both the presence
+  -- and the cache-buster, so no URL is ever stored.
+  avatar_at TEXT,
+  banner_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_player_profiles_public ON player_profiles(published, slug);
 

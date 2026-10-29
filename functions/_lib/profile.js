@@ -13,6 +13,8 @@
       javascript: or data: value must never reach the page even if it somehow
       got past the form - the page re-checks with socialUrl() before using one. */
 
+import { mediaUrl } from "./media.js";
+
 export const NETWORKS = ["x", "tiktok", "youtube", "instagram", "twitch", "kick"];
 
 export const LIMITS = {
@@ -92,6 +94,12 @@ export function publicProfile(row) {
     bio: row.bio || null,
     socials: socialsFromText(row.socials),
     updated_at: row.updated_at || null,
+    /* The addresses are derived, not stored: the row keeps when a picture was
+       saved, and the address is built from that and the slug. A row read without
+       those columns - an older query, or a database before 0012 - has no
+       timestamp, so it has no picture, which is exactly right. */
+    avatar: mediaUrl(row.slug, "avatar", row.avatar_at),
+    banner: mediaUrl(row.slug, "banner", row.banner_at),
   };
   /* Whether this player has a game settings page. Only the roster query joins
      player_settings to answer that, so it is added only when the column is
