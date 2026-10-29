@@ -821,9 +821,17 @@ export async function readNewReplays() {
     if (!result.ok) {
       /* A reader that says the failure is only true for a minute gets another
          look. The game is still appending to the replay for a minute or two
-         after the match ends, so the first poll after a match almost always
-         finds it partial, and skipping on that first look is how a real match
-         used to disappear from the lab for good. */
+         after the match ends, so the first poll after a match usually finds it
+         partial.
+
+         Worth being precise about what this buys, because the obvious guess is
+         wrong: a file this reader refuses is not lost. The game keeps writing to
+         it, its timestamp moves forward, and the next poll after it settles reads
+         it on the ordinary path - which is what happened to the three replays of
+         2026-10-29 13:44, 13:57 and 14:05, all of which reached the lab about
+         twelve minutes late. What the retry removes is that wait, and the
+         dependence on the game touching the file again before the mark moves
+         past it. */
       if (result.retryable) {
         const waited = (replayRetry.get(file.path) || 0) + 1;
         replayRetry.set(file.path, waited);
