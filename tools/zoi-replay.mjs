@@ -67,7 +67,17 @@
    back as { ok: false, reason } - the caller is on a timer and a bad replay must
    never take the settings sync down with it. The small helpers underneath are
    exported so a harness can test them apart from the file I/O, and those do
-   throw on malformed input; readReplayStats is the guard around them. */
+   throw on malformed input; readReplayStats is the guard around them.
+
+   Some of those failures are worth waiting through
+   ------------------------------------------------
+   The game keeps appending to a replay for a minute or two after the match
+   ends, so the first look at the file usually finds it half written. That is a
+   fact about the moment, not about the file, and a reader that says so - with
+   `retryable: true` - is telling its caller to look again rather than to write
+   the match off. Everything else it refuses is a property of the file itself
+   and will read the same way for the rest of the season. Which two are the
+   exception, and why, is spelled out above readReplayStats. */
 
 import { readFileSync } from "node:fs";
 import { createDecipheriv } from "node:crypto";
@@ -486,10 +496,37 @@ const MEASURED = ["accuracy", "assists", "eliminations", "weaponDamage", "otherD
 
 const zero = (stats) => MEASURED.every((k) => !stats[k]);
 
+/* Which failures are worth another look, and which are not.
+
+   Two of the reasons below are about the moment the file was read rather than
+   about the file. A chunk stream that stops in the middle means the game is
+   still writing, and a missing AthenaMatchStats event means the event has not
+   been written yet - the game appends it last. Both are observed on a real file:
+   copying UnsavedReplay-2026.10.29-14.05.54.replay while it was being written
+   answered "no AthenaMatchStats event", and the same bytes copied ninety seconds
+   later read the match completely. A caller told `retryable: true` should hold
+   the file and look again.
+
+   Everything else that comes back as a failure is a property of the file, and
+   waiting changes nothing: an unencrypted replay will never grow a key, a
+   header with a short key was written that way, a clock outside this century is
+   the same clock on every poll, and a Creative match writes no
+   AthenaMatchTeamStats event no matter how long it is given. An all-zero payload
+   is the game saying it did not record the match, which no later read can undo.
+   Retrying any of those would cost a poll every minute for the rest of the
+   session and never change the answer - and, because the mark cannot move past a
+   file that is being retried, it would also hold the whole folder behind it.
+
+   The flag is set on the two answers that carry it and is deliberately absent
+   from `base`: a default of true would make every failure retryable, including
+   the ones above, which is the opposite of what the caller needs. */
+
 /* One replay, read.
 
    Returns { ok: true, ... } with the match's window, its stats and whether it
-   was a battle royale; or { ok: false, reason } when the file cannot be read.
+   was a battle royale; or { ok: false, reason } when the file cannot be read,
+   and `retryable: true` on the failures that are only true for a minute. Which
+   failures those are, and why the line is drawn there, is the comment above.
    Never throws: every failure below is a reason string, because the caller reads
    these in a loop on a timer and one bad file must not stop the rest. */
 export function readReplayStats(path) {
@@ -545,6 +582,7 @@ export function readReplayBuffer(buf, path = "(in memory)") {
        in the reader rather than as a file to try again later. */
     return {
       ...base,
+      retryable: true,
       reason: "the replay stops in the middle of a chunk at " + walk.stoppedAt + " of " + buf.length +
         " bytes, so it is truncated or the game is still writing it",
     };
@@ -555,8 +593,14 @@ export function readReplayBuffer(buf, path = "(in memory)") {
 
   /* No stats event at all is a file this module cannot say anything about. It is
      reported as a failure rather than as a Creative match, because a Creative
-     match does write the event - it just writes it empty. */
-  if (!stats) return { ...base, reason: "the replay has no AthenaMatchStats event" };
+     match does write the event - it just writes it empty.
+
+     Retryable, for the same reason the truncation above is, and this is the
+     failure that was actually seen on the ground: the stats event is the last
+     thing the game writes, so a file copied mid-write walks end to end and comes
+     back with no stats at all. The same bytes copied ninety seconds later read
+     the match in full. */
+  if (!stats) return { ...base, retryable: true, reason: "the replay has no AthenaMatchStats event" };
 
   /* A battle royale is proved by its own ladder event, which a Creative match
      never writes. Deliberately one-sided: the absence of proof is Creative, so
