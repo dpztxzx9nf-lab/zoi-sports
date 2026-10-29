@@ -129,6 +129,7 @@ export async function onRequest({ request, env }) {
 
   let created = [];
   const skipped = [];
+  const closed = [];
   let duplicate = false;
 
   try {
@@ -183,6 +184,22 @@ export async function onRequest({ request, env }) {
           continue;
         }
 
+        /* Anything else means this setting moved somewhere the open test was not
+           watching, so that test can never finish: it would keep collecting
+           games played on a value nobody is running. Close it with the one
+           honest label there is for a test that ended without an answer, and
+           say why in its note, rather than guessing better or worse. */
+        if (open) {
+          const done = await env.DB.prepare(
+            `UPDATE lab_tests
+                SET status = 'inconclusive',
+                    decided_at = datetime('now'),
+                    result_note = 'Closed when this setting changed again before enough games were played.'
+              WHERE id = ? AND owner = ? AND status = 'testing'`
+          ).bind(open.id, owner).run();
+          if (done?.meta?.changes) closed.push({ id: open.id, setting, to: open.to_value });
+        }
+
         const row = await env.DB.prepare(
           `INSERT INTO lab_tests (setting,label,from_value,to_value,status,games_planned,owner)
            VALUES (?,?,?,?,'testing',NULL,?)`
@@ -199,7 +216,7 @@ export async function onRequest({ request, env }) {
   /* Past this point the snapshot is stored, so nothing below may fail the
      request: a stats problem is reported in the reply and nothing else. */
   const stats = await syncStats(env, owner, tokenId, epicAccountId);
-  return json({ ok: true, created, skipped, duplicate, stats });
+  return json({ ok: true, created, skipped, closed, duplicate, stats });
 }
 
 /* ------------------------------------------------------------- the stats ---
