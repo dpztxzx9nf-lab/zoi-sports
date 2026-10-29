@@ -46,10 +46,6 @@ export const CATALOG = [
     watch: "How fast the extra aim speed kicks in during a hold. Watch for a turn that starts steady and then surges past the target.",
   },
   {
-    id: "ads_look_ease_time", label: "ADS Look Ease Time", value: "0.0", type: "decimal", step: 0.05, min: 0,
-    watch: "Whether the aim point follows your thumb directly while aimed. Any smoothing shows up as the scope drifting on after you stop moving the stick.",
-  },
-  {
     id: "scoped_multiplier", label: "Scope Multiplier", value: "0.95", type: "decimal", step: 0.05, min: 0,
     watch: "Whether a scoped flick overshoots up close or falls short at distance. Watch the first shot after you scope in: past the head, on it, or behind it.",
   },
@@ -345,12 +341,14 @@ export function valueText(value) {
    are here; a name that is wrong would silently never fire, so guessing is
    worse than leaving a setting out.
    Left out on purpose:
-     LookVerticalBoostSpeed - real, but the catalog has no vertical boost entry.
-     ads_boost_speed and ads_look_ease_time - no property name confirmed. The
-       save does carry a separate ADS boost ramp, so an ADS boost speed exists
-       somewhere, and LookEaseTimeAds is the likely ADS ease name, but neither
-       appears in the newest snapshot. Both are one line to add once a save
-       shows them. */
+     LookVerticalBoostSpeed and LookVerticalBoostSpeedAds - both are real keys in
+       the save, but the catalog tracks boost speed as one entry mapped to the
+       horizontal property, so the vertical one has nowhere to go. Mapping it as
+       well would let one stick change open two tests for one setting.
+     Every other property in the save has a catalog entry, and every catalog
+       entry has a line here. A test in the harness holds both halves of that,
+       because the failure it catches is silent: a tracked setting that never
+       opens a test looks exactly like a setting nobody changed. */
 export const PROPERTY_MAP = {
   LookHorizontalSpeed: "look_horizontal_speed",
   LookVerticalSpeed: "look_vertical_speed",
@@ -359,6 +357,7 @@ export const PROPERTY_MAP = {
   LookEaseTime: "look_ease_time",
   LookHorizontalSpeedAds: "ads_look_horizontal_speed",
   LookVerticalSpeedAds: "ads_look_vertical_speed",
+  LookHorizontalBoostSpeedAds: "ads_boost_speed",
   LookBoostAccelerationTimeAds: "ads_boost_ramp",
   ScopedSensitivityMultiplier: "scoped_multiplier",
   GamepadLookStickDeadZone: "look_stick_deadzone",
@@ -366,3 +365,56 @@ export const PROPERTY_MAP = {
   GamepadLeftTriggerReleaseThreshold: "left_trigger_release",
   GamepadRightTriggerReleaseThreshold: "right_trigger_release",
 };
+
+/* ---------- what everything is set to right now ----------
+   The PC agent sends every key in the save, but the page only shows the ones the
+   catalog tracks: the same settings a change can open a test on, with the label
+   the rest of the page uses. All ninety-one keys would be a wall to scroll, and
+   the public settings page already mirrors the in-game menu for that.
+
+   The value shown is the value the save holds, untouched: the page should show
+   what Fortnite is set to, not a prettied version of it. A tracked setting the
+   snapshot did not carry comes back with value null rather than being dropped,
+   so a missing key looks missing instead of looking like a setting that does not
+   exist. */
+export function currentOf(snapshot) {
+  if (!snapshot || typeof snapshot.payload !== "string" || !snapshot.payload) return null;
+  let parsed = null;
+  try {
+    parsed = JSON.parse(snapshot.payload);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  /* settings is a plain object of name to value. An array would pass a bare
+     typeof check and then have no keys to read. */
+  if (!parsed.settings || typeof parsed.settings !== "object" || Array.isArray(parsed.settings)) return null;
+
+  /* One property per id is the rule, but the map is consulted rather than
+     assumed, so a second property added later would show up here too. */
+  const propsFor = new Map();
+  for (const name of Object.keys(PROPERTY_MAP)) {
+    const id = PROPERTY_MAP[name];
+    if (!propsFor.has(id)) propsFor.set(id, []);
+    propsFor.get(id).push(name);
+  }
+
+  const settings = [];
+  for (const entry of CATALOG) {
+    const names = propsFor.get(entry.id) || [];
+    let value = null;
+    for (const name of names) {
+      if (!Object.prototype.hasOwnProperty.call(parsed.settings, name)) continue;
+      const text = valueText(parsed.settings[name]);
+      if (text) { value = text; break; }
+    }
+    settings.push({ id: entry.id, label: entry.label, value });
+  }
+
+  const source = typeof parsed.source === "string" && parsed.source.trim() ? parsed.source.trim() : null;
+  return {
+    taken_at: snapshot.taken_at || null,
+    source,
+    settings,
+  };
+}

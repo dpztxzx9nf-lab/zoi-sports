@@ -18,10 +18,13 @@ const nodes = {
   who: $('who'),
   loadError: $('load-error'), loadErrorText: $('load-error-text'), retry: $('retry'),
   app: $('app'), figures: $('figures'), figuresNote: $('figures-note'),
+  current: $('current'), currentNote: $('current-note'),
+  chartKpm: $('chart-kpm'), chartKpmBox: $('chart-kpm-box'),
   chartWin: $('chart-win'), chartWinBox: $('chart-win-box'),
-  chartKd: $('chart-kd'), chartKdBox: $('chart-kd-box'),
   chartKey: $('chart-key'), chartEmpty: $('chart-empty'),
-  changes: $('changes'), ranked: $('ranked'),
+  progress: $('progress'), changes: $('changes'), ranked: $('ranked'),
+  startBlock: $('start-block'),
+  progressBlock: $('progress-block'), changesBlock: $('changes-block'), rankedBlock: $('ranked-block'),
   pcConnect: $('pc-connect'), pcLabel: $('pc-label'), pcAdd: $('pc-add'),
   pcErrors: $('pc-errors'), pcToken: $('pc-token'), pcTokenValue: $('pc-token-value'),
   pcCopy: $('pc-copy'), pcDone: $('pc-done'), pcCopied: $('pc-copied'),
@@ -81,24 +84,41 @@ const fmtDayYear = value => {
 
 const group = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
+const isNum = v => typeof v === 'number' && Number.isFinite(v);
+
 /* A rate as a percentage with one decimal below 10%: an aim change often moves
    win rate by a point or two, and rounding 8.4% to 8% would hide it. */
 const pct = v => {
-  if (typeof v !== 'number' || !Number.isFinite(v)) return '\u2014';
+  if (!isNum(v)) return '\u2014';
   const p = v * 100;
   return (p >= 10 ? Math.round(p) : Math.round(p * 10) / 10) + '%';
 };
 
 const points = d => {
-  if (typeof d !== 'number' || !Number.isFinite(d)) return '';
+  if (!isNum(d)) return '';
   const p = Math.abs(d) * 100;
   const shown = p >= 10 ? Math.round(p) : Math.round(p * 10) / 10;
   return (d > 0 ? '+' : '\u2212') + shown;
 };
 
-const kd = v => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(2) : '\u2014');
+const kd = v => (isNum(v) ? v.toFixed(2) : '\u2014');
+const plural = (n, one, many) => n === 1 ? one : many;
+
+/* Kills a match is the metric the verdicts run on, so it gets two decimals
+   everywhere: a tenth of a kill a match is a real amount of play. */
+const kpm = v => (isNum(v) ? v.toFixed(2) : '\u2014');
+
+const signed = (v, places) => {
+  if (!isNum(v)) return '\u2014';
+  const a = Math.abs(v).toFixed(places);
+  if (Math.abs(v) < Math.pow(10, -places) / 2) return '0.' + '0'.repeat(places);
+  return (v > 0 ? '+' : '\u2212') + a;
+};
 
 const matchesWord = n => group(n) + (n === 1 ? ' game' : ' games');
+
+/* "3.90 to 5.32" — a range, said plainly. */
+const range = (iv, fmt) => (iv && isNum(iv.low) && isNum(iv.high) ? fmt(iv.low) + ' to ' + fmt(iv.high) : 'no range');
 
 /* ---------- load ---------- */
 
@@ -178,6 +198,45 @@ function renderFigures() {
   show(nodes.figuresNote);
 }
 
+/* ---------- what everything is set to right now ----------
+   The tracked settings only, one row each. The page already knows every label
+   from the change cards, and the payload carries the value as the save holds
+   it, so this is a read rather than a second settings page. */
+function renderCurrent() {
+  const c = state.perf && state.perf.current;
+  nodes.current.replaceChildren();
+  if (!c || !Array.isArray(c.settings) || !c.settings.length) {
+    nodes.current.append(el('p', 'lab-empty', 'Nothing yet. Your PC sends the whole config with every sync, so this fills in on its own.'));
+    hide(nodes.currentNote);
+    return;
+  }
+
+  const seen = fmtDayYear(c.taken_at);
+  const ago = c.taken_at ? agoText(c.taken_at) : '';
+  const list = el('dl', 'lab-now');
+  let missing = 0;
+  for (const row of c.settings) {
+    const dt = el('dt', 'lab-now-l', row.label);
+    let value = row.value;
+    if (value === null || value === undefined || value === '') {
+      value = '\u2014';
+      missing++;
+    }
+    list.append(dt, el('dd', 'lab-now-v', value));
+  }
+  nodes.current.append(list);
+
+  /* When it was read, in the same words the This PC list uses, so a stale
+     snapshot is obvious rather than being read as the current setting. The
+     agent's own name is deliberately not shown: it is an internal filename and
+     tells him nothing he can act on. How long ago is the useful part. */
+  const bits = [];
+  if (seen) bits.push('As of ' + seen + (ago ? ' (' + ago + ')' : '') + '.');
+  if (missing) bits.push(missing + (missing === 1 ? ' setting was not' : ' settings were not') + ' in the snapshot.');
+  nodes.currentNote.textContent = bits.join(' ');
+  if (bits.length) show(nodes.currentNote); else hide(nodes.currentNote);
+}
+
 /* ---------- charts ----------
    Hand-drawn SVG with presentation attributes, because the page's CSP allows no
    inline styles and no third-party chart script. */
@@ -196,12 +255,15 @@ const svgText = (attrs, text) => {
 const W = 320, H = 132;
 const PAD = { l: 34, r: 8, t: 10, b: 20 };
 
-/* series: [{ v: number|null, mark: bool }]. x is the session index: a handful of
-   sessions spaced evenly reads better than the same handful squashed against a
-   date axis, and the axis still names the days underneath. */
+/* series: [{ v: number|null, mark: bool, thin: bool }]. x is the session index:
+   a handful of sessions spaced evenly reads better than the same handful
+   squashed against a date axis, and the axis still names the days underneath.
+   A point below the server's chart floor arrives with thin: true; it is drawn
+   as a hollow mark off the line, because one game at 0% is not a reading of
+   anything and must not look like one. */
 function lineChart(series, opts) {
   const box = el('div');
-  const points = series.filter(s => typeof s.v === 'number' && Number.isFinite(s.v));
+  const points = series.filter(s => isNum(s.v));
   if (!points.length) {
     box.append(el('p', 'lab-empty', opts.empty || 'Nothing measured yet.'));
     return box;
@@ -234,7 +296,7 @@ function lineChart(series, opts) {
     root.append(svg('line', { x1: x, y1: PAD.t, x2: x, y2: PAD.t + plotH, stroke: '#e6d3a055', 'stroke-width': 1, 'stroke-dasharray': '2 3' }));
   });
 
-  /* the line, broken wherever a value is missing rather than bridged */
+  /* the line, broken wherever a value is missing or too thin to stand on */
   let run = [];
   const flush = () => {
     if (run.length > 1) {
@@ -244,13 +306,17 @@ function lineChart(series, opts) {
     run = [];
   };
   series.forEach((s, i) => {
-    if (typeof s.v !== 'number' || !Number.isFinite(s.v)) { flush(); return; }
+    if (!isNum(s.v) || s.thin) { flush(); return; }
     run.push({ x: xAt(i), y: yAt(s.v) });
   });
   flush();
 
   series.forEach((s, i) => {
-    if (typeof s.v !== 'number' || !Number.isFinite(s.v)) return;
+    if (!isNum(s.v)) return;
+    if (s.thin) {
+      root.append(svg('circle', { cx: xAt(i).toFixed(1), cy: yAt(s.v).toFixed(1), r: 2.4, fill: 'none', stroke: '#a29f97', 'stroke-width': 1.2 }));
+      return;
+    }
     root.append(svg('circle', { cx: xAt(i).toFixed(1), cy: yAt(s.v).toFixed(1), r: s.mark ? 2.8 : 2, fill: s.mark ? '#fffbe0' : '#ffe08a' }));
   });
 
@@ -268,76 +334,189 @@ function lineChart(series, opts) {
 function renderCharts() {
   const p = state.perf || {};
   const chart = Array.isArray(p.chart) ? p.chart : [];
+  nodes.chartKpmBox.replaceChildren();
   nodes.chartWinBox.replaceChildren();
-  nodes.chartKdBox.replaceChildren();
 
   if (!chart.length) {
+    hide(nodes.chartKpm);
     hide(nodes.chartWin);
-    hide(nodes.chartKd);
     nodes.chartEmpty.textContent = 'No sessions yet. A session appears once two syncs show different match counts, which means you played in between.';
     show(nodes.chartEmpty);
     hide(nodes.chartKey);
     return;
   }
 
+  show(nodes.chartKpm);
   show(nodes.chartWin);
-  show(nodes.chartKd);
   hide(nodes.chartEmpty);
 
   const first = chart[0], last = chart[chart.length - 1];
   const firstLabel = fmtDay(first.to);
-  const lastLabel = fmtDay(last.to);
+  /* One session, or several inside one day, would print the same day at both
+     ends of the axis and read as a broken label rather than a short history. */
+  const sameDay = fmtDay(first.to) === fmtDay(last.to);
+  const lastLabel = sameDay ? '' : fmtDay(last.to);
+  const series = v => chart.map(s => ({ v: v(s), mark: Boolean(s.change), thin: Boolean(s.thin) }));
 
-  nodes.chartWinBox.append(lineChart(
-    chart.map(s => ({ v: s.win_rate, mark: Boolean(s.change) })),
-    {
-      min: 0,
-      max: 0.15,
-      label: 'Win rate by session',
-      axis: v => Math.round(v * 100) + '%',
-      firstLabel, lastLabel,
-      empty: 'Win rate needs a win recorded in a session.',
-    },
-  ));
+  /* Kills a match leads, because it is the number a verdict can move on. */
+  nodes.chartKpmBox.append(lineChart(series(s => s.kills_per_match), {
+    min: 0,
+    max: 2,
+    label: 'Kills a match by session',
+    axis: v => (Math.round(v * 10) / 10).toFixed(1),
+    firstLabel, lastLabel,
+    empty: 'Kills a match needs a kill count in a session.',
+  }));
 
-  /* K/D comes from the same rows; the endpoint carries it per session only when
-     the counters allow it, so a session without a death count is a gap. */
-  nodes.chartKdBox.append(lineChart(
-    chart.map(s => ({ v: typeof s.kd === 'number' ? s.kd : null, mark: Boolean(s.change) })),
-    {
-      min: 0,
-      max: 2,
-      label: 'Kills per death by session',
-      axis: v => (Math.round(v * 10) / 10).toFixed(1),
-      firstLabel, lastLabel,
-      empty: 'K/D needs a death counted in a session.',
-    },
-  ));
+  nodes.chartWinBox.append(lineChart(series(s => s.win_rate), {
+    min: 0,
+    max: 0.15,
+    label: 'Win rate by session',
+    axis: v => Math.round(v * 100) + '%',
+    firstLabel, lastLabel,
+    empty: 'Win rate needs a win recorded in a session.',
+  }));
 
   const marks = chart.filter(s => s.change).length;
-  nodes.chartKey.textContent = marks
-    ? 'Each point is one session. The dashed uprights are where a setting changed.'
-    : 'Each point is one session. A dashed upright appears where a setting changes.';
+  const thins = chart.filter(s => s.thin).length;
+  const bits = ['Each point is one session.'];
+  if (thins) bits.push('The hollow points are sessions of fewer than ' + (p.chart_min_games || 5) + ' games: one game at 0% is not a reading, so they sit off the line.');
+  bits.push(marks ? 'The dashed uprights are where a setting changed.' : 'A dashed upright appears where a setting changes.');
+  nodes.chartKey.textContent = bits.join(' ');
   show(nodes.chartKey);
+}
+
+/* ---------- a range, drawn ----------
+   Two horizontal intervals on one scale: the games before a change on top, the
+   games after it below. When the bars do not touch, the move is bigger than the
+   noise; when they do, it is not. Hand-drawn SVG, presentation attributes
+   only, because that is all the CSP allows. */
+function rangeChart(before, after, opts) {
+  const root = svg('svg', { viewBox: '0 0 320 56', role: 'img', 'aria-label': opts.label || '' });
+  if (!before || !after) return root;
+
+  const lo = Math.min(before.low, after.low);
+  const hi = Math.max(before.high, after.high);
+  const span = hi - lo;
+  const pad = span > 0 ? span * 0.12 : Math.max(Math.abs(hi), 1) * 0.2;
+  const min = Math.max(opts.floor || 0, lo - pad);
+  const max = hi + pad;
+  const plotW = 320 - 16;
+  const xAt = v => 8 + (max === min ? plotW / 2 : ((v - min) / (max - min)) * plotW);
+
+  const rows = [
+    { iv: before, y: 16, colour: '#a29f97', name: 'Before' },
+    { iv: after, y: 40, colour: '#ffe08a', name: 'After' },
+  ];
+  for (const r of rows) {
+    root.append(svg('line', { x1: xAt(r.iv.low).toFixed(1), y1: r.y, x2: xAt(r.iv.high).toFixed(1), y2: r.y, stroke: r.colour, 'stroke-width': 4, 'stroke-linecap': 'round', opacity: 0.55 }));
+    root.append(svg('circle', { cx: xAt(r.iv.mean).toFixed(1), cy: r.y, r: 3.4, fill: r.colour }));
+    root.append(svgText({ x: 8, y: r.y - 8, fill: '#a29f97', 'font-size': 7.5 }, r.name));
+  }
+
+  /* the gap, or the overlap, called out in the middle where the eye looks */
+  const separable = after.low > before.high || after.high < before.low;
+  root.append(svgText({ x: 312, y: 53, fill: separable ? '#ffe08a' : '#8d8a83', 'font-size': 7.5, 'text-anchor': 'end' }, separable ? 'ranges separate' : 'ranges overlap'));
+  root.append(svgText({ x: 8, y: 53, fill: '#a29f97', 'font-size': 7.5 }, opts.axis(min) + ' to ' + opts.axis(max)));
+  return root;
 }
 
 /* ---------- the changes ---------- */
 
 const VERDICT_WORD = { better: 'Better', worse: 'Worse', even: 'No change', 'too-soon': 'Too soon' };
 
-function deltaLine(c) {
-  if (c.verdict === 'too-soon') {
-    const need = state.perf && state.perf.min_games ? state.perf.min_games : 10;
+const NO_KILLS = 'These readings carry no kill count, so there is nothing to judge. Kills a match is the number that decides.';
+
+/* What the primary verdict means, in words that do not oversell it. */
+function killsLine(c) {
+  const b = c.kills_interval && c.kills_interval.before;
+  const a = c.kills_interval && c.kills_interval.after;
+  const wrap = el('div', 'lab-primary');
+
+  const head = el('div', 'lab-primary-head');
+  head.append(el('span', 'lab-primary-k', 'Kills a match'));
+  if (c.before && c.after && (c.verdict !== 'too-soon' || c.after.matches > 0)) {
+    head.append(el('span', 'lab-primary-v', kpm(c.before.kills_per_match)));
+    head.append(el('span', 'lab-arrow', '\u2192'));
+    head.append(el('span', 'lab-primary-v lab-primary-now', kpm(c.after.kills_per_match)));
+  }
+  if (isNum(c.kills_delta)) head.append(el('span', 'lab-primary-d', signed(c.kills_delta, 2) + ' a match'));
+  wrap.append(head);
+
+  if (b && a) {
+    const chart = rangeChart(b, a, {
+      label: 'Kills a match before and after the change, with the 95% range for each',
+      axis: v => (Math.round(v * 100) / 100).toFixed(1),
+    });
+    const box = el('div', 'lab-range');
+    box.append(chart);
+    wrap.append(box);
+
+    const pairs = el('div', 'lab-ranges');
+    const row = (name, iv, mean) => {
+      const line = el('div', 'lab-ranges-row');
+      line.append(el('span', 'lab-ranges-k', name), el('span', 'lab-ranges-v', kpm(mean) + ', ' + range(iv, kpm)));
+      return line;
+    };
+    pairs.append(row('Before', b, b.mean), row('After', a, a.mean));
+    wrap.append(pairs);
+  }
+
+  let note;
+  if (!b || !a) {
+    /* No interval on both sides means there is nothing to compare, whatever the
+       verdict says. Never claim separation we cannot show. */
+    note = c.verdict === 'too-soon' ? 'Not enough games yet to put a range on both sides of the change.' : 'No range to compare on this change yet.';
+  } else if (c.verdict === 'too-soon') {
+    const need = (state.perf && state.perf.min_games) || 25;
     const seen = c.after && c.after.matches ? c.after.matches : 0;
-    return el('p', 'lab-c-note', 'Not enough games to call it: ' + matchesWord(seen) + ' since the change, ' + need + ' needed on each side.');
+    const had = c.before && c.before.matches ? c.before.matches : 0;
+    if (c.reason === 'kills-missing') note = NO_KILLS;
+    else if (had < need) note = 'Not enough games before the change to compare against: ' + matchesWord(had) + ' of history, ' + need + ' needed.';
+    else note = 'Not enough games to call it: ' + matchesWord(seen) + ' since the change, ' + need + ' needed on each side.';
+  } else if (c.verdict === 'better') {
+    note = 'The two ranges do not overlap, so the move is bigger than the noise in it.';
+  } else if (c.verdict === 'worse') {
+    note = 'The two ranges do not overlap, and the second one sits lower. The move is bigger than the noise in it.';
+  } else {
+    note = 'The two ranges overlap, so the move so far is not bigger than the noise. That is not a verdict either way.';
   }
-  const d = points(c.delta);
-  const bits = ['Win rate ' + (c.delta > 0 ? 'up ' : c.delta < 0 ? 'down ' : 'level at ') + d.replace('+', '') + (d === '0' ? '' : ' points')];
-  if (typeof c.kd_delta === 'number' && Number.isFinite(c.kd_delta)) {
-    const k = c.kd_delta;
-    bits.push('K/D ' + (Math.abs(k) < 0.005 ? 'level' : (k > 0 ? 'up ' : 'down ') + Math.abs(k).toFixed(2)));
+  wrap.append(el('p', 'lab-c-note lab-c-note-primary', note));
+  return wrap;
+}
+
+/* Win rate, underneath, never deciding on its own. */
+function winRateLine(c) {
+  const wrap = el('div', 'lab-secondary');
+  const b = c.win_rate_interval && c.win_rate_interval.before;
+  const a = c.win_rate_interval && c.win_rate_interval.after;
+
+  const head = el('div', 'lab-secondary-head');
+  head.append(el('span', 'lab-secondary-k', 'Win rate'));
+  head.append(el('span', 'lab-secondary-v', pct(c.before && c.before.win_rate)));
+  head.append(el('span', 'lab-arrow', '\u2192'));
+  head.append(el('span', 'lab-secondary-v', pct(c.after && c.after.win_rate)));
+  if (isNum(c.delta) && Math.abs(c.delta) >= 0.0005) {
+    head.append(el('span', 'lab-secondary-d', points(c.delta) + ' points'));
   }
-  return el('p', 'lab-c-note', bits.join('. ') + '.');
+  wrap.append(head);
+
+  if (b && a) {
+    wrap.append(el('p', 'lab-c-fine', 'Ranges ' + pct(b.low) + ' to ' + pct(b.high) + ' before, ' + pct(a.low) + ' to ' + pct(a.high) + ' after.'));
+  }
+
+  /* The honest sentence, and it quotes a move worth having rather than the one
+     that happened to show up. Sizing a half-point wobble gives hundreds of
+     thousands of games: true, and useless. Three points is the smallest
+     win-rate move worth acting on, so that is the figure on the card. */
+  let note;
+  if (isNum(c.win_games_target)) {
+    note = 'Win rate is the slow signal. A three-point move, the smallest worth acting on, would need about ' + group(c.win_games_target) + ' games on each side. A setting gets a fraction of that, so win rate here is colour rather than evidence.';
+  } else {
+    note = 'Win rate is the slow signal here. It stays colour rather than evidence until there are far more games than a single setting gets.';
+  }
+  wrap.append(el('p', 'lab-c-fine', note));
+  return wrap;
 }
 
 function beforeAfterRows(c) {
@@ -349,7 +528,7 @@ function beforeAfterRows(c) {
   };
   wrap.append(
     row('Games', String(c.before.matches), String(c.after.matches)),
-    row('Win rate', pct(c.before.win_rate), pct(c.after.win_rate)),
+    row('Kills', c.before.kills === null ? '\u2014' : group(c.before.kills), c.after.kills === null ? '\u2014' : group(c.after.kills)),
     row('K/D', kd(c.before.kd), kd(c.after.kd)),
   );
   return wrap;
@@ -368,9 +547,13 @@ function changeCard(c) {
   card.append(values);
 
   const when = fmtDayYear(c.started_at);
-  if (when) card.append(el('span', 'lab-change-when', when));
+  const meta = el('p', 'lab-change-meta');
+  if (when) meta.append(el('span', 'lab-change-when', when));
+  meta.append(el('span', 'lab-change-primary-name', 'Judged on kills a match'));
+  card.append(meta);
 
-  card.append(deltaLine(c));
+  card.append(killsLine(c));
+  card.append(winRateLine(c));
   card.append(beforeAfterRows(c));
 
   return card;
@@ -379,11 +562,80 @@ function changeCard(c) {
 function renderChanges() {
   const list = (state.perf && Array.isArray(state.perf.changes)) ? state.perf.changes : [];
   nodes.changes.replaceChildren();
-  if (!list.length) {
-    nodes.changes.append(el('p', 'lab-empty', 'No changes recorded yet. Change a setting in Fortnite and the next sync logs it by itself.'));
-    return;
-  }
+  if (!list.length) return;
   for (const c of list) nodes.changes.append(changeCard(c));
+}
+
+/* ---------- in progress ----------
+   One card per change still open: what the setting did, what to watch for while
+   playing it, and how far the sample has got towards what it would take. */
+
+const UNREACHABLE = 1500;   // games a side past this is not going to happen on one setting
+
+function progressCard(c) {
+  const card = el('article', 'lab-progress');
+
+  const head = el('div', 'lab-progress-head');
+  head.append(el('p', 'lab-card-k', c.label || c.setting));
+  head.append(el('span', 'lab-tag lab-tag-testing', 'Testing'));
+  card.append(head);
+
+  const values = el('p', 'lab-values');
+  values.append(el('span', null, c.from_value), el('span', 'lab-arrow', '\u2192'), el('span', null, c.to_value));
+  card.append(values);
+
+  const when = fmtDay(c.started_at);
+  if (when) card.append(el('span', 'lab-change-when', 'Since ' + when));
+
+  if (c.watch) {
+    const watch = el('div', 'lab-watch');
+    watch.append(el('span', 'lab-watch-k', 'What to watch for'));
+    watch.append(el('p', 'lab-watch-t', c.watch));
+    card.append(watch);
+  }
+
+  const played = c.after && isNum(c.after.matches) ? c.after.matches : 0;
+
+  /* Progress is measured against the games a move of one kill a match would
+     need at this kill rate, which is the size of move this lab is built to
+     find and the smallest one worth acting on. games_needed is the move seen so
+     far, and early in a test that is nearly zero and its target runs into the
+     tens of thousands: true, but not a plan. */
+  const need = isNum(c.games_target) ? c.games_target : null;
+
+  if (need === null) {
+    card.append(el('p', 'lab-c-note', 'No kill rate to size a target from yet. Play a few games and this will fill in.'));
+  } else if (need > UNREACHABLE) {
+    card.append(el('p', 'lab-c-note', 'A move of one kill a match would take about ' + group(need) + ' games on each side at this rate, which is more than one setting is worth. Play it and trust how it feels.'));
+  } else {
+    const box = el('div', 'lab-bar');
+    const fill = el('span', 'lab-bar-fill');
+    /* The fill width is a class, not a style attribute: the CSP forbids inline
+       styles and the fill is quantised to five steps anyway, which is as much
+       precision as a progress bar honestly carries. */
+    fill.classList.add('p' + Math.max(0, Math.min(100, Math.round((played / need) * 20) * 5)));
+    box.append(fill);
+    card.append(box);
+    /* The target is worked out at the kill rate in the window after the change,
+       so it moves as the player's rate moves: a higher rate carries more
+       variance and so asks for more games. The note says which rate it used so
+       the number is never a mystery next to the note on the page. */
+    card.append(el('p', 'lab-c-note', matchesWord(played) + ' since the change, of about ' + group(need) + ' on each side for a move of one kill a match, at ' + kpm(c.after.kills_per_match) + ' a match.'));
+  }
+
+  if (isNum(c.after && c.after.kills_per_match)) {
+    card.append(el('p', 'lab-c-fine', 'So far: ' + kpm(c.after.kills_per_match) + ' kills a match, ' + pct(c.after.win_rate) + ' win rate, over ' + matchesWord(played) + '.'));
+  }
+
+  return card;
+}
+
+function renderProgress() {
+  const list = (state.perf && Array.isArray(state.perf.changes)) ? state.perf.changes : [];
+  const open = list.filter(c => c.status === 'testing');
+  nodes.progress.replaceChildren();
+  if (!open.length) return;
+  for (const c of open) nodes.progress.append(progressCard(c));
 }
 
 /* ---------- which setting actually helped ---------- */
@@ -391,16 +643,13 @@ function renderChanges() {
 function renderRanked() {
   const ranked = (state.perf && Array.isArray(state.perf.ranked)) ? state.perf.ranked : [];
   nodes.ranked.replaceChildren();
-  if (!ranked.length) {
-    nodes.ranked.append(el('p', 'lab-empty', 'Nothing to rank yet. This fills in once a change has enough games on both sides.'));
-    return;
-  }
+  if (!ranked.length) return;
   const list = el('ol', 'lab-rank');
   for (const g of ranked) {
     const li = el('li', 'lab-rank-row');
     const name = el('span', 'lab-rank-name', g.label || g.setting);
-    const d = el('span', 'lab-rank-d', (g.delta > 0 ? '+' : g.delta < 0 ? '\u2212' : '\u00b1') + (Math.round(Math.abs(g.delta) * 1000) / 10) + ' pts');
-    const meta = el('span', 'lab-rank-meta', g.better + ' of ' + g.changes + ' better \u00b7 ' + matchesWord(g.matches));
+    const d = el('span', 'lab-rank-d', isNum(g.kills_delta) ? signed(g.kills_delta, 2) + ' a match' : '\u2014');
+    const meta = el('span', 'lab-rank-meta', g.better + ' of ' + g.changes + ' better \u00b7 ' + matchesWord(g.matches) + (isNum(g.delta) ? ' \u00b7 ' + points(g.delta) + ' pts win rate' : ''));
     const line = el('div', 'lab-rank-head');
     line.append(name, d);
     li.append(line, meta);
@@ -570,9 +819,30 @@ function bootPc() {
 /* ---------- boot ---------- */
 function render() {
   renderFigures();
+  renderCurrent();
   renderCharts();
+  renderProgress();
   renderChanges();
   renderRanked();
+  renderEmptiness();
+}
+
+/* ---------- what to show before there is anything ----------
+   A first-time reader has no changes, no open tests and nothing ranked, which
+   used to render three separate dashed "nothing here yet" boxes in a row. That
+   reads as a broken page. One sentence that says what to do instead, and the
+   three sections stay out of the way until each has something real in it. */
+function renderEmptiness() {
+  const list = (state.perf && Array.isArray(state.perf.changes)) ? state.perf.changes : [];
+  const ranked = (state.perf && Array.isArray(state.perf.ranked)) ? state.perf.ranked : [];
+  const anyOpen = list.some(c => c.status === 'testing');
+
+  const empty = !list.length && !ranked.length;
+  if (empty) show(nodes.startBlock); else hide(nodes.startBlock);
+
+  nodes.progressBlock.hidden = !anyOpen;
+  nodes.changesBlock.hidden = !list.length;
+  nodes.rankedBlock.hidden = !ranked.length;
 }
 
 function boot() {

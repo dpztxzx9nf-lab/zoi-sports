@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#050506">
 <link rel="icon" href="favicon.ico" sizes="any"><link rel="icon" type="image/png" href="favicon-32.png">
-<link rel="stylesheet" href="styles.css?v=28">
+<link rel="stylesheet" href="styles.css?v=30">
 </head>
 <body class="lab-page">
 <header class="nav"><a href="/" class="brand"><img class="zw" src="/assets/zoi-wordmark-gold.png?v=10" alt="Zoi" width="600" height="320"></a>
@@ -32,25 +32,41 @@
 </section>
 
 <section class="lab-block">
+ <h2 class="lab-h2">Right now</h2>
+ <div id="current"></div>
+ <p class="lab-fine" id="current-note" hidden></p>
+</section>
+
+<section class="lab-block">
  <h2 class="lab-h2">Over time</h2>
+ <div class="lab-chart lab-chart-lead" id="chart-kpm">
+  <p class="lab-chart-k">Kills a match</p>
+  <div class="lab-chart-box" id="chart-kpm-box"></div>
+ </div>
  <div class="lab-chart" id="chart-win">
   <p class="lab-chart-k">Win rate</p>
   <div class="lab-chart-box" id="chart-win-box"></div>
- </div>
- <div class="lab-chart" id="chart-kd">
-  <p class="lab-chart-k">Kills per death</p>
-  <div class="lab-chart-box" id="chart-kd-box"></div>
  </div>
  <p class="lab-chart-key" id="chart-key" hidden></p>
  <p class="lab-empty" id="chart-empty" hidden></p>
 </section>
 
-<section class="lab-block">
+<section class="lab-block" id="start-block" hidden>
+ <h2 class="lab-h2">Nothing tested yet</h2>
+ <p class="lab-start">Change one setting in Fortnite and play a session. The next sync logs the change by itself and starts measuring it, and this page fills in from there.</p>
+</section>
+
+<section class="lab-block" id="progress-block">
+ <h2 class="lab-h2">In progress</h2>
+ <div id="progress"></div>
+</section>
+
+<section class="lab-block" id="changes-block">
  <h2 class="lab-h2">Changes</h2>
  <div id="changes"></div>
 </section>
 
-<section class="lab-block">
+<section class="lab-block" id="ranked-block">
  <h2 class="lab-h2">What's worked</h2>
  <div id="ranked"></div>
 </section>
@@ -83,6 +99,13 @@
 
   <ul class="lab-pc-list" id="pc-list"></ul>
   <p class="lab-empty" id="pc-empty" hidden>No PC connected yet.</p>
+ </div>
+</section>
+
+<section class="lab-block">
+ <h2 class="lab-h2">How to read this</h2>
+ <div class="lab-note" id="note">
+  <p>A setting nudge is small next to the noise of a few nights. So the verdicts go on kills a match, which moves fast enough to read: about one hundred and ninety games a side for a move of one. Win rate sits underneath as a slow second opinion that almost never settles at this volume.</p>
  </div>
 </section>
 
