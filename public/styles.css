@@ -127,7 +127,7 @@ html,body{overflow-x:clip}img{max-width:100%}
 .card .meta{font-size:.8rem;letter-spacing:.08em;color:var(--g)}
 .recruit-note{text-align:center;font-size:.9rem;color:var(--m);margin-top:1rem}.recruit-note a{color:var(--g)}
 @media(max-width:480px){.game-tabs{width:100%}.game-tabs [role=tab]{flex:1;padding:.6rem .5rem;font-size:.72rem;letter-spacing:.08em}}
-.avatar{display:flex;align-items:center;justify-content:center;width:72px;height:72px;margin:0 auto .5rem;border-radius:50%;overflow:hidden;background:radial-gradient(circle at 35% 30%,#fff6d0,var(--g) 55%,#b8954a);color:#0b0b0d;font:400 1.9rem Graduate,Georgia,serif;box-shadow:0 0 0 2px #e6d3a066,0 0 18px #ffd63c22}.avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.avatar{display:flex;align-items:center;justify-content:center;width:72px;height:72px;margin:0 auto .5rem;border-radius:50%;overflow:hidden;background:radial-gradient(circle at 35% 30%,#fff6d0,var(--g) 55%,#b8954a);color:#0b0b0d;font:400 1.9rem Graduate,Georgia,serif;box-shadow:0 0 0 2px #e6d3a066,0 0 18px #ffd63c22}.avatar{position:relative;box-sizing:border-box;padding:0}.avatar img{position:absolute;inset:0;box-sizing:border-box;width:100%;height:100%;max-width:none;margin:0;padding:0;border:0;border-radius:50%;object-fit:cover;object-position:center;display:block}.avatar img[hidden]{display:none}.avatar.has-pic>span{display:none}
 .card.clickable{cursor:pointer;transition:transform .15s,box-shadow .15s}.card.clickable:hover{transform:translateY(-2px);box-shadow:0 0 24px #ffd63c22}.card.clickable:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
 .profile{width:min(420px,calc(100vw - 2rem));max-height:calc(100dvh - 2rem);overflow:auto;background:var(--card);color:var(--t);border:1px solid #e6d3a044;border-top:3px solid var(--g);border-radius:10px;padding:2rem 1.5rem 1.5rem;text-align:center;box-shadow:0 0 60px #ffd63c22}
 .profile::backdrop{background:#000c;backdrop-filter:blur(3px)}
@@ -690,3 +690,32 @@ html,body{overflow-x:clip}img{max-width:100%}
  .lab-bymatch-figs{gap:.35rem}
  .lab-bymatch-fig .lab-fig-v{font-size:.85rem}
 }
+/* ---------- the cropper in the account menu ----------
+   The stage is the frame the picture is saved in. The canvas fills it; the mask
+   darkens everything outside the circle (avatar) or draws the strip's edge
+   (banner). touch-action:none hands every finger to the drag and pinch. */
+.acct-crop{display:flex;flex-direction:column;align-items:center;gap:.9rem;margin-bottom:.4rem;padding:1rem;border:1px solid #e6d3a033;border-radius:12px;background:#000}
+.acct-crop[hidden],.acct-media[hidden]{display:none}
+.acct-crop-title{margin:0;align-self:flex-start;font:700 .72rem/1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--g)}
+.acct-crop-stage{position:relative;width:100%;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab;background:#111;border-radius:8px}
+.acct-crop-stage:active{cursor:grabbing}
+.acct-crop-stage:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+.acct-crop.is-avatar .acct-crop-stage{max-width:min(300px,100%);aspect-ratio:1/1}
+.acct-crop.is-banner .acct-crop-stage{aspect-ratio:3/1}
+.acct-crop-canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.acct-crop-mask{position:absolute;inset:0;pointer-events:none;border-radius:8px;box-shadow:inset 0 0 0 2px #e6d3a088}
+.acct-crop.is-avatar .acct-crop-mask{border-radius:50%;box-shadow:0 0 0 999px #000a,inset 0 0 0 2px var(--g)}
+.acct-crop-zoom{display:flex;align-items:center;gap:.6rem;width:100%;max-width:340px;color:var(--g);font:700 1.1rem/1 system-ui,sans-serif}
+.acct-crop-zoom input{flex:1 1 auto;min-width:0;height:32px;accent-color:var(--g);cursor:pointer}
+.acct-crop-acts{display:flex;gap:.6rem;justify-content:flex-end;align-self:stretch}
+.acct-crop-acts .acct-media-btn{min-height:42px;padding:.55rem 1.3rem}
+.acct-crop-save{background:var(--g);color:#0b0b0d}
+.acct-crop-save:hover{background:var(--gold)}
+.acct-crop-save:disabled{opacity:.6;cursor:progress}
+@media(max-width:519px){.acct-crop{padding:.75rem}.acct-crop-acts .acct-media-btn{flex:1 1 0}}
+/* The header button wears the picture when there is one: same circle rules as
+   every other avatar, the initial only when there is none. */
+.acct-btn{position:relative;overflow:hidden;box-sizing:border-box}
+.acct-btn-img{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;border:0;border-radius:50%;object-fit:cover;object-position:center;display:block}
+.acct-btn.has-pic .acct-initial{visibility:hidden}
+.acct-btn.has-pic{border-color:var(--g)}

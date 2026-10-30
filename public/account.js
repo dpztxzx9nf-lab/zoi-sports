@@ -62,7 +62,6 @@ ${MARKUP_TABS}
 
  <!-- The card people see on the roster, edited here. -->
  <div class="acct-pane" role="tabpanel" id="acct-profile" aria-labelledby="acct-tab-profile" tabindex="0">
-  <p class="acct-lede">This is your card on the <a href="/#roster">roster</a>. Saved here, it replaces what the public page shows.</p>
   <form class="acct-form" id="pf-form" novalidate>
    <!-- The two pictures, above the fields: they save on their own, so a big
         file never holds up a bio edit. Nothing is typed here but a file. -->
@@ -84,6 +83,20 @@ ${MARKUP_TABS}
     <input type="file" class="acct-file" id="pf-avatar-file" accept="image/*">
     <input type="file" class="acct-file" id="pf-banner-file" accept="image/*">
     <p class="acct-media-status" id="pf-media-status" role="status" hidden></p>
+   </div>
+   <div class="acct-crop" id="pf-crop" role="group" aria-labelledby="pf-crop-title" hidden>
+    <p class="acct-crop-title" id="pf-crop-title">Adjust picture</p>
+    <div class="acct-crop-stage" id="pf-crop-stage" tabindex="0" aria-label="Drag to move the picture, use the slider or pinch to zoom">
+     <canvas class="acct-crop-canvas" id="pf-crop-canvas"></canvas>
+     <div class="acct-crop-mask" aria-hidden="true"></div>
+    </div>
+    <label class="acct-crop-zoom" for="pf-crop-zoom"><span aria-hidden="true">&minus;</span>
+     <input type="range" id="pf-crop-zoom" min="1" max="4" step="0.01" value="1" aria-label="Zoom">
+     <span aria-hidden="true">+</span></label>
+    <div class="acct-crop-acts">
+     <button type="button" class="acct-media-btn" id="pf-crop-cancel">Cancel</button>
+     <button type="button" class="acct-media-btn acct-crop-save" id="pf-crop-save">Save</button>
+    </div>
    </div>
    <label class="lab-field" for="pf-gamertag">Gamertag
     <input id="pf-gamertag" name="gamertag" maxlength="32" autocomplete="off" spellcheck="false" required>
@@ -219,7 +232,10 @@ const nodes = {
   avatarInitial: inAcct('pf-avatar-initial'),
   avatarPick: inAcct('pf-avatar-pick'), avatarRemove: inAcct('pf-avatar-remove'),
   avatarFile: inAcct('pf-avatar-file'),
-  mediaStatus: inAcct('pf-media-status'),
+  mediaStatus: inAcct('pf-media-status'), media: inAcctCls('.acct-media'),
+  crop: inAcct('pf-crop'), cropTitle: inAcct('pf-crop-title'), cropStage: inAcct('pf-crop-stage'),
+  cropCanvas: inAcct('pf-crop-canvas'), cropZoom: inAcct('pf-crop-zoom'),
+  cropCancel: inAcct('pf-crop-cancel'), cropSave: inAcct('pf-crop-save'),
   socials: {
     x: inAcct('pf-x'), tiktok: inAcct('pf-tiktok'), youtube: inAcct('pf-youtube'),
     twitch: inAcct('pf-twitch'), instagram: inAcct('pf-instagram'), kick: inAcct('pf-kick'),
@@ -313,12 +329,36 @@ async function whoAmI() {
   } catch { return null; }
 }
 
+/* The header button wears the player's picture once they have one, and the
+   initial otherwise. Called on load and again after every upload or removal, so
+   the corner never lags the modal. */
+function headerPic(src) {
+  if (!nodes.btn) return;
+  let img = nodes.btn.querySelector('img.acct-btn-img');
+  if (!src) {
+    if (img) img.remove();
+    nodes.btn.classList.remove('has-pic');
+    return;
+  }
+  if (!img) {
+    img = document.createElement('img');
+    img.className = 'acct-btn-img';
+    img.alt = '';
+    img.decoding = 'async';
+    img.addEventListener('error', () => headerPic(''));
+    nodes.btn.appendChild(img);
+  }
+  if (img.getAttribute('src') !== src) img.src = src;
+  nodes.btn.classList.add('has-pic');
+}
+
 function showAccount(me) {
   const email = me && typeof me === 'object' ? String(me.email || '').trim() : '';
   const name = me && typeof me === 'object' ? String(me.name || '').trim() : '';
   const shown = name || email;
   if (!shown) { hide(nodes.btn); return; }
   nodes.initial.textContent = shown.charAt(0).toUpperCase();
+  headerPic(me && typeof me.avatar === 'string' ? me.avatar : '');
   nodes.btn.setAttribute('aria-label', 'Your account' + (email ? ', signed in as ' + email : ''));
   if (email) {
     nodes.who.textContent = 'Signed in as ' + email + '.';
@@ -473,6 +513,7 @@ function paintMedia(p) {
 function showMedia(p) {
   mediaView = p ? Object.assign({}, mediaView || {}, p) : null;
   paintMedia(mediaView);
+  if (mediaView && 'avatar' in mediaView) headerPic(mediaView.avatar || '');
 }
 
 function mediaStatus(text) {
@@ -482,54 +523,78 @@ function mediaStatus(text) {
   show(nodes.mediaStatus);
 }
 
-/* Centre-crop to the target shape, scale down to the largest size that is still
-   sharp, and hand back a JPEG data URL. createImageBitmap is the fast path; an
-   Image over an object URL is the one that works everywhere else. */
-async function cropToJpeg(file, spec) {
-  let bitmap = null;
-  let width = 0;
-  let height = 0;
+/* ---------- the cropper ----------
+   Picking a file opens it behind the frame it will be saved in: a circle for the
+   avatar, the 3:1 strip for the banner. Drag moves it, the slider, a pinch or the
+   wheel zooms it, and the image always covers the frame. Save crops exactly what
+   is in the frame. The geometry is plain functions so it can be tested apart from
+   the DOM. All lengths are in frame pixels; s is image px -> frame px. */
+/* crop-math:start */
+const CROP_MAX_ZOOM = 4;
+function cropFit(st) {
+  const base = Math.max(st.fw / st.iw, st.fh / st.ih);
+  const zoom = Math.min(CROP_MAX_ZOOM, Math.max(1, Number(st.zoom) || 1));
+  const s = base * zoom;
+  const minX = st.fw - st.iw * s;
+  const minY = st.fh - st.ih * s;
+  const tx = Math.min(0, Math.max(minX, Number.isFinite(st.tx) ? st.tx : minX / 2));
+  const ty = Math.min(0, Math.max(minY, Number.isFinite(st.ty) ? st.ty : minY / 2));
+  return { iw: st.iw, ih: st.ih, fw: st.fw, fh: st.fh, zoom, s, tx, ty };
+}
+function cropStart(iw, ih, fw, fh) {
+  return cropFit({ iw, ih, fw, fh, zoom: 1, tx: NaN, ty: NaN });
+}
+/* Zoom keeping the image point under (px, py) where it is. */
+function cropZoomAt(st, zoom, px, py) {
+  const next = cropFit(Object.assign({}, st, { zoom }));
+  const ix = (px - st.tx) / st.s;
+  const iy = (py - st.ty) / st.s;
+  return cropFit(Object.assign({}, next, { tx: px - ix * next.s, ty: py - iy * next.s }));
+}
+function cropMove(st, dx, dy) {
+  return cropFit(Object.assign({}, st, { tx: st.tx + dx, ty: st.ty + dy }));
+}
+/* The rectangle of the source image that the frame shows. */
+function cropSource(st) {
+  return { sx: -st.tx / st.s, sy: -st.ty / st.s, sw: st.fw / st.s, sh: st.fh / st.s };
+}
+/* crop-math:end */
+
+/* createImageBitmap first; an Image over an object URL is the fallback. */
+async function loadPicture(file) {
   if (typeof createImageBitmap === 'function') {
-    bitmap = await createImageBitmap(file);
-    width = bitmap.width;
-    height = bitmap.height;
-  } else {
-    const url = URL.createObjectURL(file);
     try {
-      bitmap = await new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = () => reject(new Error('not an image'));
-        img.src = url;
-      });
-      width = bitmap.naturalWidth || bitmap.width;
-      height = bitmap.naturalHeight || bitmap.height;
-    } finally {
-      URL.revokeObjectURL(url);
-    }
+      const b = await createImageBitmap(file, { imageOrientation: 'from-image' });
+      return { pic: b, w: b.width, h: b.height };
+    } catch { /* fall through */ }
   }
-  if (!width || !height) throw new Error('not an image');
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error('not an image'));
+      i.src = url;
+    });
+    return { pic: img, w: img.naturalWidth || img.width, h: img.naturalHeight || img.height };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
-  const ratio = spec.w / spec.h;
-  let sw = width;
-  let sh = height;
-  if (sw / sh > ratio) sw = Math.round(sh * ratio);
-  else sh = Math.round(sw / ratio);
-  const sx = Math.round((width - sw) / 2);
-  const sy = Math.round((height - sh) / 2);
-  const scale = Math.min(1, spec.w / sw);
-  const w = Math.max(1, Math.round(sw * scale));
-  const h = Math.max(1, Math.round(sh * scale));
-
+/* Draws the chosen rectangle at the target size and hands back a JPEG data URL. */
+async function exportCrop(pic, src, spec) {
+  const scale = Math.min(1, spec.w / src.sw);
+  const w = Math.max(1, Math.round(src.sw * scale));
+  const h = Math.max(1, Math.round(w * spec.h / spec.w));
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('no canvas');
-  ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, w, h);
-  if (bitmap && typeof bitmap.close === 'function') bitmap.close();
-
-  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(pic, src.sx, src.sy, src.sw, src.sh, 0, 0, w, h);
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.88));
   if (!blob) throw new Error('no blob');
   return await new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -537,6 +602,145 @@ async function cropToJpeg(file, spec) {
     reader.onerror = () => reject(new Error('unreadable'));
     reader.readAsDataURL(blob);
   });
+}
+
+let crop = null; // { kind, pic, st, pointers: Map, pinch }
+
+function cropDraw() {
+  if (!crop || !nodes.cropCanvas || !nodes.cropStage) return;
+  const c = nodes.cropCanvas;
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  const W = Math.round(crop.st.fw * dpr);
+  const H = Math.round(crop.st.fh * dpr);
+  if (c.width !== W) c.width = W;
+  if (c.height !== H) c.height = H;
+  const ctx = c.getContext('2d');
+  if (!ctx) return;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, crop.st.fw, crop.st.fh);
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(crop.pic, crop.st.tx, crop.st.ty, crop.st.iw * crop.st.s, crop.st.ih * crop.st.s);
+  if (nodes.cropZoom) nodes.cropZoom.value = String(crop.st.zoom);
+}
+
+function cropSet(st) { if (crop) { crop.st = st; cropDraw(); } }
+
+/* The frame's size changes with the viewport; keep the same picture region. */
+function cropMeasure() {
+  if (!crop || !nodes.cropStage) return;
+  const r = nodes.cropStage.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  const old = crop.st;
+  if (!old) { cropSet(cropStart(crop.w, crop.h, r.width, r.height)); return; }
+  const k = r.width / old.fw;
+  cropSet(cropFit(Object.assign({}, old, { fw: r.width, fh: r.height, tx: old.tx * k, ty: old.ty * k })));
+}
+
+function cropLocal(e) {
+  const r = nodes.cropStage.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+function closeCrop() {
+  if (!crop) return;
+  if (crop.pic && typeof crop.pic.close === 'function') crop.pic.close();
+  crop = null;
+  hide(nodes.crop);
+  show(nodes.media);
+}
+
+async function openCrop(kind, file) {
+  closeCrop();
+  const loaded = await loadPicture(file);
+  if (!loaded.w || !loaded.h) throw new Error('not an image');
+  crop = { kind, pic: loaded.pic, w: loaded.w, h: loaded.h, st: null, pointers: new Map(), pinch: null };
+  nodes.crop.classList.toggle('is-avatar', kind === 'avatar');
+  nodes.crop.classList.toggle('is-banner', kind === 'banner');
+  nodes.cropTitle.textContent = kind === 'avatar' ? 'Adjust picture' : 'Adjust banner';
+  if (nodes.cropSave) nodes.cropSave.disabled = false;
+  mediaStatus('');
+  hide(nodes.media);
+  show(nodes.crop);
+  cropMeasure();
+  nodes.crop.scrollIntoView({ block: 'nearest' });
+  nodes.cropStage.focus({ preventScroll: true });
+}
+
+async function saveCrop() {
+  if (!crop || !crop.st) return;
+  const { kind, pic, st } = crop;
+  nodes.cropSave.disabled = true;
+  try {
+    const data = await exportCrop(pic, cropSource(st), MEDIA[kind]);
+    closeCrop();
+    await sendPicture(kind, data);
+  } catch {
+    closeCrop();
+    mediaStatus('That file could not be read as an image.');
+  }
+}
+
+function watchCrop() {
+  const stage = nodes.cropStage;
+  if (!stage || !nodes.crop) return;
+  stage.addEventListener('pointerdown', (e) => {
+    if (!crop) return;
+    stage.setPointerCapture(e.pointerId);
+    crop.pointers.set(e.pointerId, cropLocal(e));
+    if (crop.pointers.size === 2) {
+      const [a, b] = [...crop.pointers.values()];
+      crop.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, zoom: crop.st.zoom };
+    }
+    e.preventDefault();
+  });
+  stage.addEventListener('pointermove', (e) => {
+    if (!crop || !crop.pointers.has(e.pointerId)) return;
+    const prev = crop.pointers.get(e.pointerId);
+    const now = cropLocal(e);
+    crop.pointers.set(e.pointerId, now);
+    if (crop.pointers.size >= 2 && crop.pinch) {
+      const [a, b] = [...crop.pointers.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      let st = cropMove(crop.st, (now.x - prev.x) / 2, (now.y - prev.y) / 2);
+      st = cropZoomAt(st, crop.pinch.zoom * d / crop.pinch.d, mid.x, mid.y);
+      cropSet(st);
+    } else {
+      cropSet(cropMove(crop.st, now.x - prev.x, now.y - prev.y));
+    }
+  });
+  const up = (e) => {
+    if (!crop) return;
+    crop.pointers.delete(e.pointerId);
+    if (crop.pointers.size < 2) crop.pinch = null;
+  };
+  stage.addEventListener('pointerup', up);
+  stage.addEventListener('pointercancel', up);
+  stage.addEventListener('wheel', (e) => {
+    if (!crop) return;
+    e.preventDefault();
+    const p = cropLocal(e);
+    cropSet(cropZoomAt(crop.st, crop.st.zoom * Math.exp(-e.deltaY * 0.0015), p.x, p.y));
+  }, { passive: false });
+  stage.addEventListener('keydown', (e) => {
+    if (!crop) return;
+    const step = e.shiftKey ? 40 : 10;
+    const moves = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
+    if (moves[e.key]) { e.preventDefault(); cropSet(cropMove(crop.st, moves[e.key][0], moves[e.key][1])); }
+    else if (e.key === '+' || e.key === '=') { e.preventDefault(); cropSet(cropZoomAt(crop.st, crop.st.zoom * 1.1, crop.st.fw / 2, crop.st.fh / 2)); }
+    else if (e.key === '-') { e.preventDefault(); cropSet(cropZoomAt(crop.st, crop.st.zoom / 1.1, crop.st.fw / 2, crop.st.fh / 2)); }
+  });
+  if (nodes.cropZoom) nodes.cropZoom.addEventListener('input', () => {
+    if (crop) cropSet(cropZoomAt(crop.st, Number(nodes.cropZoom.value), crop.st.fw / 2, crop.st.fh / 2));
+  });
+  if (nodes.cropCancel) nodes.cropCancel.addEventListener('click', () => { closeCrop(); mediaStatus(''); });
+  if (nodes.cropSave) nodes.cropSave.addEventListener('click', saveCrop);
+  window.addEventListener('resize', cropMeasure);
+  if (nodes.acct) {
+    /* Escape while cropping cancels the crop, not the whole menu. */
+    nodes.acct.addEventListener('cancel', (e) => { if (crop) { e.preventDefault(); closeCrop(); } });
+    nodes.acct.addEventListener('close', closeCrop);
+  }
 }
 
 function mediaAnswer(data) {
@@ -550,14 +754,22 @@ async function uploadPicked(kind) {
   const input = kind === 'banner' ? nodes.bannerFile : nodes.avatarFile;
   const file = input && input.files && input.files[0] ? input.files[0] : null;
   if (!file) return;
+  input.value = '';
   if (file.type && !/^image\//i.test(file.type)) {
     mediaStatus('That file is not an image.');
-    input.value = '';
     return;
   }
+  try {
+    await openCrop(kind, file);
+  } catch {
+    closeCrop();
+    mediaStatus('That file could not be read as an image.');
+  }
+}
+
+async function sendPicture(kind, data) {
   mediaStatus('Uploading…');
   try {
-    const data = await cropToJpeg(file, MEDIA[kind]);
     const r = await api('/api/lab/media', { method: 'PUT', body: { kind, data } });
     if (!r.ok) {
       mediaStatus(errorsFrom(r.data, "Couldn't save that picture.")[0]);
@@ -568,9 +780,7 @@ async function uploadPicked(kind) {
   } catch (e) {
     if (e instanceof AuthError) { mediaStatus('Sign in to change your pictures.'); return; }
     if (e instanceof NetError) { mediaStatus("Couldn't reach the lab."); return; }
-    mediaStatus('That file could not be read as an image.');
-  } finally {
-    input.value = '';
+    mediaStatus("Couldn't save that picture.");
   }
 }
 
@@ -601,6 +811,7 @@ function watchMedia() {
   }
   if (nodes.avatarRemove) nodes.avatarRemove.addEventListener('click', () => removePicked('avatar'));
   if (nodes.bannerRemove) nodes.bannerRemove.addEventListener('click', () => removePicked('banner'));
+  watchCrop();
 }
 
 async function loadProfile() {
