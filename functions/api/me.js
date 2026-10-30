@@ -22,6 +22,7 @@
    and name is ever returned: not the subject, not the audience, not the expiry,
    not the token. */
 import { ACCESS_COOKIE, cookieValue, json, verifyAccessToken } from "../_lib/lab.js";
+import { mediaUrl } from "../_lib/media.js";
 
 const signedOut = () => json({ signedIn: false });
 
@@ -63,5 +64,17 @@ export async function onRequest({ request, env }) {
      with, so it is signed out as far as a page is concerned. */
   if (!email) return signedOut();
 
-  return json({ signedIn: true, email, name });
+  /* The header button shows the player's own picture when they have one. A
+     missing table, a missing row or a failed read all just mean the initial. */
+  const out = { signedIn: true, email, name };
+  try {
+    const row = env && env.DB
+      ? await env.DB.prepare("SELECT owner,slug,gamertag,role,region,platform,bio,socials,published,updated_at,avatar_at,banner_at FROM player_profiles WHERE owner = ? LIMIT 1").bind(email).first()
+      : null;
+    const avatar = row && row.slug && row.avatar_at ? mediaUrl(row.slug, "avatar", row.avatar_at) : null;
+    if (avatar) out.avatar = avatar;
+  } catch (e) {
+    console.error("me: avatar read failed", e);
+  }
+  return json(out);
 }
