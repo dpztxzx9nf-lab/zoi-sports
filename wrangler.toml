@@ -7,6 +7,12 @@ binding = "DB"
 database_name = "zoi-tryouts"
 database_id = "3c5d2cf7-5335-4468-bcd0-0ebbea094760"
 
+# Player pictures. Objects are written by /api/lab/media and read back through
+# /media/<slug>/<kind>; the bucket is private, so nothing is served by its own URL.
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "zoi-media"
+
 [[services]]
 binding = "NOTIFY"
 service = "zoi-tryout-notify"
@@ -17,6 +23,10 @@ service = "zoi-tryout-notify"
 [vars]
 LAB_ACCESS_TEAM = "seniortechvisits.cloudflareaccess.com"
 LAB_ACCESS_AUD = "776b7c622ec9bc429b9c37747ed7457ce834b789e390c9c35d9ecd1058453ca7"
+
+[env.preview.r2_buckets]
+binding = "MEDIA"
+bucket_name = "zoi-media"
 
 [env.preview.vars]
 LAB_ACCESS_TEAM = "seniortechvisits.cloudflareaccess.com"

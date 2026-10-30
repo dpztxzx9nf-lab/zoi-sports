@@ -8,7 +8,7 @@
 <link rel="icon" href="favicon.ico" sizes="any"><link rel="icon" type="image/png" href="favicon-32.png"><link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=9">
 <meta property="og:title" content="Zoi — Play for life"><meta property="og:description" content="Competitive Fortnite and Call of Duty. ΖΩΗ · EST. MMXXVI. Rush is open."><link rel="canonical" href="https://zoisports.com/"><meta property="og:url" content="https://zoisports.com/"><meta property="og:image" content="https://zoisports.com/assets/og.jpg?v=9"><meta property="og:type" content="website"><meta name="twitter:card" content="summary_large_image">
 <link rel="preload" href="assets/fonts/Graduate-Regular.ttf" as="font" type="font/ttf" crossorigin>
-<link rel="stylesheet" href="styles.css?v=40">
+<link rel="stylesheet" href="styles.css?v=41">
 <link rel="alternate" type="text/plain" href="/llms.txt" title="llms.txt">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"SportsOrganization","name":"Zoi","alternateName":["Zoi Sports","ΖΩΗ"],"url":"https://zoisports.com/","logo":"https://zoisports.com/assets/zoi-wordmark-gold.png","image":"https://zoisports.com/assets/og.jpg","description":"Competitive Fortnite and Call of Duty esports organization. Play for life.","slogan":"Play for life.","email":"hello@zoisports.com","foundingDate":"2026","sport":"Esports","sameAs":["https://kick.com/zoi_sports_gg"],"knowsAbout":["Fortnite","Zero Build","Call of Duty","FNCS","esports"],"potentialAction":{"@type":"ApplyAction","name":"Rush Zoi","target":"https://zoisports.com/#tryouts"}}
@@ -47,7 +47,7 @@
  </div>
  <div class="game-panel" role="tabpanel" id="panel-zb" aria-labelledby="tab-zb" tabindex="0">
  <div class="cards">
-  <div class="card player clickable" role="button" tabindex="0" data-player="kneczi" aria-haspopup="dialog" aria-label="View Kneczi profile"><span class="avatar" data-avatar="/img/roster/kneczi.png" aria-hidden="true">K</span><h3>Kneczi</h3><p class="role">Founder &amp; Owner</p></div>
+  <div class="card player clickable" role="button" tabindex="0" data-player="kneczi" aria-haspopup="dialog" aria-label="View Kneczi profile"><span class="banner" aria-hidden="true"></span><span class="avatar" data-avatar="/img/roster/kneczi.png" aria-hidden="true">K</span><h3>Kneczi</h3><p class="role">Founder &amp; Owner</p></div>
   <div class="card player open"><div class="slot">+</div><h3>Open spot</h3><p class="role">Zero Build player</p></div>
   <div class="card player open"><div class="slot">+</div><h3>Open spot</h3><p class="role">Zero Build player</p></div>
   <div class="card player open"><div class="slot">+</div><h3>Open spot</h3><p class="role">Content creator</p></div>
@@ -55,8 +55,8 @@
  </div>
  <div class="game-panel" role="tabpanel" id="panel-cod" aria-labelledby="tab-cod" tabindex="0" hidden>
  <div class="cards">
-  <div class="card player clickable" role="button" tabindex="0" data-player="kneczi" aria-haspopup="dialog" aria-label="View Kneczi profile"><span class="avatar" data-avatar="/img/roster/kneczi.png" aria-hidden="true">K</span><h3>Kneczi</h3><p class="role">Founder &amp; Owner</p></div>
-  <div class="card player clickable" role="button" tabindex="0" data-player="fattyusmcchubbs" aria-haspopup="dialog" aria-label="View FattyusMcChubbs profile"><span class="avatar" data-avatar="/img/roster/fattyusmcchubbs.png" aria-hidden="true">F</span><h3>FattyusMcChubbs</h3><p class="role">Content creator</p><p class="meta">NA-West · PC</p></div>
+  <div class="card player clickable" role="button" tabindex="0" data-player="kneczi" aria-haspopup="dialog" aria-label="View Kneczi profile"><span class="banner" aria-hidden="true"></span><span class="avatar" data-avatar="/img/roster/kneczi.png" aria-hidden="true">K</span><h3>Kneczi</h3><p class="role">Founder &amp; Owner</p></div>
+  <div class="card player clickable" role="button" tabindex="0" data-player="fattyusmcchubbs" aria-haspopup="dialog" aria-label="View FattyusMcChubbs profile"><span class="banner" aria-hidden="true"></span><span class="avatar" data-avatar="/img/roster/fattyusmcchubbs.png" aria-hidden="true">F</span><h3>FattyusMcChubbs</h3><p class="role">Content creator</p><p class="meta">NA-West · PC</p></div>
  </div>
  <p class="recruit-note">Our <span class="nw">Call of Duty</span> roster is still open. <a href="#tryouts">Rush the chapter</a></p>
  </div>
@@ -107,6 +107,7 @@
 <footer><div class="stripes" aria-hidden="true"></div><p>Zoi · ζωή · life</p><p class="small">Contact: <a href="mailto:hello@zoisports.com">hello@zoisports.com</a></p><p class="small">© 2026 Zoi. All rights reserved. · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p><p class="small">Zoi is not affiliated with or endorsed by Epic Games. Fortnite is a trademark of Epic Games, Inc. Zoi is not affiliated with or endorsed by Activision. Call of Duty is a trademark of Activision Publishing, Inc.</p></footer>
 <dialog id="profile" class="profile" aria-labelledby="pop-name">
  <button type="button" class="pf-close" aria-label="Close profile">&times;</button>
+ <div class="pf-banner" id="pop-banner" aria-hidden="true" hidden><img id="pop-banner-img" alt="" hidden></div>
  <span class="avatar pf-avatar" aria-hidden="true"></span>
  <h3 id="pop-name"></h3><p class="role" id="pop-role"></p>
  <dl class="pf-facts" id="pop-facts"></dl>
@@ -115,6 +116,6 @@
  <p class="pf-soon" id="pop-soon">Socials coming soon</p>
 </dialog>
 <script src="roster.js?v=17"></script>
-<script src="main.js?v=22"></script>
-<script src="account.js?v=5" defer></script>
+<script src="main.js?v=23"></script>
+<script src="account.js?v=6" defer></script>
 </body></html>

@@ -32,15 +32,26 @@ const paint=()=>document.querySelectorAll('.card[data-player]').forEach(card=>{
  let m=card.querySelector('.meta');
  if(meta){if(!m){m=document.createElement('p');m.className='meta';r?r.after(m):card.append(m)}m.textContent=meta}
  else if(m)m.remove();
+ const av=card.querySelector('.avatar');
+ if(av&&typeof p.avatar==='string'&&p.avatar){paintPic(av,p.avatar)}
+ const bn=card.querySelector('.banner');
+ if(bn&&typeof p.banner==='string'&&p.banner){paintPic(bn,p.banner)}
  card.setAttribute('aria-label','View '+p.gamertag+' profile');
 });
+
+/* One image into a slot that is already the right shape. The baked-in picture is
+   only replaced once the live one has actually loaded, so a roster with no
+   pictures keeps the portraits it always had rather than blanking them. */
+const paintPic=(slot,src)=>{const i=new Image();i.alt='';i.decoding='async';
+ i.onload=()=>{slot.textContent='';slot.replaceChildren(i)};
+ i.src=src};
 fetch('/api/roster',{headers:{accept:'application/json'}})
  .then(r=>r.ok?r.json():null)
  .then(j=>{const list=j&&Array.isArray(j.players)?j.players:null;if(!list)return;
   let changed=false;
   list.forEach(row=>{if(!row||!row.slug||!row.gamertag)return;
    const before=ROSTER[row.slug]||{};
-   ROSTER[row.slug]=Object.assign({},before,{gamertag:row.gamertag,role:row.role||before.role||'',region:row.region||'',platform:row.platform||'',bio:row.bio||'',socials:row.socials&&typeof row.socials==='object'?row.socials:{},games:before.games||[],settings:row.settings===true||before.settings===true});
+   ROSTER[row.slug]=Object.assign({},before,{gamertag:row.gamertag,role:row.role||before.role||'',region:row.region||'',platform:row.platform||'',bio:row.bio||'',socials:row.socials&&typeof row.socials==='object'?row.socials:{},games:before.games||[],settings:row.settings===true||before.settings===true,avatar:typeof row.avatar==='string'?row.avatar:(before.avatar||null),banner:typeof row.banner==='string'?row.banner:(before.banner||null)});
    changed=true;
   });
   if(changed)paint();
@@ -54,7 +65,11 @@ const $=id=>document.getElementById(id);let opener=null;
 const safe=u=>{try{const x=new URL(u);return x.protocol==='https:'?x.href:null}catch{return null}};
 function open(card){const k=card.dataset.player,p=ROSTER[k];if(!p)return;opener=card;
  const av=dlg.querySelector('.pf-avatar');av.textContent=p.gamertag[0].toUpperCase();
- const i=new Image();i.alt='';i.onload=()=>{av.textContent='';av.appendChild(i)};i.src='/img/roster/'+k+'.png';
+ const i=new Image();i.alt='';i.onload=()=>{av.textContent='';av.appendChild(i)};i.src=(typeof p.avatar==='string'&&p.avatar)?p.avatar:'/img/roster/'+k+'.png';
+ const bb=$('pop-banner'),bi=$('pop-banner-img');
+ if(bb&&bi){const on=typeof p.banner==='string'&&p.banner;
+  if(on){bi.src=p.banner;bi.hidden=false;bb.hidden=false}else{bi.removeAttribute('src');bi.hidden=true;bb.hidden=true}
+  dlg.classList.toggle('has-banner',Boolean(on))}
  $('pop-name').textContent=p.gamertag;$('pop-role').textContent=p.role||'';
  const f=$('pop-facts');f.replaceChildren();[[(p.games||[]).length>1?'Games':'Game',(p.games||[p.game]).filter(Boolean).map(g=>g.replace(/ /g,'\u00a0')).join(', ')],['Region',p.region],['Platform',p.platform]].forEach(([l,v])=>{if(!v)return;const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=l;dd.textContent=v;f.append(dt,dd)});
  const b=$('pop-bio');b.textContent=p.bio||'';b.hidden=!p.bio;
