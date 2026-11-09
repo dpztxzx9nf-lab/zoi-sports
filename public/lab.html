@@ -19,14 +19,13 @@
 <meta name="apple-mobile-web-app-title" content="Zoi Lab">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="styles.css?v=44">
+<link rel="stylesheet" href="styles.css?v=45">
 </head>
 <body class="lab-page">
 <header class="nav"><a href="/" class="brand"><img class="zw" src="/assets/zoi-wordmark-gold.png?v=10" alt="Zoi" width="600" height="320"></a>
 <nav><a href="/#about">About</a><a href="/#roster">Roster</a><a href="/#tryouts">Rush</a><a href="/#events">Events</a><a href="/#socials">Socials</a><a href="/results">Results</a><a href="/lab" aria-current="page">Lab</a><a href="/shop">Shop</a></nav>
 <div class="nav-end"><button class="menu" aria-label="Menu" aria-expanded="false">☰</button><button class="acct-btn" type="button" id="acct-btn" aria-haspopup="dialog" aria-expanded="false" aria-label="Your account" hidden><span class="acct-initial" id="acct-initial">?</span></button></div></header>
 <main class="lab">
-<h1 class="lab-h1">Settings Lab</h1>
 
 <div class="lab-error" id="load-error" hidden>
  <p id="load-error-text">Couldn't reach the log. It may be the connection.</p>
@@ -34,71 +33,19 @@
 </div>
 
 <div id="app" hidden>
-
-<!-- The only thing above the fold: one action. Open tests sit as compact
-     rows directly under it. Everything else is behind one History fold
-     or Current settings. -->
-<section class="lab-block lab-block-lead" id="takeaway-block" hidden>
- <div id="takeaway"></div>
-</section>
-
-<section class="lab-block lab-block-now" id="now-block" hidden>
- <h2 class="lab-h2 lab-h2-quiet">On test</h2>
- <div id="now"></div>
-</section>
-
-<section class="lab-block" id="history-block" hidden>
- <details class="lab-fold lab-fold-plain">
-  <summary class="lab-fold-k">History</summary>
-  <div class="lab-history">
-   <section id="ranked-block" hidden>
-    <h3 class="lab-h3">What's worked</h3>
-    <div id="ranked"></div>
-   </section>
-   <section id="changes-block" hidden>
-    <h3 class="lab-h3">Past changes</h3>
-    <div id="changes"></div>
-   </section>
-   <section id="charts-block" hidden>
-    <h3 class="lab-h3">Over time</h3>
-    <div class="lab-chart lab-chart-lead" id="chart-kpm">
-     <p class="lab-chart-k">Kills a match</p>
-     <div class="lab-chart-box" id="chart-kpm-box"></div>
-    </div>
-    <div class="lab-chart" id="chart-win">
-     <p class="lab-chart-k">Win rate</p>
-     <div class="lab-chart-box" id="chart-win-box"></div>
-    </div>
-    <p class="lab-chart-key" id="chart-key" hidden></p>
-    <p class="lab-empty" id="chart-empty" hidden></p>
-   </section>
-   <section id="window-block" hidden>
-    <h3 class="lab-h3">Since the last change</h3>
-    <div id="window"></div>
-   </section>
-   <section id="totals-block">
-    <h3 class="lab-h3">All-time totals</h3>
-    <div class="lab-figures" id="figures"></div>
-    <p class="lab-fine" id="figures-note" hidden></p>
-   </section>
-  </div>
- </details>
-</section>
-
-<section class="lab-block" id="current-block" hidden>
- <details class="lab-fold lab-fold-plain">
-  <summary class="lab-fold-k">Current settings</summary>
-  <p class="lab-mode" id="current-mode" hidden></p>
-  <div id="current"></div>
-  <p class="lab-fine" id="current-note" hidden></p>
- </details>
-</section>
-
+ <p class="lab-empty-line" id="empty" hidden>Nothing logged yet.</p>
+ <section id="now-block" hidden>
+  <div id="now"></div>
+ </section>
+ <section id="changes-block" hidden>
+  <h2 class="lab-earlier">Earlier</h2>
+  <div id="changes"></div>
+ </section>
 </div>
 </main>
 
 <script src="main.js?v=23" defer></script>
 <script src="account.js?v=7" defer></script>
-<script src="lab.js?v=17" defer></script>
+<script src="lab.js?v=18" defer></script>
 </body>
 </html>
