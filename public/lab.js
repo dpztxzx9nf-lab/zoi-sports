@@ -23,6 +23,10 @@ const nodes = {
   app: $('app'), empty: $('empty'),
   now: $('now'), nowBlock: $('now-block'),
   changes: $('changes'), changesBlock: $('changes-block'),
+  chartsBlock: $('charts-block'),
+  chartKpm: $('chart-kpm'), chartKpmBox: $('chart-kpm-box'),
+  chartWin: $('chart-win'), chartWinBox: $('chart-win-box'),
+  chartLegend: $('chart-legend'), chartEmpty: $('chart-empty'),
   pcConnect: $('pc-connect'), pcLabel: $('pc-label'), pcAdd: $('pc-add'),
   pcErrors: $('pc-errors'), pcToken: $('pc-token'), pcTokenValue: $('pc-token-value'),
   pcCopy: $('pc-copy'), pcDone: $('pc-done'), pcCopied: $('pc-copied'),
@@ -66,6 +70,12 @@ const timeOf = value => {
   if (!s) return NaN;
   const iso = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(s) ? s.replace(' ', 'T') + 'Z' : s;
   return Date.parse(iso);
+};
+
+const fmtDay = value => {
+  const ms = timeOf(value);
+  if (!Number.isFinite(ms)) return '';
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'America/Denver' }).format(new Date(ms));
 };
 
 const group = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
@@ -252,6 +262,175 @@ function pickLead(open, past) {
   return rankedOpen[0] || null;
 }
 
+/* ---------- charts ----------
+   Hand-drawn SVG with presentation attributes: the CSP allows no inline styles
+   and no third-party chart script. Always on the page, never in a fold. */
+const NS = 'http://www.w3.org/2000/svg';
+const svg = (tag, attrs) => {
+  const n = document.createElementNS(NS, tag);
+  for (const k of Object.keys(attrs || {})) n.setAttribute(k, String(attrs[k]));
+  return n;
+};
+const svgText = (attrs, text) => {
+  const n = svg('text', attrs);
+  n.textContent = text;
+  return n;
+};
+
+const W = 320, H = 132;
+const PAD = { l: 34, r: 8, t: 10, b: 20 };
+
+/* series: [{ v: number|null, mark: bool, thin: bool }]. x is the session index.
+   A point below the server's chart floor arrives with thin: true; it is drawn
+   as a hollow mark off the line. */
+function lineChart(series, opts) {
+  const box = el('div');
+  const points = series.filter(s => isNum(s.v));
+  if (!points.length) {
+    box.append(el('p', 'lab-empty', opts.empty || 'Nothing measured yet.'));
+    return box;
+  }
+  const values = points.map(s => s.v);
+  /* Win rate cannot exceed 100%. A one-game 100% used to stretch the axis past
+     the only value the number can take. */
+  const cap = isNum(opts.cap) ? opts.cap : null;
+  const rawTop = Math.max(opts.max || 0, ...values);
+  const top = cap === null ? rawTop : Math.min(cap, rawTop);
+  const yMax = cap !== null && rawTop >= cap ? cap : (top <= 0 ? 1 : top * 1.15);
+  const yMin = opts.min || 0;
+
+  const plotW = W - PAD.l - PAD.r;
+  const plotH = H - PAD.t - PAD.b;
+  const xAt = i => PAD.l + (series.length <= 1 ? plotW / 2 : (plotW * i) / (series.length - 1));
+  const yAt = v => PAD.t + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
+
+  const root = svg('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': opts.label || '' });
+
+  for (let g = 0; g <= 2; g++) {
+    const v = yMin + ((yMax - yMin) * g) / 2;
+    const y = yAt(v);
+    root.append(svg('line', { x1: PAD.l, y1: y, x2: W - PAD.r, y2: y, stroke: '#ffffff14', 'stroke-width': 1 }));
+    root.append(svgText({ x: PAD.l - 5, y: y + 3.5, fill: '#a29f97', 'font-size': 8, 'text-anchor': 'end' }, opts.axis(v)));
+  }
+
+  series.forEach((s, i) => {
+    if (!s.mark) return;
+    const x = xAt(i);
+    root.append(svg('line', { x1: x, y1: PAD.t, x2: x, y2: PAD.t + plotH, stroke: '#e6d3a055', 'stroke-width': 1, 'stroke-dasharray': '2 3' }));
+  });
+
+  let band = [];
+  const flushBand = () => {
+    if (band.length > 1) {
+      const up = band.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.hi.toFixed(1)).join(' ');
+      const down = band.slice().reverse().map((p) => 'L' + p.x.toFixed(1) + ' ' + p.lo.toFixed(1)).join(' ');
+      root.append(svg('path', { d: up + ' ' + down + ' Z', fill: '#ffe08a', 'fill-opacity': 0.13, stroke: 'none' }));
+    }
+    band = [];
+  };
+  series.forEach((s, i) => {
+    if (!isNum(s.lo) || !isNum(s.hi) || s.thin) { flushBand(); return; }
+    band.push({ x: xAt(i), lo: yAt(s.lo), hi: yAt(s.hi) });
+  });
+  flushBand();
+
+  let run = [];
+  const flush = () => {
+    if (run.length > 1) {
+      const d = run.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join(' ');
+      root.append(svg('path', { d, fill: 'none', stroke: '#ffe08a', 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+    }
+    run = [];
+  };
+  series.forEach((s, i) => {
+    if (!isNum(s.v) || s.thin) { flush(); return; }
+    run.push({ x: xAt(i), y: yAt(s.v) });
+  });
+  flush();
+
+  series.forEach((s, i) => {
+    if (!isNum(s.v)) return;
+    if (s.thin) {
+      root.append(svg('circle', { cx: xAt(i).toFixed(1), cy: yAt(s.v).toFixed(1), r: 2.4, fill: 'none', stroke: '#a29f97', 'stroke-width': 1.2 }));
+      return;
+    }
+    root.append(svg('circle', { cx: xAt(i).toFixed(1), cy: yAt(s.v).toFixed(1), r: s.mark ? 2.8 : 2, fill: s.mark ? '#fffbe0' : '#ffe08a' }));
+  });
+
+  if (opts.firstLabel) {
+    root.append(svgText({ x: PAD.l, y: H - 6, fill: '#a29f97', 'font-size': 8 }, opts.firstLabel));
+  }
+  if (opts.lastLabel) {
+    root.append(svgText({ x: W - PAD.r, y: H - 6, fill: '#a29f97', 'font-size': 8, 'text-anchor': 'end' }, opts.lastLabel));
+  }
+
+  box.append(root);
+  return box;
+}
+
+function renderCharts() {
+  const p = state.perf || {};
+  const chart = Array.isArray(p.chart) ? p.chart : [];
+  nodes.chartKpmBox.replaceChildren();
+  nodes.chartWinBox.replaceChildren();
+  nodes.chartLegend.replaceChildren();
+
+  if (!chart.length) {
+    hide(nodes.chartKpm);
+    hide(nodes.chartWin);
+    hide(nodes.chartLegend);
+    hide(nodes.chartEmpty);
+    hide(nodes.chartsBlock);
+    return;
+  }
+
+  show(nodes.chartsBlock);
+  show(nodes.chartKpm);
+  show(nodes.chartWin);
+  hide(nodes.chartEmpty);
+
+  const first = chart[0], last = chart[chart.length - 1];
+  const firstLabel = fmtDay(first.to);
+  const sameDay = fmtDay(first.to) === fmtDay(last.to);
+  const lastLabel = sameDay ? '' : fmtDay(last.to);
+  const series = v => chart.map(s => ({
+    v: v(s), mark: Boolean(s.change), thin: Boolean(s.thin),
+    lo: isNum(s.kills_low) ? s.kills_low : null,
+    hi: isNum(s.kills_high) ? s.kills_high : null,
+  }));
+
+  nodes.chartKpmBox.append(lineChart(series(s => s.kills_per_match), {
+    min: 0,
+    max: 2,
+    label: 'Kills a match by session',
+    axis: v => (Math.round(v * 10) / 10).toFixed(1),
+    firstLabel, lastLabel,
+    empty: 'Kills a match needs a kill count in a session.',
+  }));
+
+  nodes.chartWinBox.append(lineChart(series(s => s.win_rate), {
+    min: 0,
+    max: 0.15,
+    cap: 1,
+    label: 'Win rate by session',
+    axis: v => Math.round(v * 100) + '%',
+    firstLabel, lastLabel,
+    empty: 'Win rate needs a win recorded in a session.',
+  }));
+
+  /* A tiny legend, only for the marks that are actually on the chart. No prose. */
+  const marks = chart.some(s => s.change);
+  const thins = chart.some(s => s.thin);
+  const minGames = p.chart_min_games || 5;
+  if (marks || thins) {
+    if (thins) nodes.chartLegend.append(el('span', null, '\u25cb under ' + minGames + ' games'));
+    if (marks) nodes.chartLegend.append(el('span', null, '\u250a change'));
+    show(nodes.chartLegend);
+  } else {
+    hide(nodes.chartLegend);
+  }
+}
+
 function render() {
   const list = (state.perf && Array.isArray(state.perf.changes)) ? state.perf.changes : [];
   const open = list.filter(isOpenChange);
@@ -265,6 +444,7 @@ function render() {
     show(nodes.empty);
     hide(nodes.nowBlock);
     hide(nodes.changesBlock);
+    renderCharts();
     return;
   }
   hide(nodes.empty);
@@ -282,9 +462,12 @@ function render() {
 
   const earlier = past.filter(c => c !== lead);
   nodes.changes.replaceChildren();
-  if (!earlier.length) { hide(nodes.changesBlock); return; }
-  for (const c of earlier) nodes.changes.append(changeRow(c, { lead: false }));
-  show(nodes.changesBlock);
+  if (!earlier.length) hide(nodes.changesBlock);
+  else {
+    for (const c of earlier) nodes.changes.append(changeRow(c, { lead: false }));
+    show(nodes.changesBlock);
+  }
+  renderCharts();
 }
 
 /* ---------- connected PCs ---------- */
