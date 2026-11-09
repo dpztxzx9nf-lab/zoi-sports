@@ -19,7 +19,7 @@
 <meta name="apple-mobile-web-app-title" content="Zoi Lab">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="styles.css?v=42">
+<link rel="stylesheet" href="styles.css?v=43">
 </head>
 <body class="lab-page">
 <header class="nav"><a href="/" class="brand"><img class="zw" src="/assets/zoi-wordmark-gold.png?v=10" alt="Zoi" width="600" height="320"></a>
@@ -35,23 +35,34 @@
 
 <div id="app" hidden>
 
-<!-- 1. The test that is open right now. This is the answer to "is the thing I
-     just changed working", so it leads the page: the change, how far the sample
-     has got, and what the games since it say. -->
+<!-- 1. One takeaway: what to keep, change, or keep playing. The rest of the
+     page is evidence for this line. -->
+<section class="lab-block" id="takeaway-block" hidden>
+ <div id="takeaway"></div>
+</section>
+
+<!-- 2. Open tests, compact. A card here is still being played; decided ones
+     live only under Past changes. -->
 <section class="lab-block" id="now-block" hidden>
  <h2 class="lab-h2">On test now</h2>
  <div id="now"></div>
 </section>
 
-<!-- 2. The games since the last change, drawn. The window the whole page is
-     built on, so it comes before any all-time figure. -->
-<section class="lab-block" id="window-block" hidden>
- <h2 class="lab-h2">Since the last change</h2>
- <div id="window"></div>
+<!-- 3. Which setting has actually helped, before the long history. -->
+<section class="lab-block" id="ranked-block" hidden>
+ <h2 class="lab-h2">What's worked</h2>
+ <div id="ranked"></div>
 </section>
 
-<!-- 3. Every session over time, as a band rather than a bare line. -->
-<section class="lab-block">
+<!-- 4. Every finished change, newest first. -->
+<section class="lab-block" id="changes-block" hidden>
+ <h2 class="lab-h2">Past changes</h2>
+ <div id="changes"></div>
+</section>
+
+<!-- 5. Sessions over time. Below the verdicts, so it does not compete with
+     the answer at the top. -->
+<section class="lab-block" id="charts-block" hidden>
  <h2 class="lab-h2">Over time</h2>
  <div class="lab-chart lab-chart-lead" id="chart-kpm">
   <p class="lab-chart-k">Kills a match</p>
@@ -65,23 +76,16 @@
  <p class="lab-empty" id="chart-empty" hidden></p>
 </section>
 
-<!-- 4. Every change, newest first, with the verdict on each. -->
-<section class="lab-block" id="changes-block" hidden>
- <h2 class="lab-h2">Every change</h2>
- <div id="changes"></div>
+<!-- Kept in the document for the numbers, but not shown as its own section:
+     the same figures already sit on the open test. -->
+<section class="lab-block" id="window-block" hidden>
+ <h2 class="lab-h2">Since the last change</h2>
+ <div id="window"></div>
 </section>
 
-<!-- 5. Which setting has actually helped. Folded under the changes, because it
-     is a summary of them rather than a separate thing to learn. -->
-<section class="lab-block" id="ranked-block" hidden>
- <h2 class="lab-h2">What's worked</h2>
- <div id="ranked"></div>
-</section>
-
-<!-- 6. The setup and the reference material. Real, but not what he opens the
-     page to read, so it sits below everything that is about the games. -->
-<section class="lab-block">
- <h2 class="lab-h2">What it's set to</h2>
+<!-- 6. Reference: current values, then all-time totals. -->
+<section class="lab-block" id="current-block">
+ <h2 class="lab-h2">Current settings</h2>
  <p class="lab-mode" id="current-mode" hidden></p>
  <div id="current"></div>
  <p class="lab-fine" id="current-note" hidden></p>
@@ -100,6 +104,6 @@
 
 <script src="main.js?v=23" defer></script>
 <script src="account.js?v=7" defer></script>
-<script src="lab.js?v=15" defer></script>
+<script src="lab.js?v=16" defer></script>
 </body>
 </html>
