@@ -48,6 +48,12 @@ const WIN_RATE_EFFECT = 0.03;      /* 80% power, the usual default */
 export const OVERDISPERSION = 2.5; /* see killsInterval */
 export const PRIMARY = "kills_per_match";
 export const MAX_SEGMENTS = 60;    /* what the chart draws */
+/* Two recorded matches belong to one session when the next one ends
+   no more than this long after the last. Three hours is an evening's
+   break: lunch-to-evening is a new session, and a short queue between
+   games is not. */
+export const SESSION_GAP_MS = 3 * 60 * 60 * 1000;
+
 export const MAX_READINGS = 400;
 export const MAX_MATCHES = 400;    /* matches read for labelling; a window never needs more */
 
@@ -304,6 +310,65 @@ export function segmentsOf(rows) {
     out.push(seg);
   }
   return out;
+}
+
+/* One segment per evening of recorded matches, from the replay rows.
+   The chart used to be drawn only from the career-stats API readings in
+   lab_stats. When that API stops answering, those readings freeze and the
+   charts look like no games have been logged, even though each match's
+   replay is already in the database. These segments are the same shape
+   `segmentsOf` returns, so the chart, the session labels and the since-
+   change window can all use them without a second code path.
+
+   A Creative or unrecorded row is already filtered out by replayMatchOf,
+   and a recorded match with no kill count is skipped here the same way
+   the per-match verdict skips it: a zero would be a claim, not a gap.
+   Wins are placement === 1, and only when every match in the session
+   carried a placement; otherwise the session has a kill rate and no
+   honest win rate. */
+export function segmentsOfReplays(matches, gapMs = SESSION_GAP_MS) {
+  const gap = Number.isFinite(gapMs) && gapMs >= 0 ? gapMs : SESSION_GAP_MS;
+  const list = (matches || [])
+    .filter((m) => m && Number.isFinite(m.endedMs) && Number.isFinite(m.kills))
+    .slice()
+    .sort((a, b) => a.endedMs - b.endedMs || (a.kills - b.kills));
+  if (!list.length) return [];
+
+  const sessions = [];
+  let cur = null;
+  for (const m of list) {
+    if (!cur || m.endedMs - cur.toMs > gap) {
+      if (cur) sessions.push(cur);
+      cur = {
+        fromMs: m.endedMs,
+        toMs: m.endedMs,
+        matches: 0,
+        kills: 0,
+        wins: 0,
+        winsKnown: 0,
+      };
+    }
+    cur.toMs = m.endedMs;
+    cur.fromMs = Math.min(cur.fromMs, m.endedMs);
+    cur.matches += 1;
+    cur.kills += m.kills;
+    if (m.placement === 1) { cur.wins += 1; cur.winsKnown += 1; }
+    else if (Number.isFinite(m.placement)) cur.winsKnown += 1;
+  }
+  if (cur) sessions.push(cur);
+
+  return sessions.map((s) => {
+    const seg = {
+      from: new Date(s.fromMs).toISOString(),
+      to: new Date(s.toMs).toISOString(),
+      fromMs: s.fromMs,
+      toMs: s.toMs,
+      matches: s.matches,
+      kills: s.kills,
+    };
+    if (s.winsKnown === s.matches) seg.wins = s.wins;
+    return seg;
+  });
 }
 
 /* The latest reading, as the header's lifetime numbers. */
@@ -754,6 +819,13 @@ function nextChangeOf(ordered, i) {
 
 export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_SEGMENTS, watch = null, matches = null, replays = null }) {
   const segments = labelSessions(segmentsOf((rows || []).slice(-MAX_READINGS)), matches);
+  /* The chart and the since-change window should show the games this machine
+     actually recorded, not only the career-stats snapshots. Those snapshots
+     come from a third-party API that can go quiet while replays keep arriving,
+     and a chart that then stops in the past reads as "nothing has been logged".
+     The counter path above stays as it is: the per-change verdicts already
+     have their own replay reading in by_match, and blending the two sources
+     into one comparison is the thing that path is built not to do. */
   /* The replay rows, oldest first, read once. `replays` is null when the caller
      did not send any - a database without 0010, or a read that failed - and that
      is different from an empty list: null means "the second reading is not
@@ -1053,7 +1125,15 @@ export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_S
       return y - x;
     });
 
-  const chart = segments.slice(-maxSegments).map((s) => {
+  const replaySegments = replayMatches !== null
+    ? labelSessions(segmentsOfReplays(replayMatches), matches)
+    : [];
+  /* Prefer the replay sessions for anything the page draws as a history of
+     games. Fall back to the counter sessions when no recorded replay is
+     available, so a lab that has never ingested a replay still charts the
+     way it always has. */
+  const history = replaySegments.length ? replaySegments : segments;
+  const chart = history.slice(-maxSegments).map((s) => {
     const t = totalsOf([s]);
     /* The same interval the verdict uses, per session, so the page can draw the
        spread it is actually reading rather than a bare line that looks precise.
@@ -1087,7 +1167,7 @@ export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_S
      games window, which is the honest second opinion: it says how big a move a
      handful of games can see, so a short window reads as short. */
   const lastChangeMs = ordered.length ? ordered[ordered.length - 1].startedMs : null;
-  const sinceChangeSegs = lastChangeMs === null ? [] : segments.filter((s) => s.fromMs >= lastChangeMs);
+  const sinceChangeSegs = lastChangeMs === null ? [] : history.filter((s) => s.fromMs >= lastChangeMs);
   const sinceChangeTotals = sinceChangeSegs.length ? totalsOf(sinceChangeSegs) : null;
   const sinceChange = sinceChangeTotals === null ? null : {
     ...sinceChangeTotals,
@@ -1097,7 +1177,7 @@ export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_S
     /* Games that the open reading covering the change cannot place: they exist
        and they are not in the figure, so they are counted here rather than
        silently dropped. */
-    unplaced: lastChangeMs === null ? 0 : sampleAfterDetailed(segments, lastChangeMs, null).unplaced,
+    unplaced: lastChangeMs === null ? 0 : sampleAfterDetailed(history, lastChangeMs, null).unplaced,
     detectable: sinceChangeTotals.kills_per_match !== null
       ? moveDetectable(sinceChangeTotals.kills_per_match, sinceChangeTotals.kills_matches)
       : null,
@@ -1130,7 +1210,7 @@ export function performance({ rows, tests, now = Date.now(), maxSegments = MAX_S
        window so a short one reads as short instead of as a number to believe. */
     detectable_at_since_change: sinceChange ? sinceChange.detectable : null,
     chart,
-    sessions: segments.length,
+    sessions: history.length,
     changes: changes.reverse(),                 // newest first, for the cards
     ranked,
     primary: PRIMARY,

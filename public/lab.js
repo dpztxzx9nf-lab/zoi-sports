@@ -228,7 +228,9 @@ function signal(c) {
   const v = liveVerdict(c);
   const d = killsMove(c);
   if (v === 'too-soon') {
-    const played = c.after && isNum(c.after.matches) ? c.after.matches : 0;
+    const replayed = c.by_match && isNum(c.by_match.after) ? c.by_match.after : 0;
+    const counted = c.after && isNum(c.after.matches) ? c.after.matches : 0;
+    const played = replayed || counted;
     return { kind: 'early', text: 'Still early' + (played ? ' \u00b7 ' + group(played) + (played === 1 ? ' game' : ' games') : '') };
   }
   if (isNum(d)) return { kind: d < 0 ? 'down' : d > 0 ? 'up' : 'flat', text: signed(d, 2) };
