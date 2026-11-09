@@ -574,6 +574,27 @@ html,body{overflow-x:clip}img{max-width:100%}
 .lab-figures-3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .lab-window{margin:0}
 
+/* The one-line takeaway that now leads the page. */
+.lab-take{background:linear-gradient(180deg,#e6d3a014,#ffffff03);border:1px solid #e6d3a03d;border-left:2px solid var(--g);border-radius:6px;padding:1.1rem 1.05rem}
+.lab-take-better{border-left-color:var(--g)}
+.lab-take-worse{border-left-color:#ff6b8b}
+.lab-take-even,.lab-take-too-soon{border-left-color:#8d8a83}
+.lab-take-empty{border-left-color:#e6d3a033}
+.lab-take-k{margin:0;font:400 1.2rem/1.3 Graduate,Georgia,serif;letter-spacing:.03em;color:var(--t)}
+.lab-take-v{margin:.35rem 0 0;font:400 1.55rem/1.15 Graduate,Georgia,serif;letter-spacing:.04em;color:var(--g)}
+.lab-take-more{list-style:none;margin:.85rem 0 0;padding:.8rem 0 0;border-top:1px solid #e6d3a026}
+.lab-take-more li{margin:0;padding:.2rem 0;font-size:.86rem;line-height:1.5;color:var(--m)}
+
+/* Open-test cards pick up the same left-edge colours as history cards. */
+.lab-hero-better{border-left-color:var(--g)}
+.lab-hero-worse{border-left-color:#ff6b8b}
+.lab-hero-even,.lab-hero-too-soon{border-left-color:#8d8a83}
+
+/* The long evidence on a finished change, folded so the verdict can be read first. */
+.lab-more{margin:.8rem 0 0}
+.lab-more .lab-primary,.lab-more .lab-secondary,.lab-more .lab-ba{padding-left:.9rem;padding-right:.9rem}
+.lab-more .lab-ba{padding-bottom:.9rem}
+
 /* A fold for material that is real but not what the page is read for. Native
    <details>, so it works without script and keeps the summary in the tab order. */
 .lab-fold{border:1px solid #e6d3a01f;border-radius:5px;background:#ffffff03}
@@ -589,6 +610,8 @@ html,body{overflow-x:clip}img{max-width:100%}
  .lab-hero-figs,.lab-figures-3{grid-template-columns:repeat(3,minmax(0,1fr));gap:.4rem}
  .lab-hero-fig .lab-fig-v{font-size:1rem}
  .lab-hero-values{font-size:1.3rem}
+ .lab-take-k{font-size:1.05rem}
+ .lab-take-v{font-size:1.28rem}
 }
 
 /* ---------- account button + the account dialog (lab) ----------

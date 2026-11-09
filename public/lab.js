@@ -17,9 +17,11 @@ const state = { perf: null, tokens: [] };
 const nodes = {
   loadError: $('load-error'), loadErrorText: $('load-error-text'), retry: $('retry'),
   app: $('app'), figures: $('figures'), figuresNote: $('figures-note'),
+  takeaway: $('takeaway'), takeawayBlock: $('takeaway-block'),
   now: $('now'), nowBlock: $('now-block'),
   window: $('window'), windowBlock: $('window-block'),
   current: $('current'), currentNote: $('current-note'), currentMode: $('current-mode'),
+  currentBlock: $('current-block'), chartsBlock: $('charts-block'), totalsBlock: $('totals-block'),
   chartKpm: $('chart-kpm'), chartKpmBox: $('chart-kpm-box'),
   chartWin: $('chart-win'), chartWinBox: $('chart-win-box'),
   chartKey: $('chart-key'), chartEmpty: $('chart-empty'),
@@ -540,11 +542,12 @@ function renderNow() {
   show(nodes.nowBlock);
 
   for (const c of open) {
-    const card = el('article', 'lab-hero');
+    const reading = liveVerdict(c);
+    const card = el('article', 'lab-hero lab-hero-' + reading);
 
     const head = el('div', 'lab-hero-head');
     head.append(el('p', 'lab-hero-k', c.label || c.setting));
-    head.append(el('span', 'lab-tag lab-tag-testing', 'Testing'));
+    head.append(el('span', 'lab-tag lab-tag-' + reading, LIVE_WORD[reading] || reading));
     card.append(head);
 
     const values = el('p', 'lab-hero-values');
@@ -588,57 +591,52 @@ function renderNow() {
       /* `delta` on a change is the win-rate move; `kills_delta` is the kill one.
          The sublabel under a win-rate figure has to be the win-rate move, or the
          card captions the wrong number. */
-      figRow('Win rate now', c.after ? pct(c.after.win_rate) : '\u2014', isNum(c.delta) ? points(c.delta) + ' points' : ''),
+      figRow('Win rate now', c.after ? pct(c.after.win_rate) : '\u2014', isNum(c.delta) && Math.abs(c.delta) >= 0.0005 ? points(c.delta) + ' points' : ''),
     );
     card.append(fig);
 
+    /* A target bar is only useful while the test is still early. Once the
+       games have already separated, "234 a side to prove a one-kill move"
+       is a second, contradictory story on a card that just said it helped. */
     const need = isNum(c.games_target) ? c.games_target : null;
-    if (need === null) {
-      card.append(el('p', 'lab-c-note', 'No kill rate to size a target from yet.'));
-    } else if (need > UNREACHABLE) {
-      card.append(el('p', 'lab-c-note', 'A move of one kill a match would take about ' + group(need) + ' games on each side at your rate, which is more than one setting is worth. Play it and trust how it feels.'));
-    } else {
-      /* The rate the target was worked out from, which is the rate since the
-         change when there is one and the lifetime rate when there is not. It is
-         never printed as a dash: a target with no rate beside it reads as a
-         number that came from nowhere. */
-      const rateShown = isNum(c.after && c.after.kills_per_match)
-        ? c.after.kills_per_match
-        : (state.perf && isNum(state.perf.lifetime_rate) ? state.perf.lifetime_rate : null);
-      card.append(progressBar(played, need));
-      /* Two facts in one line: how far in this is, and how far it has to go.
-         Written as "4 of about 187" the second number reads as a target that is
-         close, which it is not - so the line spells both out. */
-      card.append(el('p', 'lab-c-note', matchesWord(played) + ' since the change. Proving a one-kill move'
-        + (isNum(rateShown) ? ' at ' + kpm(rateShown) + ' a match' : '')
-        + ' takes about ' + group(need) + ' a side.'));
+    if (reading === 'too-soon') {
+      if (need === null) {
+        card.append(el('p', 'lab-c-note', 'No kill rate to size a target from yet.'));
+      } else if (need > UNREACHABLE) {
+        card.append(el('p', 'lab-c-note', 'A move of one kill a match would take about ' + group(need) + ' games on each side at your rate, which is more than one setting is worth. Play it and trust how it feels.'));
+      } else {
+        const rateShown = isNum(c.after && c.after.kills_per_match)
+          ? c.after.kills_per_match
+          : (state.perf && isNum(state.perf.lifetime_rate) ? state.perf.lifetime_rate : null);
+        card.append(progressBar(played, need));
+        card.append(el('p', 'lab-c-note', matchesWord(played) + ' since the change. Proving a one-kill move'
+          + (isNum(rateShown) ? ' at ' + kpm(rateShown) + ' a match' : '')
+          + ' takes about ' + group(need) + ' a side.'));
+      }
     }
 
-    /* What the games so far can and cannot say. An open test that reads
-       "no change" in its first four games is not a finding, and this says so
-       rather than letting the figures above imply otherwise. */
+    /* The long admissions and the replay reading stay on the card, but under a
+       fold, so the takeaway and the three figures can be read first. */
+    const extras = [];
     if (c.verdict === 'too-soon' && c.reason === 'after-thin') {
-      card.append(el('p', 'lab-c-fine', 'Under ' + (state.perf.min_games || 25) + ' games a side, so nothing here is a verdict yet \u2014 it is the start of the sample.'));
+      extras.push(el('p', 'lab-c-fine', 'Under ' + (state.perf.min_games || 25) + ' games a side, so nothing here is a verdict yet — it is the start of the sample.'));
     }
-
-    /* The admissions a settled card makes, from the same functions, because this
-       is the card a decision gets made on. */
     const gaps = killGaps(c);
-    if (gaps) card.append(gaps);
+    if (gaps) extras.push(gaps);
     const winShort = winGaps(c);
-    if (winShort) card.append(winShort);
+    if (winShort) extras.push(winShort);
     const stuck = unplacedNote(c);
-    if (stuck) card.append(stuck);
-
-    /* The per-match reading, which is the one that can place the games the note
-       above had to leave out. It goes last because it is the second opinion, and
-       it never replaces the figures above it. */
+    if (stuck) extras.push(stuck);
     const byMatch = matchReading(c);
-    if (byMatch) card.append(byMatch);
-    /* And the line that says which reading to trust when they part ways. On this
-       card it matters most: it is the one still being tested. */
+    if (byMatch) extras.push(byMatch);
     const split = readingsDisagree(c);
-    if (split) card.append(split);
+    if (split) extras.push(split);
+    if (extras.length) {
+      const more = el('details', 'lab-fold lab-more');
+      more.append(el('summary', 'lab-fold-k', 'More detail'));
+      for (const n of extras) more.append(n);
+      card.append(more);
+    }
 
     nodes.now.append(card);
   }
@@ -650,7 +648,10 @@ function renderWindow() {
   const w = state.perf && state.perf.since_change;
   nodes.window.replaceChildren();
   if (!w || !isNum(w.matches) || w.matches <= 0) { hide(nodes.windowBlock); return; }
-  show(nodes.windowBlock);
+  /* The same figures already sit on the open test, so this block stays in the
+     document for the numbers and out of the layout so the page does not tell
+     the same story twice. */
+  hide(nodes.windowBlock);
 
   const card = el('div', 'lab-window');
 
@@ -847,9 +848,11 @@ function renderCharts() {
     nodes.chartEmpty.textContent = 'No sessions yet.';
     show(nodes.chartEmpty);
     hide(nodes.chartKey);
+    hide(nodes.chartsBlock);
     return;
   }
 
+  show(nodes.chartsBlock);
   show(nodes.chartKpm);
   show(nodes.chartWin);
   hide(nodes.chartEmpty);
@@ -888,10 +891,8 @@ function renderCharts() {
 
   const marks = chart.filter(s => s.change).length;
   const thins = chart.filter(s => s.thin).length;
-  const bits = ['Each point is one session.'];
-  bits.push('The shaded band is the range each session could really sit in, so a point inside another point\u2019s band is not a change.');
-  if (thins) bits.push('The hollow points are sessions of fewer than ' + (p.chart_min_games || 5) + ' games: one game at 0% is not a reading, so they sit off the line.');
-  bits.push(marks ? 'The dashed uprights are where a setting changed.' : 'A dashed upright appears where a setting changes.');
+  const bits = ['Each point is one session.', 'The shaded band is the range each session could really sit in.', marks ? 'The dashed uprights are where a setting changed.' : 'A dashed upright appears where a setting changes.'];
+  if (thins) bits.push('The hollow points are sessions of fewer than ' + (p.chart_min_games || 5) + ' games.');
   nodes.chartKey.textContent = bits.join(' ');
   show(nodes.chartKey);
 }
@@ -935,9 +936,84 @@ function rangeChart(before, after, opts) {
 
 const VERDICT_WORD = { better: 'Better', worse: 'Worse', even: 'No change', 'too-soon': 'Too soon' };
 
-const NO_KILLS = 'These readings carry no kill count, so there is nothing to judge. Kills a match is the number that decides.';
+/* On an open test the badge should be the reading, not a generic "Testing".
+   "Helping" / "Hurting" say what to do; "Still early" says it is too soon to act. */
+const LIVE_WORD = { better: 'Helping', worse: 'Hurting', even: 'No change', 'too-soon': 'Still early' };
 
-/* What the primary verdict means, in words that do not oversell it. */
+/* Prefer a settled replay reading when the counters cannot place the games.
+   That is the same rule readingsDisagree already explains in words. */
+function liveVerdict(c) {
+  const m = c && c.by_match;
+  if (m && m.verdict && m.verdict !== 'too-soon') return m.verdict;
+  return (c && c.verdict) || 'too-soon';
+}
+
+function takeawayParts(c) {
+  const name = (c && (c.label || c.setting)) || 'This setting';
+  const v = liveVerdict(c);
+  const d = isNum(c.kills_delta) ? c.kills_delta
+    : (c.by_match && isNum(c.by_match.kills_delta) ? c.by_match.kills_delta : null);
+  const move = isNum(d) ? signed(d, 2) + ' kills a match' : '';
+  if (v === 'better') return { lead: 'Keep ' + name + ' at ' + c.to_value, move };
+  if (v === 'worse') return { lead: 'Consider putting ' + name + ' back to ' + c.from_value, move };
+  if (v === 'even') return { lead: name + ' looks the same so far', move: '' };
+  const played = c.after && isNum(c.after.matches) ? c.after.matches : 0;
+  const need = (state.perf && state.perf.min_games) || 25;
+  return { lead: name + ' is still early', move: matchesWord(played) + ' since the change, ' + need + ' needed' };
+}
+
+function renderTakeaway() {
+  const list = (state.perf && Array.isArray(state.perf.changes)) ? state.perf.changes : [];
+  const open = list.filter(isOpenChange);
+  const ranked = (state.perf && Array.isArray(state.perf.ranked)) ? state.perf.ranked : [];
+  nodes.takeaway.replaceChildren();
+
+  const card = el('article', 'lab-take');
+  const order = { worse: 0, better: 1, even: 2, 'too-soon': 3 };
+  const sorted = open.slice().sort((a, b) => (order[liveVerdict(a)] ?? 9) - (order[liveVerdict(b)] ?? 9));
+
+  const paint = (parts) => {
+    card.append(el('p', 'lab-take-k', parts.lead));
+    if (parts.move) card.append(el('p', 'lab-take-v', parts.move));
+  };
+
+  if (sorted.length) {
+    const lead = sorted[0];
+    card.classList.add('lab-take-' + liveVerdict(lead));
+    paint(takeawayParts(lead));
+    if (sorted.length > 1) {
+      const more = el('ul', 'lab-take-more');
+      for (const c of sorted.slice(1)) {
+        const p = takeawayParts(c);
+        more.append(el('li', null, p.move ? p.lead + ' \u00b7 ' + p.move : p.lead));
+      }
+      card.append(more);
+    }
+    nodes.takeaway.append(card);
+    show(nodes.takeawayBlock);
+    return;
+  }
+
+  if (ranked.length && isNum(ranked[0].kills_delta)) {
+    const g = ranked[0];
+    const v = g.kills_delta > 0 ? 'better' : g.kills_delta < 0 ? 'worse' : 'even';
+    card.classList.add('lab-take-' + v);
+    const name = g.label || g.setting;
+    paint({
+      lead: g.kills_delta > 0 ? 'Best so far: ' + name : 'Biggest drop so far: ' + name,
+      move: signed(g.kills_delta, 2) + ' kills a match',
+    });
+    nodes.takeaway.append(card);
+    show(nodes.takeawayBlock);
+    return;
+  }
+
+  card.classList.add('lab-take-empty');
+  card.append(el('p', 'lab-take-k', 'Nothing logged yet.'));
+  nodes.takeaway.append(card);
+  show(nodes.takeawayBlock);
+}
+
 function killsLine(c) {
   const b = c.kills_interval && c.kills_interval.before;
   const a = c.kills_interval && c.kills_interval.after;
@@ -1103,9 +1179,19 @@ function changeCard(c) {
   if (scope) meta.append(el('span', 'lab-change-scope', scope));
   card.append(meta);
 
-  card.append(killsLine(c));
-  card.append(winRateLine(c));
-  card.append(beforeAfterRows(c));
+  const summary = el('p', 'lab-c-note lab-c-note-primary',
+    c.verdict === 'better' ? 'This looks better than before.'
+    : c.verdict === 'worse' ? 'This looks worse than before.'
+    : c.verdict === 'even' ? 'No clear difference yet.'
+    : 'Not enough games to call it.');
+  card.append(summary);
+
+  const more = el('details', 'lab-fold lab-more');
+  more.append(el('summary', 'lab-fold-k', 'The numbers'));
+  more.append(killsLine(c));
+  more.append(winRateLine(c));
+  more.append(beforeAfterRows(c));
+  card.append(more);
 
   return card;
 }
@@ -1316,11 +1402,12 @@ function bootPc() {
    first because it is the live question, then the window it is measured over,
    then the history, then the reference material. */
 function render() {
+  renderTakeaway();
   renderNow();
-  renderWindow();
-  renderCharts();
-  renderChanges();
   renderRanked();
+  renderChanges();
+  renderCharts();
+  renderWindow();
   renderCurrent();
   renderFigures();
   renderEmptiness();
@@ -1340,6 +1427,21 @@ function renderEmptiness() {
   const past = list.filter(c => !isOpenChange(c));
   nodes.changesBlock.hidden = !past.length;
   nodes.rankedBlock.hidden = !ranked.length;
+
+  /* The since-change window is always filled when there is data, and always
+     hidden: it duplicates the open-test figures. */
+  hide(nodes.windowBlock);
+
+  /* Empty boxes for charts and settings were reading as a broken page. The
+     takeaway already says "Nothing logged yet", so those sections stay away
+     until they have something real. The empty copy stays in the document so
+     existing checks can still read it. */
+  const cur = state.perf && state.perf.current;
+  const hasSettings = Boolean(cur && Array.isArray(cur.settings) && cur.settings.length);
+  const hasMode = Boolean(nodes.currentMode && !nodes.currentMode.hidden && nodes.currentMode.textContent);
+  if (nodes.currentBlock) nodes.currentBlock.hidden = !hasSettings && !hasMode;
+  const L = state.perf && state.perf.lifetime;
+  if (nodes.totalsBlock) nodes.totalsBlock.hidden = !(L && L.matches > 0);
 }
 
 function boot() {
