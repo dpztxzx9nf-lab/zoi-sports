@@ -2,9 +2,9 @@
    Sign-in happens at the edge (Cloudflare Access). This file only reads:
    the changes recorded, and the numbers measured around them.
 
-   The page itself is only what changes a setting in Fortnite: one action
-   and the other open tests. Decided changes stay in the log and still
-   feed the charts and the verdict, but they are not listed again. */
+   The page itself is one plain recommendation, the session charts, and
+   the open tests. Decided changes stay in the log and still feed the
+   charts and the verdict, but they are not listed again. */
 (() => {
 
 const $ = id => document.getElementById(id);
@@ -21,7 +21,7 @@ const state = { perf: null, tokens: [] };
 const nodes = {
   loadError: $('load-error'), loadErrorText: $('load-error-text'), retry: $('retry'),
   app: $('app'), empty: $('empty'),
-  now: $('now'), nowBlock: $('now-block'),
+  nowLead: $('now-lead'), now: $('now'), nowBlock: $('now-block'),
   chartsBlock: $('charts-block'),
   chartKpm: $('chart-kpm'), chartKpmBox: $('chart-kpm-box'),
   chartWin: $('chart-win'), chartWinBox: $('chart-win-box'),
@@ -184,13 +184,44 @@ function scopeNote(c) {
   return '';
 }
 
-function actionLine(c) {
-  const name = (c && (c.label || c.setting)) || 'This setting';
+function settingName(c) {
+  return (c && (c.label || c.setting)) || 'This setting';
+}
+
+function killsReason(c) {
+  const d = killsMove(c);
+  if (!isNum(d) || Math.abs(d) < 0.005) return '';
+  const n = Math.abs(d).toFixed(2);
+  return n + (d < 0 ? ' fewer' : ' more') + ' kills a match since the change.';
+}
+
+function verdictBlock(c) {
   const v = liveVerdict(c);
-  if (v === 'better') return 'Keep ' + name + ' at ' + c.to_value + '.';
-  if (v === 'worse') return 'Put ' + name + ' back to ' + c.from_value + '.';
-  if (v === 'even') return 'Leave ' + name + ' as it is.';
-  return 'Keep playing ' + name + '.';
+  const name = settingName(c);
+  const box = el('div', 'lab-verdict');
+  let action = '';
+  let reason = '';
+  if (v === 'worse') {
+    action = 'Put ' + name + ' back to ' + c.from_value + '.';
+    reason = killsReason(c);
+  } else if (v === 'better') {
+    action = 'Keep ' + name + ' at ' + c.to_value + '.';
+    reason = killsReason(c);
+  } else if (v === 'even') {
+    action = name + ' made no difference. Your call.';
+  }
+  box.append(el('p', 'lab-verdict-action', action));
+  if (reason) box.append(el('p', 'lab-verdict-reason', reason));
+  return box;
+}
+
+function earlyVerdict(openCount) {
+  const box = el('div', 'lab-verdict');
+  box.append(el('p', 'lab-verdict-action', 'Too early to call. Keep your settings and play more games.'));
+  if (openCount > 0) {
+    box.append(el('p', 'lab-verdict-sub', openCount === 1 ? '1 test running' : openCount + ' tests running'));
+  }
+  return box;
 }
 
 function signal(c) {
@@ -217,22 +248,17 @@ function justification(c) {
   return body.childNodes.length ? body : null;
 }
 
-function changeRow(c, opts) {
-  const lead = Boolean(opts && opts.lead);
+function changeRow(c) {
   const v = liveVerdict(c);
-  const card = el('details', 'lab-hero lab-hero-' + v + (lead ? ' lab-hero-lead' : ''));
+  const card = el('details', 'lab-hero lab-hero-' + v);
 
   const sum = el('summary', 'lab-hero-sum');
-  if (lead) {
-    sum.append(el('span', 'lab-hero-action', actionLine(c)));
-  } else {
-    const id = el('span', 'lab-hero-id');
-    id.append(el('span', 'lab-hero-k', c.label || c.setting));
-    const values = el('span', 'lab-hero-values');
-    values.append(el('span', null, c.from_value), el('span', 'lab-arrow', '\u2192'), el('span', null, c.to_value));
-    id.append(values);
-    sum.append(id);
-  }
+  const id = el('span', 'lab-hero-id');
+  id.append(el('span', 'lab-hero-k', c.label || c.setting));
+  const values = el('span', 'lab-hero-values');
+  values.append(el('span', null, c.from_value), el('span', 'lab-arrow', '\u2192'), el('span', null, c.to_value));
+  id.append(values);
+  sum.append(id);
 
   const side = el('span', 'lab-hero-side');
   const sig = signal(c);
@@ -255,10 +281,19 @@ function changeRow(c, opts) {
 function pickLead(open, past) {
   const order = { worse: 0, better: 1, even: 2, 'too-soon': 3 };
   const rankedOpen = open.slice().sort((a, b) => (order[liveVerdict(a)] ?? 9) - (order[liveVerdict(b)] ?? 9));
-  const pastWorse = past.filter(c => liveVerdict(c) === 'worse');
+  const pastOf = v => past.filter(c => liveVerdict(c) === v);
   if (rankedOpen[0] && liveVerdict(rankedOpen[0]) === 'worse') return rankedOpen[0];
-  if (pastWorse[0]) return pastWorse[0];
+  if (pastOf('worse')[0]) return pastOf('worse')[0];
+  if (rankedOpen[0] && liveVerdict(rankedOpen[0]) === 'better') return rankedOpen[0];
+  if (pastOf('better')[0]) return pastOf('better')[0];
+  if (rankedOpen[0] && liveVerdict(rankedOpen[0]) === 'even') return rankedOpen[0];
+  if (pastOf('even')[0]) return pastOf('even')[0];
   return rankedOpen[0] || null;
+}
+
+function isSettledLead(c) {
+  const v = c ? liveVerdict(c) : 'too-soon';
+  return v === 'worse' || v === 'better' || v === 'even';
 }
 
 /* ---------- charts ----------
@@ -435,25 +470,41 @@ function render() {
   const open = list.filter(isOpenChange);
   const past = list.filter(c => !isOpenChange(c));
   const lead = pickLead(open, past);
+  const settled = isSettledLead(lead);
 
+  nodes.nowLead.replaceChildren();
   nodes.now.replaceChildren();
 
-  if (!lead && !open.length) {
-    if (!list.length) show(nodes.empty);
-    else hide(nodes.empty);
+  if (!list.length) {
+    show(nodes.empty);
+    hide(nodes.nowLead);
     hide(nodes.nowBlock);
     renderCharts();
     return;
   }
   hide(nodes.empty);
 
-  show(nodes.nowBlock);
-  if (lead) nodes.now.append(changeRow(lead, { lead: true }));
-  for (const c of open) {
-    if (lead && c === lead) continue;
-    nodes.now.append(changeRow(c, { lead: false }));
+  if (settled) {
+    nodes.nowLead.append(verdictBlock(lead));
+    show(nodes.nowLead);
+  } else if (open.length) {
+    nodes.nowLead.append(earlyVerdict(open.length));
+    show(nodes.nowLead);
+  } else {
+    hide(nodes.nowLead);
   }
+
   renderCharts();
+
+  const skip = settled ? lead : null;
+  let listed = 0;
+  for (const c of open) {
+    if (skip && c === skip) continue;
+    nodes.now.append(changeRow(c));
+    listed++;
+  }
+  if (listed) show(nodes.nowBlock);
+  else hide(nodes.nowBlock);
 }
 
 /* ---------- connected PCs ---------- */
