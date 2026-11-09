@@ -392,10 +392,8 @@ html,body{overflow-x:clip}img{max-width:100%}
 /* The lab page itself: one action, compact rows, tight spacing. */
 .lab-empty-line{margin:2.2rem 0 0;font:400 1.35rem/1.25 Graduate,Georgia,serif;letter-spacing:.02em;color:var(--t)}
 .lab section{max-width:none;margin:0;padding:0}
-.lab-earlier{font:400 .62rem/1.2 Graduate,Georgia,serif;letter-spacing:.16em;text-transform:uppercase;color:var(--m);-webkit-text-fill-color:var(--m);background:none;filter:none;text-align:left;margin:1.35rem 0 .15rem;padding:0;border:0}
-.lab-earlier::after{display:none}
 
-.lab-charts{margin:1.5rem 0 0;padding:0}
+.lab-charts{margin:1.1rem 0 0;padding:0}
 .lab-chart{margin:0 0 1rem;padding:0;background:none;border:0;border-radius:0}
 .lab-chart:last-of-type{margin-bottom:.15rem}
 .lab-chart-k{margin:0 0 .15rem;padding:0;font:400 .62rem/1.2 Graduate,Georgia,serif;letter-spacing:.16em;text-transform:uppercase;color:var(--m)}
