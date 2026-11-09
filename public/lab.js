@@ -2,9 +2,9 @@
    Sign-in happens at the edge (Cloudflare Access). This file only reads:
    the changes recorded, and the numbers measured around them.
 
-   The page itself is only what changes a setting in Fortnite: one action,
-   the other open tests, and earlier verdicts that might still be worth
-   reversing. Everything else was noise. */
+   The page itself is only what changes a setting in Fortnite: one action
+   and the other open tests. Decided changes stay in the log and still
+   feed the charts and the verdict, but they are not listed again. */
 (() => {
 
 const $ = id => document.getElementById(id);
@@ -22,7 +22,6 @@ const nodes = {
   loadError: $('load-error'), loadErrorText: $('load-error-text'), retry: $('retry'),
   app: $('app'), empty: $('empty'),
   now: $('now'), nowBlock: $('now-block'),
-  changes: $('changes'), changesBlock: $('changes-block'),
   chartsBlock: $('charts-block'),
   chartKpm: $('chart-kpm'), chartKpmBox: $('chart-kpm-box'),
   chartWin: $('chart-win'), chartWinBox: $('chart-win-box'),
@@ -438,34 +437,21 @@ function render() {
   const lead = pickLead(open, past);
 
   nodes.now.replaceChildren();
-  nodes.changes.replaceChildren();
 
-  if (!lead && !open.length && !past.length) {
-    show(nodes.empty);
+  if (!lead && !open.length) {
+    if (!list.length) show(nodes.empty);
+    else hide(nodes.empty);
     hide(nodes.nowBlock);
-    hide(nodes.changesBlock);
     renderCharts();
     return;
   }
   hide(nodes.empty);
 
-  if (lead || open.length) {
-    show(nodes.nowBlock);
-    if (lead) nodes.now.append(changeRow(lead, { lead: true }));
-    for (const c of open) {
-      if (lead && c === lead) continue;
-      nodes.now.append(changeRow(c, { lead: false }));
-    }
-  } else {
-    hide(nodes.nowBlock);
-  }
-
-  const earlier = past.filter(c => c !== lead);
-  nodes.changes.replaceChildren();
-  if (!earlier.length) hide(nodes.changesBlock);
-  else {
-    for (const c of earlier) nodes.changes.append(changeRow(c, { lead: false }));
-    show(nodes.changesBlock);
+  show(nodes.nowBlock);
+  if (lead) nodes.now.append(changeRow(lead, { lead: true }));
+  for (const c of open) {
+    if (lead && c === lead) continue;
+    nodes.now.append(changeRow(c, { lead: false }));
   }
   renderCharts();
 }
