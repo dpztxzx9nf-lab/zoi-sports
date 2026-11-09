@@ -382,15 +382,20 @@ html,body{overflow-x:clip}img{max-width:100%}
 
 /* settings lab — a private tool: your own numbers, measured */
 .lab-page{background:radial-gradient(700px 520px at 50% -10%,#16130b 0,transparent 70%),var(--bg);background-attachment:fixed}
-.lab{max-width:680px;margin:0 auto;padding:2rem 1.2rem 3.5rem}
-.lab-h1{font-size:clamp(1.7rem,5vw,2.3rem);letter-spacing:.06em;margin:0 0 .4rem;background:linear-gradient(180deg,#fff,var(--g));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 3px 8px #000)}
+.lab{max-width:640px;margin:0 auto;padding:1.6rem 1.2rem 4.5rem}
+.lab-h1{font:400 .68rem/1.2 Graduate,Georgia,serif;letter-spacing:.2em;text-transform:uppercase;margin:0 0 1.6rem;background:none;-webkit-background-clip:border-box;background-clip:border-box;color:var(--g);-webkit-text-fill-color:var(--g);filter:none}
 
 .lab-error{margin:0 0 1.6rem;padding:1rem;border:1px solid #ff6b8b44;border-left:2px solid #ff6b8b;border-radius:5px;background:#1a0c10}
 .lab-error p{margin:0 0 .7rem;font-size:.9rem;color:var(--t)}
 .lab-error .btn{cursor:pointer;border:0}
 
-.lab-block{margin:0 0 2.2rem}
+.lab-block{margin:0 0 1.6rem}
 .lab-block:last-child{margin-bottom:0}
+.lab-block-lead{margin:0 0 1.5rem}
+.lab-block-now{margin:0 0 1.25rem}
+.lab-h2-quiet{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;white-space:nowrap}
+.lab-h3{font:400 .62rem/1.2 Graduate,Georgia,serif;letter-spacing:.16em;text-transform:uppercase;color:var(--m);margin:1.2rem 0 .55rem;background:none;color:var(--m);-webkit-text-fill-color:var(--m);filter:none;text-align:left}
+.lab-h3::after{display:none}
 .lab-h2{font:400 .72rem/1.2 Graduate,Georgia,serif;letter-spacing:.22em;text-transform:uppercase;color:var(--g);text-align:left;background:none;-webkit-background-clip:border-box;background-clip:border-box;-webkit-text-fill-color:var(--g);filter:none;margin:0 0 .9rem;padding:0 0 .45rem;border-bottom:1px solid #e6d3a033}
 .lab-h2::after{display:none}
 
@@ -559,59 +564,62 @@ html,body{overflow-x:clip}img{max-width:100%}
    with the open test and the window it is measured over. These are the blocks
    those two sections draw. */
 
-/* The open test, given the weight it deserves: it is the one live question. */
-.lab-hero{position:relative;background:linear-gradient(180deg,#e6d3a014,#ffffff03);border:1px solid #e6d3a03d;border-left:2px solid var(--g);border-radius:6px;padding:1rem;margin:0 0 .8rem}
-.lab-hero:last-child{margin-bottom:0}
+/* Above the fold: one action, then compact rows. No card chrome. */
+.lab-take{background:none;border:0;padding:0}
+.lab-take-k{margin:0;font:400 1.7rem/1.2 Graduate,Georgia,serif;letter-spacing:.02em;color:var(--t)}
+.lab-take-v,.lab-take-more{display:none}
+
+.lab-hero,.lab-change{position:relative;background:none;border:0;border-bottom:1px solid #e6d3a01f;border-radius:0;padding:0;margin:0}
+.lab-hero:last-child,.lab-change:last-child{margin-bottom:0;border-bottom:0}
+.lab-hero-better,.lab-hero-worse,.lab-hero-even,.lab-hero-too-soon,
+.lab-change-better,.lab-change-worse,.lab-change-even{border-left:0}
+
+.lab-hero-sum{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.35rem .9rem;align-items:baseline;padding:.85rem 0;cursor:pointer;list-style:none}
+.lab-hero-sum::-webkit-details-marker{display:none}
+.lab-hero-id{display:flex;flex-direction:column;gap:.15rem;min-width:0}
+.lab-hero-k,.lab-card-k{margin:0;font:400 .92rem/1.3 Graduate,Georgia,serif;letter-spacing:.06em;color:var(--t);text-transform:uppercase;min-width:0;overflow-wrap:anywhere}
+.lab-hero-values,.lab-values{margin:0;font:400 .95rem/1.2 Graduate,Georgia,serif;letter-spacing:.03em;color:var(--m);display:flex;align-items:baseline;gap:.35rem;flex-wrap:wrap}
+.lab-hero-side{display:flex;align-items:baseline;gap:.7rem;flex:0 0 auto;white-space:nowrap}
+.lab-hero-d{font:400 1rem/1.2 Graduate,Georgia,serif;letter-spacing:.02em;color:var(--t);font-variant-numeric:tabular-nums}
+.lab-hero-body{padding:0 0 1rem}
+
 .lab-hero-head{display:flex;align-items:baseline;justify-content:space-between;gap:.6rem;flex-wrap:wrap}
-.lab-hero-k{margin:0;font:400 1.05rem/1.25 Graduate,Georgia,serif;letter-spacing:.1em;color:var(--g);text-transform:uppercase;min-width:0;overflow-wrap:anywhere}
-.lab-hero-values{margin:.35rem 0 0;font:400 1.5rem/1.15 Graduate,Georgia,serif;letter-spacing:.05em;color:var(--t);display:flex;align-items:baseline;gap:.45rem;flex-wrap:wrap}
 .lab-hero-figs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem;margin:.85rem 0 0}
 .lab-hero-fig{display:flex;flex-direction:column;gap:.15rem;min-width:0}
 .lab-hero-fig .lab-fig-v{font-size:1.18rem}
 .lab-hero-fig .lab-fig-sub{font-size:.68rem}
 
-/* The since-change window: the same figure block, one wider column set. */
 .lab-figures-3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .lab-window{margin:0}
 
-/* The one-line takeaway that now leads the page. */
-.lab-take{background:linear-gradient(180deg,#e6d3a014,#ffffff03);border:1px solid #e6d3a03d;border-left:2px solid var(--g);border-radius:6px;padding:1.1rem 1.05rem}
-.lab-take-better{border-left-color:var(--g)}
-.lab-take-worse{border-left-color:#ff6b8b}
-.lab-take-even,.lab-take-too-soon{border-left-color:#8d8a83}
-.lab-take-empty{border-left-color:#e6d3a033}
-.lab-take-k{margin:0;font:400 1.2rem/1.3 Graduate,Georgia,serif;letter-spacing:.03em;color:var(--t)}
-.lab-take-v{margin:.35rem 0 0;font:400 1.55rem/1.15 Graduate,Georgia,serif;letter-spacing:.04em;color:var(--g)}
-.lab-take-more{list-style:none;margin:.85rem 0 0;padding:.8rem 0 0;border-top:1px solid #e6d3a026}
-.lab-take-more li{margin:0;padding:.2rem 0;font-size:.86rem;line-height:1.5;color:var(--m)}
+.lab-tag{font:400 .62rem/1 Graduate,Georgia,serif;letter-spacing:.1em;text-transform:uppercase;padding:0;border:0;border-radius:0;color:var(--m);white-space:nowrap}
+.lab-tag-better,.lab-tag-testing{color:var(--g);border:0}
+.lab-tag-worse{color:#ff9aae;border:0}
+.lab-tag-even{color:#b9b6ae;border:0}
+.lab-tag-too-soon{color:#8d8a83;border:0}
 
-/* Open-test cards pick up the same left-edge colours as history cards. */
-.lab-hero-better{border-left-color:var(--g)}
-.lab-hero-worse{border-left-color:#ff6b8b}
-.lab-hero-even,.lab-hero-too-soon{border-left-color:#8d8a83}
-
-/* The long evidence on a finished change, folded so the verdict can be read first. */
 .lab-more{margin:.8rem 0 0}
-.lab-more .lab-primary,.lab-more .lab-secondary,.lab-more .lab-ba{padding-left:.9rem;padding-right:.9rem}
-.lab-more .lab-ba{padding-bottom:.9rem}
+.lab-history{padding:.2rem 0 .4rem}
 
-/* A fold for material that is real but not what the page is read for. Native
-   <details>, so it works without script and keeps the summary in the tab order. */
-.lab-fold{border:1px solid #e6d3a01f;border-radius:5px;background:#ffffff03}
-.lab-fold-k{font:400 .72rem/1.2 Graduate,Georgia,serif;letter-spacing:.18em;text-transform:uppercase;color:var(--g);padding:.85rem .9rem;cursor:pointer;list-style:none}
+/* Quiet folds: a line of type, not a boxed drawer. */
+.lab-fold{border:0;border-radius:0;background:none}
+.lab-fold-plain{border-top:1px solid #e6d3a01f;padding-top:.15rem}
+.lab-fold-k{font:400 .72rem/1.2 Graduate,Georgia,serif;letter-spacing:.18em;text-transform:uppercase;color:var(--g);padding:.85rem 0;cursor:pointer;list-style:none}
 .lab-fold-k::-webkit-details-marker{display:none}
 .lab-fold-k::after{content:'+';float:right;font-size:1rem;line-height:1;color:var(--m)}
 .lab-fold[open] .lab-fold-k::after{content:'\2212'}
-.lab-fold[open] .lab-fold-k{padding-bottom:.5rem;border-bottom:1px solid #e6d3a01a;margin-bottom:.75rem}
-.lab-fold>.lab-figures{padding:0 .9rem}
-.lab-fold>.lab-fine{padding:0 .9rem .9rem}
+.lab-fold[open] .lab-fold-k{padding-bottom:.5rem;border-bottom:1px solid #e6d3a01a;margin-bottom:.6rem}
+.lab-fold>.lab-figures{padding:0}
+.lab-fold>.lab-fine{padding:0 0 .4rem}
+.lab-fold>.lab-mode,.lab-fold>#current,.lab-fold>.lab-fine{display:block}
 
 @media(max-width:560px){
+ .lab-take-k{font-size:1.35rem}
+ .lab-hero-sum{grid-template-columns:minmax(0,1fr);gap:.2rem;padding:.8rem 0}
+ .lab-hero-side{justify-content:space-between;width:100%}
  .lab-hero-figs,.lab-figures-3{grid-template-columns:repeat(3,minmax(0,1fr));gap:.4rem}
  .lab-hero-fig .lab-fig-v{font-size:1rem}
- .lab-hero-values{font-size:1.3rem}
- .lab-take-k{font-size:1.05rem}
- .lab-take-v{font-size:1.28rem}
+ .lab-hero-values,.lab-values{font-size:.9rem}
 }
 
 /* ---------- account button + the account dialog (lab) ----------

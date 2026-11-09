@@ -19,7 +19,7 @@
 <meta name="apple-mobile-web-app-title" content="Zoi Lab">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="styles.css?v=43">
+<link rel="stylesheet" href="styles.css?v=44">
 </head>
 <body class="lab-page">
 <header class="nav"><a href="/" class="brand"><img class="zw" src="/assets/zoi-wordmark-gold.png?v=10" alt="Zoi" width="600" height="320"></a>
@@ -35,67 +35,62 @@
 
 <div id="app" hidden>
 
-<!-- 1. One takeaway: what to keep, change, or keep playing. The rest of the
-     page is evidence for this line. -->
-<section class="lab-block" id="takeaway-block" hidden>
+<!-- The only thing above the fold: one action. Open tests sit as compact
+     rows directly under it. Everything else is behind one History fold
+     or Current settings. -->
+<section class="lab-block lab-block-lead" id="takeaway-block" hidden>
  <div id="takeaway"></div>
 </section>
 
-<!-- 2. Open tests, compact. A card here is still being played; decided ones
-     live only under Past changes. -->
-<section class="lab-block" id="now-block" hidden>
- <h2 class="lab-h2">On test now</h2>
+<section class="lab-block lab-block-now" id="now-block" hidden>
+ <h2 class="lab-h2 lab-h2-quiet">On test</h2>
  <div id="now"></div>
 </section>
 
-<!-- 3. Which setting has actually helped, before the long history. -->
-<section class="lab-block" id="ranked-block" hidden>
- <h2 class="lab-h2">What's worked</h2>
- <div id="ranked"></div>
+<section class="lab-block" id="history-block" hidden>
+ <details class="lab-fold lab-fold-plain">
+  <summary class="lab-fold-k">History</summary>
+  <div class="lab-history">
+   <section id="ranked-block" hidden>
+    <h3 class="lab-h3">What's worked</h3>
+    <div id="ranked"></div>
+   </section>
+   <section id="changes-block" hidden>
+    <h3 class="lab-h3">Past changes</h3>
+    <div id="changes"></div>
+   </section>
+   <section id="charts-block" hidden>
+    <h3 class="lab-h3">Over time</h3>
+    <div class="lab-chart lab-chart-lead" id="chart-kpm">
+     <p class="lab-chart-k">Kills a match</p>
+     <div class="lab-chart-box" id="chart-kpm-box"></div>
+    </div>
+    <div class="lab-chart" id="chart-win">
+     <p class="lab-chart-k">Win rate</p>
+     <div class="lab-chart-box" id="chart-win-box"></div>
+    </div>
+    <p class="lab-chart-key" id="chart-key" hidden></p>
+    <p class="lab-empty" id="chart-empty" hidden></p>
+   </section>
+   <section id="window-block" hidden>
+    <h3 class="lab-h3">Since the last change</h3>
+    <div id="window"></div>
+   </section>
+   <section id="totals-block">
+    <h3 class="lab-h3">All-time totals</h3>
+    <div class="lab-figures" id="figures"></div>
+    <p class="lab-fine" id="figures-note" hidden></p>
+   </section>
+  </div>
+ </details>
 </section>
 
-<!-- 4. Every finished change, newest first. -->
-<section class="lab-block" id="changes-block" hidden>
- <h2 class="lab-h2">Past changes</h2>
- <div id="changes"></div>
-</section>
-
-<!-- 5. Sessions over time. Below the verdicts, so it does not compete with
-     the answer at the top. -->
-<section class="lab-block" id="charts-block" hidden>
- <h2 class="lab-h2">Over time</h2>
- <div class="lab-chart lab-chart-lead" id="chart-kpm">
-  <p class="lab-chart-k">Kills a match</p>
-  <div class="lab-chart-box" id="chart-kpm-box"></div>
- </div>
- <div class="lab-chart" id="chart-win">
-  <p class="lab-chart-k">Win rate</p>
-  <div class="lab-chart-box" id="chart-win-box"></div>
- </div>
- <p class="lab-chart-key" id="chart-key" hidden></p>
- <p class="lab-empty" id="chart-empty" hidden></p>
-</section>
-
-<!-- Kept in the document for the numbers, but not shown as its own section:
-     the same figures already sit on the open test. -->
-<section class="lab-block" id="window-block" hidden>
- <h2 class="lab-h2">Since the last change</h2>
- <div id="window"></div>
-</section>
-
-<!-- 6. Reference: current values, then all-time totals. -->
-<section class="lab-block" id="current-block">
- <h2 class="lab-h2">Current settings</h2>
- <p class="lab-mode" id="current-mode" hidden></p>
- <div id="current"></div>
- <p class="lab-fine" id="current-note" hidden></p>
-</section>
-
-<section class="lab-block" id="totals-block">
- <details class="lab-fold">
-  <summary class="lab-fold-k">All-time totals</summary>
-  <div class="lab-figures" id="figures"></div>
-  <p class="lab-fine" id="figures-note" hidden></p>
+<section class="lab-block" id="current-block" hidden>
+ <details class="lab-fold lab-fold-plain">
+  <summary class="lab-fold-k">Current settings</summary>
+  <p class="lab-mode" id="current-mode" hidden></p>
+  <div id="current"></div>
+  <p class="lab-fine" id="current-note" hidden></p>
  </details>
 </section>
 
@@ -104,6 +99,6 @@
 
 <script src="main.js?v=23" defer></script>
 <script src="account.js?v=7" defer></script>
-<script src="lab.js?v=16" defer></script>
+<script src="lab.js?v=17" defer></script>
 </body>
 </html>

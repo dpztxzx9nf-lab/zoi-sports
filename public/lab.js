@@ -22,6 +22,7 @@ const nodes = {
   window: $('window'), windowBlock: $('window-block'),
   current: $('current'), currentNote: $('current-note'), currentMode: $('current-mode'),
   currentBlock: $('current-block'), chartsBlock: $('charts-block'), totalsBlock: $('totals-block'),
+  historyBlock: $('history-block'),
   chartKpm: $('chart-kpm'), chartKpmBox: $('chart-kpm-box'),
   chartWin: $('chart-win'), chartWinBox: $('chart-win-box'),
   chartKey: $('chart-key'), chartEmpty: $('chart-empty'),
@@ -543,38 +544,41 @@ function renderNow() {
 
   for (const c of open) {
     const reading = liveVerdict(c);
-    const card = el('article', 'lab-hero lab-hero-' + reading);
+    const card = el('details', 'lab-hero lab-hero-' + reading);
 
-    const head = el('div', 'lab-hero-head');
-    head.append(el('p', 'lab-hero-k', c.label || c.setting));
-    head.append(el('span', 'lab-tag lab-tag-' + reading, LIVE_WORD[reading] || reading));
-    card.append(head);
-
-    const values = el('p', 'lab-hero-values');
+    const sum = el('summary', 'lab-hero-sum');
+    const id = el('span', 'lab-hero-id');
+    id.append(el('span', 'lab-hero-k', c.label || c.setting));
+    const values = el('span', 'lab-hero-values');
     values.append(el('span', null, c.from_value), el('span', 'lab-arrow', '\u2192'), el('span', null, c.to_value));
-    card.append(values);
+    id.append(values);
+    sum.append(id);
 
-    /* What was compared, and since when, on one line. A test running inside one
-       mode is a narrower sample and a stronger claim, and an open test is the
-       card a reader acts on, so it has to say which games it is counting just as
-       a settled card does. */
+    const side = el('span', 'lab-hero-side');
+    side.append(el('span', 'lab-tag lab-tag-' + reading, LIVE_WORD[reading] || reading));
+    const d = killsMove(c);
+    const played = c.after && isNum(c.after.matches) ? c.after.matches : 0;
+    if (isNum(d)) side.append(el('span', 'lab-hero-d', signed(d, 2)));
+    else if (played) side.append(el('span', 'lab-hero-d', group(played) + (played === 1 ? ' game' : ' games')));
+    sum.append(side);
+    card.append(sum);
+
+    const body = el('div', 'lab-hero-body');
+
     const meta = el('p', 'lab-change-meta');
     const when = fmtDay(c.started_at);
     if (when) meta.append(el('span', 'lab-change-when', 'Since ' + when));
     const scope = scopeNote(c);
     if (scope) meta.append(el('span', 'lab-change-scope', scope));
-    card.append(meta);
+    if (meta.childNodes.length) body.append(meta);
 
     if (c.watch) {
       const watch = el('div', 'lab-watch');
       watch.append(el('span', 'lab-watch-k', 'What to watch for'));
       watch.append(el('p', 'lab-watch-t', c.watch));
-      card.append(watch);
+      body.append(watch);
     }
 
-    /* The two numbers this card is for: how it is going since the change, and how
-       far that is from being enough to call. */
-    const played = c.after && isNum(c.after.matches) ? c.after.matches : 0;
     const kpmNow = c.after ? c.after.kills_per_match : null;
     const kpmBefore = c.before ? c.before.kills_per_match : null;
 
@@ -588,56 +592,42 @@ function renderNow() {
     fig.append(
       figRow('Kills a match now', kpm(kpmNow), isNum(kpmBefore) ? 'was ' + kpm(kpmBefore) : ''),
       figRow('Games since', group(played), ''),
-      /* `delta` on a change is the win-rate move; `kills_delta` is the kill one.
-         The sublabel under a win-rate figure has to be the win-rate move, or the
-         card captions the wrong number. */
       figRow('Win rate now', c.after ? pct(c.after.win_rate) : '\u2014', isNum(c.delta) && Math.abs(c.delta) >= 0.0005 ? points(c.delta) + ' points' : ''),
     );
-    card.append(fig);
+    body.append(fig);
 
-    /* A target bar is only useful while the test is still early. Once the
-       games have already separated, "234 a side to prove a one-kill move"
-       is a second, contradictory story on a card that just said it helped. */
     const need = isNum(c.games_target) ? c.games_target : null;
     if (reading === 'too-soon') {
       if (need === null) {
-        card.append(el('p', 'lab-c-note', 'No kill rate to size a target from yet.'));
+        body.append(el('p', 'lab-c-note', 'No kill rate to size a target from yet.'));
       } else if (need > UNREACHABLE) {
-        card.append(el('p', 'lab-c-note', 'A move of one kill a match would take about ' + group(need) + ' games on each side at your rate, which is more than one setting is worth. Play it and trust how it feels.'));
+        body.append(el('p', 'lab-c-note', 'A move of one kill a match would take about ' + group(need) + ' games on each side at your rate, which is more than one setting is worth. Play it and trust how it feels.'));
       } else {
         const rateShown = isNum(c.after && c.after.kills_per_match)
           ? c.after.kills_per_match
           : (state.perf && isNum(state.perf.lifetime_rate) ? state.perf.lifetime_rate : null);
-        card.append(progressBar(played, need));
-        card.append(el('p', 'lab-c-note', matchesWord(played) + ' since the change. Proving a one-kill move'
+        body.append(progressBar(played, need));
+        body.append(el('p', 'lab-c-note', matchesWord(played) + ' since the change. Proving a one-kill move'
           + (isNum(rateShown) ? ' at ' + kpm(rateShown) + ' a match' : '')
           + ' takes about ' + group(need) + ' a side.'));
       }
     }
 
-    /* The long admissions and the replay reading stay on the card, but under a
-       fold, so the takeaway and the three figures can be read first. */
-    const extras = [];
     if (c.verdict === 'too-soon' && c.reason === 'after-thin') {
-      extras.push(el('p', 'lab-c-fine', 'Under ' + (state.perf.min_games || 25) + ' games a side, so nothing here is a verdict yet — it is the start of the sample.'));
+      body.append(el('p', 'lab-c-fine', 'Under ' + (state.perf.min_games || 25) + ' games a side, so nothing here is a verdict yet \u2014 it is the start of the sample.'));
     }
     const gaps = killGaps(c);
-    if (gaps) extras.push(gaps);
+    if (gaps) body.append(gaps);
     const winShort = winGaps(c);
-    if (winShort) extras.push(winShort);
+    if (winShort) body.append(winShort);
     const stuck = unplacedNote(c);
-    if (stuck) extras.push(stuck);
+    if (stuck) body.append(stuck);
     const byMatch = matchReading(c);
-    if (byMatch) extras.push(byMatch);
+    if (byMatch) body.append(byMatch);
     const split = readingsDisagree(c);
-    if (split) extras.push(split);
-    if (extras.length) {
-      const more = el('details', 'lab-fold lab-more');
-      more.append(el('summary', 'lab-fold-k', 'More detail'));
-      for (const n of extras) more.append(n);
-      card.append(more);
-    }
+    if (split) body.append(split);
 
+    card.append(body);
     nodes.now.append(card);
   }
 }
@@ -948,18 +938,20 @@ function liveVerdict(c) {
   return (c && c.verdict) || 'too-soon';
 }
 
-function takeawayParts(c) {
+function killsMove(c) {
+  if (isNum(c.kills_delta)) return c.kills_delta;
+  if (c.by_match && isNum(c.by_match.kills_delta)) return c.by_match.kills_delta;
+  return null;
+}
+
+/* One sentence: the action. The number and the other tests live on the rows. */
+function takeawayLine(c) {
   const name = (c && (c.label || c.setting)) || 'This setting';
   const v = liveVerdict(c);
-  const d = isNum(c.kills_delta) ? c.kills_delta
-    : (c.by_match && isNum(c.by_match.kills_delta) ? c.by_match.kills_delta : null);
-  const move = isNum(d) ? signed(d, 2) + ' kills a match' : '';
-  if (v === 'better') return { lead: 'Keep ' + name + ' at ' + c.to_value, move };
-  if (v === 'worse') return { lead: 'Consider putting ' + name + ' back to ' + c.from_value, move };
-  if (v === 'even') return { lead: name + ' looks the same so far', move: '' };
-  const played = c.after && isNum(c.after.matches) ? c.after.matches : 0;
-  const need = (state.perf && state.perf.min_games) || 25;
-  return { lead: name + ' is still early', move: matchesWord(played) + ' since the change, ' + need + ' needed' };
+  if (v === 'better') return 'Keep ' + name + ' at ' + c.to_value + '.';
+  if (v === 'worse') return 'Put ' + name + ' back to ' + c.from_value + '.';
+  if (v === 'even') return 'Leave ' + name + ' as it is.';
+  return 'Keep playing ' + name + '.';
 }
 
 function renderTakeaway() {
@@ -972,23 +964,10 @@ function renderTakeaway() {
   const order = { worse: 0, better: 1, even: 2, 'too-soon': 3 };
   const sorted = open.slice().sort((a, b) => (order[liveVerdict(a)] ?? 9) - (order[liveVerdict(b)] ?? 9));
 
-  const paint = (parts) => {
-    card.append(el('p', 'lab-take-k', parts.lead));
-    if (parts.move) card.append(el('p', 'lab-take-v', parts.move));
-  };
-
   if (sorted.length) {
     const lead = sorted[0];
     card.classList.add('lab-take-' + liveVerdict(lead));
-    paint(takeawayParts(lead));
-    if (sorted.length > 1) {
-      const more = el('ul', 'lab-take-more');
-      for (const c of sorted.slice(1)) {
-        const p = takeawayParts(c);
-        more.append(el('li', null, p.move ? p.lead + ' \u00b7 ' + p.move : p.lead));
-      }
-      card.append(more);
-    }
+    card.append(el('p', 'lab-take-k', takeawayLine(lead)));
     nodes.takeaway.append(card);
     show(nodes.takeawayBlock);
     return;
@@ -999,10 +978,10 @@ function renderTakeaway() {
     const v = g.kills_delta > 0 ? 'better' : g.kills_delta < 0 ? 'worse' : 'even';
     card.classList.add('lab-take-' + v);
     const name = g.label || g.setting;
-    paint({
-      lead: g.kills_delta > 0 ? 'Best so far: ' + name : 'Biggest drop so far: ' + name,
-      move: signed(g.kills_delta, 2) + ' kills a match',
-    });
+    const line = g.kills_delta > 0
+      ? 'Keep ' + name + '.'
+      : 'Put ' + name + ' back.';
+    card.append(el('p', 'lab-take-k', line));
     nodes.takeaway.append(card);
     show(nodes.takeawayBlock);
     return;
@@ -1160,39 +1139,42 @@ function scopeNote(c) {
 }
 
 function changeCard(c) {
-  const card = el('article', 'lab-change lab-change-' + c.verdict);
-  const head = el('div', 'lab-change-head');
-  head.append(el('p', 'lab-card-k', c.label || c.setting));
-  const badge = el('span', 'lab-tag lab-tag-' + c.verdict, VERDICT_WORD[c.verdict] || c.verdict);
-  head.append(badge);
-  card.append(head);
+  const card = el('details', 'lab-change lab-change-' + c.verdict);
 
-  const values = el('p', 'lab-values');
-  values.append(el('span', null, c.from_value), el('span', 'lab-arrow', '\u2192'), el('span', null, c.to_value));
-  card.append(values);
+  const sum = el('summary', 'lab-hero-sum');
+  const id = el('span', 'lab-hero-id');
+  id.append(el('p', 'lab-card-k', c.label || c.setting));
+  const values = el('span', 'lab-values lab-hero-values');
+  values.append(el('span', null, c.from_value), el('span', 'lab-arrow', '→'), el('span', null, c.to_value));
+  id.append(values);
+  sum.append(id);
 
+  const side = el('span', 'lab-hero-side');
+  side.append(el('span', 'lab-tag lab-tag-' + c.verdict, VERDICT_WORD[c.verdict] || c.verdict));
+  const d = killsMove(c);
+  if (isNum(d)) side.append(el('span', 'lab-hero-d', signed(d, 2)));
+  sum.append(side);
+  card.append(sum);
+
+  const body = el('div', 'lab-hero-body');
   const when = fmtDayYear(c.started_at);
   const meta = el('p', 'lab-change-meta');
   if (when) meta.append(el('span', 'lab-change-when', when));
   meta.append(el('span', 'lab-change-primary-name', 'Judged on kills a match'));
   const scope = scopeNote(c);
   if (scope) meta.append(el('span', 'lab-change-scope', scope));
-  card.append(meta);
+  body.append(meta);
 
-  const summary = el('p', 'lab-c-note lab-c-note-primary',
+  body.append(el('p', 'lab-c-note lab-c-note-primary',
     c.verdict === 'better' ? 'This looks better than before.'
     : c.verdict === 'worse' ? 'This looks worse than before.'
     : c.verdict === 'even' ? 'No clear difference yet.'
-    : 'Not enough games to call it.');
-  card.append(summary);
+    : 'Not enough games to call it.'));
 
-  const more = el('details', 'lab-fold lab-more');
-  more.append(el('summary', 'lab-fold-k', 'The numbers'));
-  more.append(killsLine(c));
-  more.append(winRateLine(c));
-  more.append(beforeAfterRows(c));
-  card.append(more);
-
+  body.append(killsLine(c));
+  body.append(winRateLine(c));
+  body.append(beforeAfterRows(c));
+  card.append(body);
   return card;
 }
 
@@ -1442,6 +1424,12 @@ function renderEmptiness() {
   if (nodes.currentBlock) nodes.currentBlock.hidden = !hasSettings && !hasMode;
   const L = state.perf && state.perf.lifetime;
   if (nodes.totalsBlock) nodes.totalsBlock.hidden = !(L && L.matches > 0);
+
+  /* One History fold holds ranked, past changes, charts and totals. It stays
+     closed, and stays off the page entirely when there is nothing to put in it. */
+  const hasChart = Boolean(state.perf && Array.isArray(state.perf.chart) && state.perf.chart.length);
+  const hasHistory = Boolean(past.length || ranked.length || hasChart || (L && L.matches > 0));
+  if (nodes.historyBlock) nodes.historyBlock.hidden = !hasHistory;
 }
 
 function boot() {
