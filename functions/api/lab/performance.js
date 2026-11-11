@@ -93,8 +93,12 @@ async function performanceForCod(env, who, request) {
   let matches = [];
   try {
     const hasMeta = await hasColumn(env, "lab_cod_matches", "needs_review");
+    const hasDamage = await hasColumn(env, "lab_cod_matches", "damage");
+    const hasStats = await hasColumn(env, "lab_cod_matches", "stats");
     const cols = hasMeta
       ? "id,played_at,mode,kills,extracted,won,deaths,score,placement,source,needs_review,confidence,aar_key"
+        + (hasDamage ? ",damage" : "")
+        + (hasStats ? ",stats" : "")
       : "id,played_at,mode,kills,extracted,won,deaths";
     const where = hasMeta
       ? "WHERE owner = ? AND deleted_at IS NULL"
@@ -108,7 +112,7 @@ async function performanceForCod(env, who, request) {
     matches = [];
   }
 
-  const scored = matches.filter((m) => !Number(m.needs_review) && isCodMode(m.mode));
+  const scored = matches.filter((m) => isCodMode(m.mode));
   const modes = modesWithMatches(scored);
   const mode = pickCodMode(scored, requested);
   const payload = mode
@@ -136,6 +140,25 @@ async function performanceForCod(env, who, request) {
 }
 
 
+
+function statsOf(m) {
+  if (m && m.stats && typeof m.stats === "object" && !Array.isArray(m.stats)) return m.stats;
+  if (m && typeof m.stats === "string" && m.stats.trim()) {
+    try {
+      const obj = JSON.parse(m.stats);
+      if (obj && typeof obj === "object" && !Array.isArray(obj)) return obj;
+    } catch {}
+  }
+  return null;
+}
+
+function statNum(m, key) {
+  const bag = statsOf(m);
+  if (!bag || bag[key] == null || bag[key] === "") return null;
+  const n = Number(bag[key]);
+  return Number.isFinite(n) ? n : null;
+}
+
 function recentCodMatches(rows) {
   const list = Array.isArray(rows) ? rows.slice() : [];
   list.sort((a, b) => {
@@ -150,15 +173,18 @@ function recentCodMatches(rows) {
       id: Number.isInteger(id) && id > 0 ? id : null,
       played_at: m.played_at || null,
       mode: m.mode || null,
-      mode_label: meta ? meta.label : (m.mode || "Needs review"),
+      mode_label: meta ? meta.label : (m.mode || "Match"),
       kills: m.kills == null ? null : Number(m.kills),
       deaths: m.deaths == null ? null : Number(m.deaths),
       score: m.score == null ? null : Number(m.score),
       placement: m.placement == null ? null : Number(m.placement),
       extracted: m.extracted == null ? null : Number(m.extracted),
       won: m.won == null ? null : Number(m.won),
+      assists: m.assists == null ? (statNum(m, "assists")) : Number(m.assists),
+      contracts: m.contracts == null ? (statNum(m, "contracts")) : Number(m.contracts),
+      damage: m.damage == null ? (statNum(m, "damage")) : Number(m.damage),
+      stats: statsOf(m),
       source: m.source === "ocr" ? "ocr" : "manual",
-      needs_review: Boolean(Number(m.needs_review)),
       confidence: m.confidence == null ? null : Number(m.confidence),
       image: m.aar_key && Number.isInteger(id) && id > 0 ? "/api/lab/cod-aar-image?id=" + id : null,
     };

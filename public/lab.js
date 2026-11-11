@@ -37,6 +37,7 @@ const nodes = {
   modeSwitch: $('mode-switch'),
   chartsBlock: $('charts-block'),
   chartKpm: $('chart-kpm'), chartKpmBox: $('chart-kpm-box'),
+  chartDmg: $('chart-dmg'), chartDmgBox: $('chart-dmg-box'),
   chartWin: $('chart-win'), chartWinBox: $('chart-win-box'), chartWinTitle: $('chart-win-title'),
   chartLegend: $('chart-legend'), chartEmpty: $('chart-empty'),
   codLog: $('cod-log'), codLogMode: $('cod-log-mode'), codLogKills: $('cod-log-kills'),
@@ -214,10 +215,7 @@ function renderCodMatches() {
   show(nodes.codMatches);
   const all = (state.perf && Array.isArray(state.perf.recent_matches)) ? state.perf.recent_matches : [];
   const current = (state.perf && state.perf.mode) || state.mode || '';
-  const review = all.filter(m => m.needs_review);
-  const listed = all.filter(m => !m.needs_review && (!current || m.mode === current));
-  const rows = review.concat(listed.filter(m => !m.needs_review));
-  // Keep review rows first, then this mode's confirmed rows, without duplicating.
+  const rows = all.filter(m => !current || m.mode === current);
   const seen = new Set();
   const ordered = [];
   for (const m of rows) {
@@ -242,21 +240,33 @@ function codMatchRow(m) {
   const title = el('p', 'lab-match-line');
   const bits = [];
   bits.push(m.mode_label || m.mode || 'Match');
+  if (m.placement != null) bits.push('placed ' + m.placement);
   if (m.kills != null) bits.push(m.kills + (m.kills === 1 ? ' kill' : ' kills'));
   if (m.deaths != null) bits.push(m.deaths + (m.deaths === 1 ? ' death' : ' deaths'));
+  const assists = m.assists != null ? m.assists : (m.stats && m.stats.assists);
+  const contracts = m.contracts != null ? m.contracts : (m.stats && m.stats.contracts);
+  const damage = m.damage != null ? m.damage : (m.stats && m.stats.damage);
+  if (assists != null && assists !== '') bits.push(assists + (Number(assists) === 1 ? ' assist' : ' assists'));
+  if (contracts != null && contracts !== '') bits.push(contracts + (Number(contracts) === 1 ? ' contract' : ' contracts'));
+  if (damage != null && damage !== '') bits.push(group(damage) + ' damage');
   if (m.score != null) bits.push('score ' + group(m.score));
-  if (m.placement != null) bits.push('placed ' + m.placement);
   if (m.extracted === 1) bits.push('extracted');
   if (m.extracted === 0) bits.push('did not extract');
   if (m.won === 1) bits.push('won');
   if (m.won === 0) bits.push('lost');
+  const skip = new Set(['mode','mode_label','kills','deaths','assists','contracts','damage','score','placement','extracted','won','map']);
+  if (m.stats && typeof m.stats === 'object') {
+    for (const [k, v] of Object.entries(m.stats)) {
+      if (skip.has(k) || v == null || v === '') continue;
+      bits.push(String(k).replace(/_/g, ' ') + ' ' + v);
+    }
+  }
   title.textContent = bits.join(' · ');
   li.append(title);
   const meta = el('p', 'lab-match-meta');
   const src = m.source === 'ocr' ? 'From the scoreboard' : 'Logged by hand';
   const when = fmtWhen(m.played_at);
-  meta.textContent = [when, src, m.needs_review ? 'Needs review' : null].filter(Boolean).join(' · ');
-  if (m.needs_review) meta.classList.add('lab-match-flag');
+  meta.textContent = [when, src].filter(Boolean).join(' · ');
   li.append(meta);
   if (m.image) {
     const img = document.createElement('img');
@@ -265,14 +275,8 @@ function codMatchRow(m) {
     img.alt = 'After-action report';
     li.append(img);
   }
-  if (m.id && (m.needs_review || m.source === 'ocr')) {
+  if (m.id) {
     const actions = el('div', 'lab-match-actions');
-    if (m.needs_review) {
-      const ok = el('button', 'lab-mini', 'Looks right');
-      ok.type = 'button';
-      ok.addEventListener('click', () => patchCodMatch(m.id, { confirm: true }, ok));
-      actions.append(ok);
-    }
     const rm = el('button', 'lab-mini', 'Remove');
     rm.type = 'button';
     rm.addEventListener('click', () => patchCodMatch(m.id, { deleted: true }, rm));
@@ -403,6 +407,18 @@ function killsReason(c) {
   return n + (d < 0 ? ' fewer' : ' more') + ' kills a match since the change.';
 }
 
+function damageMove(c) {
+  if (isNum(c && c.damage_delta)) return c.damage_delta;
+  return null;
+}
+
+function damageReason(c) {
+  const d = damageMove(c);
+  if (!isNum(d) || Math.abs(d) < 0.5) return '';
+  const n = Math.abs(d).toFixed(0);
+  return n + (d < 0 ? ' less' : ' more') + ' damage a match since the change.';
+}
+
 function verdictBlock(c) {
   const v = liveVerdict(c);
   const name = settingName(c);
@@ -411,10 +427,10 @@ function verdictBlock(c) {
   let reason = '';
   if (v === 'worse') {
     action = 'Put ' + name + ' back to ' + c.from_value + '.';
-    reason = killsReason(c);
+    reason = [killsReason(c), damageReason(c)].filter(Boolean).join(' ');
   } else if (v === 'better') {
     action = 'Keep ' + name + ' at ' + c.to_value + '.';
-    reason = killsReason(c);
+    reason = [killsReason(c), damageReason(c)].filter(Boolean).join(' ');
   } else if (v === 'even') {
     action = name + ' made no difference. Your call.';
   }
@@ -452,6 +468,11 @@ function justification(c) {
   const sides = killsSides(c);
   if (isNum(sides.before) || isNum(sides.after)) {
     body.append(el('p', 'lab-just', kpm(sides.before) + ' \u2192 ' + kpm(sides.after) + ' kills a match'));
+  }
+  const dmgBefore = c && c.before ? c.before.damage_per_match : null;
+  const dmgAfter = c && c.after ? c.after.damage_per_match : null;
+  if (isNum(dmgBefore) || isNum(dmgAfter)) {
+    body.append(el('p', 'lab-just', kpm(dmgBefore) + ' \u2192 ' + kpm(dmgAfter) + ' damage a match'));
   }
   const scope = scopeNote(c);
   if (scope) body.append(el('span', 'lab-change-scope', scope));
@@ -616,11 +637,13 @@ function renderCharts() {
   const p = state.perf || {};
   const chart = Array.isArray(p.chart) ? p.chart : [];
   nodes.chartKpmBox.replaceChildren();
+  if (nodes.chartDmgBox) nodes.chartDmgBox.replaceChildren();
   nodes.chartWinBox.replaceChildren();
   nodes.chartLegend.replaceChildren();
 
   if (!chart.length) {
     hide(nodes.chartKpm);
+    if (nodes.chartDmg) hide(nodes.chartDmg);
     hide(nodes.chartWin);
     hide(nodes.chartLegend);
     hide(nodes.chartEmpty);
@@ -651,6 +674,23 @@ function renderCharts() {
     firstLabel, lastLabel,
     empty: 'Kills a match needs a kill count in a session.',
   }));
+
+  const showDamage = Boolean(p.has_damage) && chart.some(s => isNum(s.damage_per_match));
+  if (nodes.chartDmg && nodes.chartDmgBox) {
+    if (showDamage) {
+      show(nodes.chartDmg);
+      nodes.chartDmgBox.append(lineChart(series(s => s.damage_per_match), {
+        min: 0,
+        max: 400,
+        label: 'Damage a match by session',
+        axis: v => String(Math.round(v)),
+        firstLabel, lastLabel,
+        empty: 'Damage a match needs a damage count in a session.',
+      }));
+    } else {
+      hide(nodes.chartDmg);
+    }
+  }
 
   const outcome = p.outcome === 'extraction' ? 'extraction' : 'win';
   const outcomeLabel = p.outcome_label || (outcome === 'extraction' ? 'Extraction rate' : 'Win rate');

@@ -19,7 +19,7 @@
 <meta name="apple-mobile-web-app-title" content="Zoi Lab">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="styles.css?v=52">
+<link rel="stylesheet" href="styles.css?v=53">
 </head>
 <body class="lab-page">
 <header class="nav"><a href="/" class="brand"><img class="zw" src="/assets/zoi-wordmark-gold.png?v=10" alt="Zoi" width="600" height="320"></a>
@@ -46,6 +46,10 @@
     <p class="lab-chart-k">Kills a match</p>
     <div class="lab-chart-box" id="chart-kpm-box"></div>
    </div>
+   <div class="lab-chart" id="chart-dmg" hidden>
+    <p class="lab-chart-k">Damage a match</p>
+    <div class="lab-chart-box" id="chart-dmg-box"></div>
+   </div>
    <div class="lab-chart" id="chart-win">
     <p class="lab-chart-k" id="chart-win-title">Win rate</p>
     <div class="lab-chart-box" id="chart-win-box"></div>
@@ -59,7 +63,7 @@
  </section>
  <section class="lab-matches" id="cod-matches" hidden>
   <p class="lab-log-k">Matches</p>
-  <p class="lab-matches-note" id="cod-matches-note">While Call of Duty is running, the lab watches for the after-action report on this PC and files it. F9 captures the screen as a backup. You can also log a match by hand below.</p>
+  <p class="lab-matches-note" id="cod-matches-note">While Call of Duty is running, the lab watches for the after-action report on this PC and files every readable stat automatically. F9 captures the screen as a backup. You can also log a match by hand below.</p>
   <ul class="lab-match-list" id="cod-match-list"></ul>
   <p class="lab-empty-line" id="cod-matches-empty" hidden>No matches yet. Play a game and leave the after-action report up for a couple of seconds.</p>
  </section>
@@ -92,6 +96,6 @@
 
 <script src="main.js?v=23" defer></script>
 <script src="account.js?v=7" defer></script>
-<script src="lab.js?v=24" defer></script>
+<script src="lab.js?v=25" defer></script>
 </body>
 </html>

@@ -1,9 +1,9 @@
 /* Parse a Call of Duty after-action report into a lab match row.
 
-   The numbers come from a picture of the player's own scoreboard, read by
-   a vision model. This file does not call the model: it turns the model's
-   JSON into catalog modes, whole numbers, and a review flag so a shaky
-   read cannot quietly enter the charts. */
+   Numbers come from local Windows OCR and a vision model. This file does
+   not call the model: it turns JSON and local reads into catalog modes,
+   whole numbers, a stats bag, and a majority merge. A field that cannot
+   be read is left null; the row still counts. Nothing is invented. */
 
 import { COD_MODES, isCodMode, modeOutcome } from "./lab-cod.js";
 
@@ -128,16 +128,33 @@ export function parseOcrPayload(input) {
     won = flag(obj.won);
   }
 
-  const notes = typeof obj.notes === "string" ? obj.notes.trim().slice(0, 400) : "";
+  const assists = whole(firstVal(obj, ["assists"]), 0, 200);
+  const contracts = whole(firstVal(obj, ["contracts"]), 0, 50);
+  const damage = whole(firstVal(obj, ["damage", "total_damage", "damage_dealt"]), 0, SCORE_MAX);
+  const revives = whole(firstVal(obj, ["revives"]), 0, 100);
+  const xp = whole(firstVal(obj, ["xp", "total_xp"]), 0, 2000000);
 
-  return {
+  const notes = typeof obj.notes === "string" ? obj.notes.trim().slice(0, 400) : "";
+  const timeAlive = stringStat(firstVal(obj, ["time_alive", "time"]));
+  const map = stringStat(firstVal(obj, ["map", "map_name"]));
+  const modeLabel = typeof obj.mode_label === "string" ? obj.mode_label.trim().slice(0, 80) : "";
+
+  const core = {
     ok: true,
     mode,
     mode_guess: modeGuess || null,
+    mode_label: modeLabel || modeGuess || null,
     kills: kills.empty || kills.bad ? null : kills.value,
     deaths: deaths.empty || deaths.bad ? null : deaths.value,
     score: score.empty || score.bad ? null : score.value,
     placement: placement.empty || placement.bad ? null : placement.value,
+    assists: assists.empty || assists.bad ? null : assists.value,
+    contracts: contracts.empty || contracts.bad ? null : contracts.value,
+    damage: damage.empty || damage.bad ? null : damage.value,
+    revives: revives.empty || revives.bad ? null : revives.value,
+    xp: xp.empty || xp.bad ? null : xp.value,
+    time_alive: timeAlive,
+    map,
     extracted,
     won,
     confidence,
@@ -146,7 +163,138 @@ export function parseOcrPayload(input) {
     deaths_bad: Boolean(deaths.bad),
     score_bad: Boolean(score.bad),
     placement_bad: Boolean(placement.bad),
+    assists_bad: Boolean(assists.bad),
+    contracts_bad: Boolean(contracts.bad),
+    damage_bad: Boolean(damage.bad),
   };
+  core.stats = statsBag(obj, core);
+  return core;
+}
+
+function firstVal(obj, keys) {
+  const bags = [obj];
+  if (obj && obj.stats && typeof obj.stats === "object") bags.push(obj.stats);
+  for (const bag of bags) {
+    for (const k of keys) {
+      if (bag[k] !== undefined && bag[k] !== null && bag[k] !== "") return bag[k];
+    }
+  }
+  return null;
+}
+
+function stringStat(v) {
+  if (v === undefined || v === null || v === "") return null;
+  const s = String(v).trim().slice(0, 80);
+  return s || null;
+}
+
+const META_KEYS = new Set([
+  "mode", "mode_label", "mode_guess", "confidence", "notes", "ok", "stats",
+  "kills_bad", "deaths_bad", "score_bad", "placement_bad", "assists_bad",
+  "contracts_bad", "damage_bad",
+]);
+
+export const STAT_INT_FIELDS = ["kills", "deaths", "score", "placement", "assists", "contracts", "damage", "revives", "xp"];
+export const STAT_FLAG_FIELDS = ["extracted", "won"];
+export const STAT_TEXT_FIELDS = ["time_alive", "map", "mode_label"];
+
+function statsBag(obj, core) {
+  const bag = {};
+  for (const k of [...STAT_INT_FIELDS, ...STAT_FLAG_FIELDS, ...STAT_TEXT_FIELDS, "mode"]) {
+    if (core[k] !== undefined && core[k] !== null && core[k] !== "") bag[k] = core[k];
+  }
+  const extra = obj && obj.stats && typeof obj.stats === "object" && !Array.isArray(obj.stats) ? obj.stats : {};
+  const top = obj && typeof obj === "object" ? obj : {};
+  for (const src of [extra, top]) {
+    for (const [k, v] of Object.entries(src)) {
+      if (META_KEYS.has(k) || k in bag) continue;
+      if (v === undefined || v === null || v === "") continue;
+      if (typeof v === "number" && Number.isFinite(v)) bag[k] = Number.isInteger(v) ? v : Math.round(v);
+      else if (typeof v === "boolean") bag[k] = v ? 1 : 0;
+      else if (typeof v === "string") {
+        const s = v.trim().slice(0, 80);
+        if (s) bag[k] = s;
+      }
+    }
+  }
+  return bag;
+}
+
+export function majorityValue(votes) {
+  const present = (votes || []).filter((v) => v !== undefined && v !== null && v !== "");
+  if (!present.length) return null;
+  const keyOf = (v) => (typeof v === "number" || typeof v === "boolean" ? String(v) : String(v).trim());
+  const counts = new Map();
+  for (const v of present) {
+    const k = keyOf(v);
+    const cur = counts.get(k) || { v, n: 0 };
+    cur.n += 1;
+    counts.set(k, cur);
+  }
+  const ranked = [...counts.values()].sort((a, b) => b.n - a.n);
+  if (ranked.length > 1 && ranked[0].n === ranked[1].n) return null;
+  if (present.length > 1 && ranked[0].n < 2) return null;
+  return ranked[0].v;
+}
+
+export function applyPlacementWon(fields) {
+  const row = { ...(fields || {}) };
+  if (!isCodMode(row.mode) || modeOutcome(row.mode) !== "win") return row;
+  if (row.placement == null) return row;
+  const fromPlace = row.placement === 1 ? 1 : 0;
+  row.won = fromPlace;
+  return row;
+}
+
+export function mergeMatchReads(reads) {
+  const list = (reads || []).filter((r) => r && r.ok);
+  const fields = { ok: true };
+  const keys = [...STAT_INT_FIELDS, ...STAT_FLAG_FIELDS, ...STAT_TEXT_FIELDS, "mode", "mode_guess", "confidence"];
+  for (const k of keys) {
+    fields[k] = majorityValue(list.map((r) => r[k]));
+  }
+  if (!fields.mode) fields.mode = majorityValue(list.map((r) => r.mode)) || UNRECOGNIZED_MODE;
+  const merged = applyPlacementWon(parseOcrPayload({
+    ...fields,
+    mode: fields.mode,
+    mode_label: fields.mode_label,
+  }));
+  // parseOcrPayload re-validates ranges; restore stats extras by majority too
+  const extraKeys = new Set();
+  for (const r of list) {
+    if (r.stats && typeof r.stats === "object") Object.keys(r.stats).forEach((k) => extraKeys.add(k));
+  }
+  const stats = { ...(merged.stats || {}) };
+  for (const k of extraKeys) {
+    if (k in stats) continue;
+    const v = majorityValue(list.map((r) => (r.stats ? r.stats[k] : null)));
+    if (v !== null && v !== undefined) stats[k] = v;
+  }
+  merged.stats = stats;
+  merged.ok = true;
+  return merged;
+}
+
+export function fieldsNeedingCrop(localFields, vision) {
+  const keys = [...STAT_INT_FIELDS, ...STAT_FLAG_FIELDS, "mode"];
+  const need = [];
+  for (const k of keys) {
+    const a = localFields ? localFields[k] : null;
+    const b = vision ? vision[k] : null;
+    const aMissing = a === undefined || a === null || a === "";
+    const bMissing = b === undefined || b === null || b === "";
+    if (aMissing && bMissing) continue;
+    if (aMissing || bMissing || String(a) !== String(b)) need.push(k);
+  }
+  return need;
+}
+
+export function statsJson(row) {
+  const bag = row && row.stats && typeof row.stats === "object" ? { ...row.stats } : {};
+  for (const k of [...STAT_INT_FIELDS, ...STAT_FLAG_FIELDS, ...STAT_TEXT_FIELDS, "mode"]) {
+    if (row && row[k] !== undefined && row[k] !== null && row[k] !== "") bag[k] = row[k];
+  }
+  return bag;
 }
 
 export function reviewOf(parsed) {
@@ -180,23 +328,41 @@ export const OCR_GUIDED_JSON = {
     deaths: { type: ["integer", "null"] },
     score: { type: ["integer", "null"] },
     placement: { type: ["integer", "null"] },
+    assists: { type: ["integer", "null"] },
+    contracts: { type: ["integer", "null"] },
+    damage: { type: ["integer", "null"] },
+    revives: { type: ["integer", "null"] },
+    xp: { type: ["integer", "null"] },
+    time_alive: { type: ["string", "null"] },
+    map: { type: ["string", "null"] },
     extracted: { type: ["boolean", "null"] },
     won: { type: ["boolean", "null"] },
     confidence: { type: "number" },
     notes: { type: "string" },
+    stats: { type: "object" },
   },
   required: ["confidence"],
-  additionalProperties: false,
+  additionalProperties: true,
 };
 
 export const OCR_PROMPT = [
   "This is a screenshot of a Call of Duty: Modern Warfare 4 after-action report or end-of-match scoreboard, or it is not.",
   "Read only the local player's own line if a full scoreboard is shown.",
-  "On a Warzone or Resurgence Match Summary, the important numbers are on the bottom bar, labeled KILLS, DEATHS, ASSISTS, CONTRACTS, and TOTAL DAMAGE, next to a large placement like 31ST PLACE. Read those labels even if a character pose fills most of the screen. RESURGENCE SOLOS or similar in the corner is the mode.",
-  "Return JSON with: mode (the playlist name), mode_label (exact text on screen), kills, deaths, score (use the match score if shown; do not use total damage as score), placement (finishing place, or null if the mode has none), extracted (true/false only for DMZ, otherwise null), won (true/false for multiplayer, Warzone, or Resurgence, otherwise null), confidence (0 to 1), and a short notes field.",
+  "Capture every labeled stat that is visible, not only kills and deaths.",
+  "On a Warzone or Resurgence Match Summary, the numbers are on the bottom bar, labeled CONTRACTS, KILLS, DEATHS, ASSISTS, and TOTAL DAMAGE, next to a large placement like 31ST PLACE. A 0 is a real value and must be read. RESURGENCE SOLOS or WARZONE in the corner is the mode. Put total damage in damage, not in score. Include any other visible stats (revives, time alive, XP, map) in the JSON.",
+  "On a multiplayer scoreboard, read the local player's score, kills, deaths, assists, and any objective or damage number on that row.",
+  "On a DMZ result, read whether the player extracted, plus kills and any other visible stats.",
+  "Return JSON with: mode, mode_label, kills, deaths, assists, contracts, damage, score (match score only, never total damage), placement, revives, xp, time_alive, map, extracted (true/false only for DMZ, otherwise null), won (true/false for multiplayer, Warzone, or Resurgence; placement 1 is a win, any other place is not), confidence (0 to 1), notes, and stats (an object of any other labeled numbers).",
   "If this is not a scoreboard or after-action report, set confidence to 0 and the other fields to null.",
-  "Do not invent numbers you cannot see. If kills or deaths are visible on the bar, you must include them and must not set confidence to 1 if you skipped them. Preferred mode ids: "
+  "Do not invent numbers you cannot see. A field you cannot read must be null. Preferred mode ids: "
     + COD_MODES.map((m) => m.id + " (" + m.label + ")").join(", ") + ".",
+].join(" ");
+
+export const OCR_CROP_PROMPT = [
+  "This is a crop from a Call of Duty after-action report, often the bottom stats bar or the header.",
+  "Read every labeled number. On the bottom bar, CONTRACTS, KILLS, DEATHS, ASSISTS, and TOTAL DAMAGE each have a number above or beside the label. A 0 is a real value.",
+  "Return the same JSON shape: mode, mode_label, kills, deaths, assists, contracts, damage (total damage), score, placement, revives, xp, time_alive, map, extracted, won, confidence, notes, stats.",
+  "Do not invent numbers. If a field is not in this crop, set it to null.",
 ].join(" ");
 
 export function modelTextOf(result) {

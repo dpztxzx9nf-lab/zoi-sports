@@ -8,8 +8,8 @@
 import { json, sha256Hex } from "../_lib/lab.js";
 import { sniffImage } from "../_lib/media.js";
 import {
-  AAR_MAX_BYTES, OCR_GUIDED_JSON, OCR_MODEL, OCR_PROMPT,
-  modelTextOf, parseOcrPayload, reviewOf,
+  AAR_MAX_BYTES, OCR_GUIDED_JSON, OCR_MODEL, OCR_PROMPT, OCR_CROP_PROMPT,
+  modelTextOf, parseOcrPayload, mergeMatchReads, fieldsNeedingCrop, statsJson,
 } from "../_lib/lab-cod-aar.js";
 
 const unauthorized = () => json({ ok: false, error: "Unauthorized." }, 401);
@@ -85,16 +85,16 @@ function bytesToChunks(bytes) {
   return chars.join("");
 }
 
-async function readScoreboard(env, bytes, mime) {
+async function runModel(env, bytes, mime, prompt) {
   if (!env.AI || typeof env.AI.run !== "function") {
     return { raw: "", error: "The scoreboard reader is not available." };
   }
   const payload = {
     messages: [
       { role: "system", content: "You extract match results from a Call of Duty scoreboard. Reply with JSON only." },
-      { role: "user", content: contentOf(bytes, mime, OCR_PROMPT) },
+      { role: "user", content: contentOf(bytes, mime, prompt) },
     ],
-    max_tokens: 500,
+    max_tokens: 700,
     temperature: 0,
     guided_json: OCR_GUIDED_JSON,
   };
@@ -107,6 +107,82 @@ async function readScoreboard(env, bytes, mime) {
   }
 }
 
+function localReadsOf(body) {
+  const src = body && body.local_ocr && typeof body.local_ocr === "object" ? body.local_ocr : null;
+  if (!src) return [];
+  const frames = Array.isArray(src.frames) ? src.frames : [];
+  const out = [];
+  for (const frame of frames) {
+    const bag = frame && (frame.fields || frame);
+    if (!bag || typeof bag !== "object") continue;
+    const parsed = parseOcrPayload(bag);
+    if (parsed.ok) out.push(parsed);
+  }
+  if (!out.length && src.fields && typeof src.fields === "object") {
+    const parsed = parseOcrPayload(src.fields);
+    if (parsed.ok) out.push(parsed);
+  }
+  return out;
+}
+
+function cropImagesOf(body) {
+  const src = body && body.crops && typeof body.crops === "object" ? body.crops : {};
+  const out = [];
+  for (const name of ["footer", "bar", "place", "header"]) {
+    if (typeof src[name] !== "string" || !src[name]) continue;
+    const pic = imageFromBody({ image: src[name] });
+    if (!pic.error) out.push({ name, ...pic });
+  }
+  return out;
+}
+
+async function readAllSources(env, pic, body) {
+  const locals = localReadsOf(body);
+  const vision = await runModel(env, pic.bytes, pic.mime, OCR_PROMPT);
+  const visionParsed = vision.raw ? parseOcrPayload(vision.raw) : { ok: false };
+  const localSummary = locals.length ? mergeMatchReads(locals) : null;
+  const needed = fieldsNeedingCrop(localSummary, visionParsed.ok ? visionParsed : null);
+  const cropParses = [];
+  const cropRaws = [];
+  if (needed.length) {
+    for (const crop of cropImagesOf(body)) {
+      const r = await runModel(env, crop.bytes, crop.mime, OCR_CROP_PROMPT);
+      cropRaws.push({ name: crop.name, raw: r.raw, error: r.error || null });
+      if (r.raw) {
+        const parsed = parseOcrPayload(r.raw);
+        if (parsed.ok) cropParses.push(parsed);
+      }
+    }
+  }
+  const reads = [...locals];
+  if (visionParsed.ok) reads.push(visionParsed);
+  reads.push(...cropParses);
+  const merged = reads.length ? mergeMatchReads(reads) : { ok: false, mode: "unrecognized" };
+  return {
+    merged,
+    vision,
+    locals,
+    needed,
+    cropRaws,
+  };
+}
+
+function rowFields(merged) {
+  const ok = Boolean(merged && merged.ok);
+  return {
+    mode: ok && merged.mode ? merged.mode : "unrecognized",
+    kills: ok ? merged.kills : null,
+    deaths: ok ? merged.deaths : null,
+    score: ok ? merged.score : null,
+    placement: ok ? merged.placement : null,
+    extracted: ok ? merged.extracted : null,
+    won: ok ? merged.won : null,
+    damage: ok ? merged.damage : null,
+    stats: ok ? JSON.stringify(statsJson(merged)) : null,
+    confidence: ok ? merged.confidence : null,
+  };
+}
+
 export async function onRequest({ request, env }) {
   if (request.method !== "POST") return json({ ok: false, error: "Method not allowed." }, 405);
 
@@ -114,7 +190,7 @@ export async function onRequest({ request, env }) {
   if (!token || token.length > 200) return unauthorized();
 
   const declared = Number(request.headers.get("content-length") || 0);
-  if (Number.isFinite(declared) && declared > AAR_MAX_BYTES + 32 * 1024) {
+  if (Number.isFinite(declared) && declared > AAR_MAX_BYTES * 3) {
     return json({ ok: false, error: "That screenshot is too large." }, 413);
   }
 
@@ -137,16 +213,47 @@ export async function onRequest({ request, env }) {
   let body;
   try { body = await request.json(); } catch { return json({ ok: false, error: "Send the screenshot as JSON." }, 400); }
 
+  const rereadId = Number(body && body.reread_id);
+  const isReread = Number.isInteger(rereadId) && rereadId > 0;
+
   const pic = imageFromBody(body);
-  if (pic.error) return json({ ok: false, error: pic.error }, 400);
+  if (pic.error && !isReread) return json({ ok: false, error: pic.error }, 400);
+
+  let existing = null;
+  if (isReread) {
+    try {
+      existing = await env.DB.prepare(
+        "SELECT id,played_at,aar_key,fingerprint FROM lab_cod_matches WHERE id = ? AND owner = ? AND deleted_at IS NULL LIMIT 1"
+      ).bind(rereadId, owner).first();
+    } catch (e) {
+      console.error("cod aar reread lookup failed", e);
+    }
+    if (!existing) return json({ ok: false, error: "That match is not in the log." }, 404);
+  }
+
+  if (pic.error && existing && existing.aar_key && env.MEDIA) {
+    try {
+      const obj = await env.MEDIA.get(existing.aar_key);
+      if (obj) {
+        const buf = new Uint8Array(await obj.arrayBuffer());
+        const mime = (obj.httpMetadata && obj.httpMetadata.contentType) || "image/jpeg";
+        pic.error = null;
+        pic.bytes = buf;
+        pic.mime = mime;
+      }
+    } catch (e) {
+      console.error("cod aar reread image failed", e);
+    }
+  }
+  if (pic.error || !pic.bytes) return json({ ok: false, error: pic.error || "No screenshot was sent." }, 400);
 
   const fingerprint = typeof body.fingerprint === "string"
     ? body.fingerprint.trim().toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 80)
     : "";
-  if (fingerprint) {
+  if (fingerprint && !isReread) {
     try {
       const dup = await env.DB.prepare(
-        `SELECT id,played_at,mode,kills,deaths,score,extracted,won,needs_review,confidence
+        `SELECT id,played_at,mode,kills,deaths,score,extracted,won,damage,placement,confidence
            FROM lab_cod_matches
           WHERE owner = ? AND fingerprint = ? AND deleted_at IS NULL
             AND datetime(played_at) >= datetime('now', '-15 minutes')
@@ -162,9 +269,10 @@ export async function onRequest({ request, env }) {
           kills: dup.kills,
           deaths: dup.deaths,
           score: dup.score,
+          placement: dup.placement,
           extracted: dup.extracted,
           won: dup.won,
-          needs_review: Boolean(Number(dup.needs_review)),
+          damage: dup.damage,
           confidence: dup.confidence,
         }, 200);
       }
@@ -173,72 +281,84 @@ export async function onRequest({ request, env }) {
     }
   }
 
-  const playedAt = playedAtOf(body);
-  const ownerHash = await sha256Hex(owner);
-  const stamp = playedAt.replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
-  const key = "cod-aar/" + ownerHash.slice(0, 16) + "/" + stamp + "-" + crypto.randomUUID().slice(0, 8) + "." + extOf(pic.mime);
-
-  try {
-    await env.MEDIA.put(key, pic.bytes, { httpMetadata: { contentType: pic.mime } });
-  } catch (e) {
-    console.error("cod aar store failed", e);
-    return json({ ok: false, error: "Couldn't store that screenshot just now." }, 500);
+  const playedAt = existing ? existing.played_at : playedAtOf(body);
+  let key = existing && existing.aar_key ? existing.aar_key : null;
+  if (!key) {
+    const ownerHash = await sha256Hex(owner);
+    const stamp = playedAt.replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+    key = "cod-aar/" + ownerHash.slice(0, 16) + "/" + stamp + "-" + crypto.randomUUID().slice(0, 8) + "." + extOf(pic.mime);
+    try {
+      await env.MEDIA.put(key, pic.bytes, { httpMetadata: { contentType: pic.mime } });
+    } catch (e) {
+      console.error("cod aar store failed", e);
+      return json({ ok: false, error: "Couldn't store that screenshot just now." }, 500);
+    }
   }
 
-  const ocr = await readScoreboard(env, pic.bytes, pic.mime);
-  const parsed = ocr.raw ? parseOcrPayload(ocr.raw) : { ok: false };
-  const flagged = reviewOf(parsed.ok ? parsed : null);
-  if (ocr.error) {
-    flagged.needs_review = 1;
-    flagged.reasons = [ocr.error, ...flagged.reasons];
-  }
-
-  const mode = parsed.ok ? parsed.mode : "unrecognized";
+  const read = await readAllSources(env, pic, body);
+  const fields = rowFields(read.merged);
   const ocrJson = JSON.stringify({
-    raw: typeof ocr.raw === "string" ? ocr.raw.slice(0, 4000) : "",
-    parsed: parsed.ok ? parsed : null,
-    reasons: flagged.reasons,
-    error: ocr.error || null,
+    raw: typeof read.vision.raw === "string" ? read.vision.raw.slice(0, 4000) : "",
+    parsed: read.merged && read.merged.ok ? read.merged : null,
+    local: read.locals.map((r) => ({ mode: r.mode, kills: r.kills, deaths: r.deaths, assists: r.assists, contracts: r.contracts, damage: r.damage, placement: r.placement, won: r.won })),
+    needed: read.needed,
+    crops: read.cropRaws,
+    error: read.vision.error || null,
   });
 
+  const payload = {
+    ok: true,
+    mode: fields.mode,
+    kills: fields.kills,
+    deaths: fields.deaths,
+    score: fields.score,
+    placement: fields.placement,
+    extracted: fields.extracted,
+    won: fields.won,
+    damage: fields.damage,
+    assists: read.merged && read.merged.ok ? read.merged.assists : null,
+    contracts: read.merged && read.merged.ok ? read.merged.contracts : null,
+    stats: read.merged && read.merged.ok ? statsJson(read.merged) : null,
+    confidence: fields.confidence,
+  };
+
   try {
+    if (isReread) {
+      await env.DB.prepare(
+        `UPDATE lab_cod_matches
+            SET mode=?, kills=?, extracted=?, won=?, deaths=?, score=?, placement=?,
+                source='ocr', needs_review=0, confidence=?, ocr_json=?, damage=?, stats=?
+          WHERE id=? AND owner=? AND deleted_at IS NULL`
+      ).bind(
+        fields.mode, fields.kills, fields.extracted, fields.won, fields.deaths, fields.score, fields.placement,
+        fields.confidence, ocrJson, fields.damage, fields.stats, rereadId, owner,
+      ).run();
+      return json({ ...payload, id: rereadId, played_at: playedAt, reread: true }, 200);
+    }
+
     const row = await env.DB.prepare(
       `INSERT INTO lab_cod_matches
-         (owner,played_at,mode,kills,extracted,won,deaths,score,placement,source,needs_review,confidence,aar_key,fingerprint,ocr_json)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+         (owner,played_at,mode,kills,extracted,won,deaths,score,placement,source,needs_review,confidence,aar_key,fingerprint,ocr_json,damage,stats)
+       VALUES (?,?,?,?,?,?,?,?,?,'ocr',0,?,?,?,?,?,?)`
     ).bind(
       owner,
       playedAt,
-      mode,
-      parsed.ok ? parsed.kills : null,
-      parsed.ok ? parsed.extracted : null,
-      parsed.ok ? parsed.won : null,
-      parsed.ok ? parsed.deaths : null,
-      parsed.ok ? parsed.score : null,
-      parsed.ok ? parsed.placement : null,
-      "ocr",
-      flagged.needs_review,
-      parsed.ok ? parsed.confidence : null,
+      fields.mode,
+      fields.kills,
+      fields.extracted,
+      fields.won,
+      fields.deaths,
+      fields.score,
+      fields.placement,
+      fields.confidence,
       key,
       fingerprint || null,
       ocrJson,
+      fields.damage,
+      fields.stats,
     ).run();
 
-    return json({
-      ok: true,
-      id: row?.meta?.last_row_id ?? null,
-      played_at: playedAt,
-      mode,
-      kills: parsed.ok ? parsed.kills : null,
-      deaths: parsed.ok ? parsed.deaths : null,
-      score: parsed.ok ? parsed.score : null,
-      placement: parsed.ok ? parsed.placement : null,
-      extracted: parsed.ok ? parsed.extracted : null,
-      won: parsed.ok ? parsed.won : null,
-      needs_review: Boolean(flagged.needs_review),
-      confidence: parsed.ok ? parsed.confidence : null,
-      reasons: flagged.reasons,
-    }, 201);
+    return json({ ...payload, id: row?.meta?.last_row_id ?? null, played_at: playedAt }, 201);
   } catch (e) {
     console.error("cod aar insert failed", e);
     return json({ ok: false, error: "The screenshot was stored, but the match could not be saved. Has the migration been applied?" }, 500);
