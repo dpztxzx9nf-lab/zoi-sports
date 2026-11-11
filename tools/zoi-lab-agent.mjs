@@ -986,19 +986,27 @@ async function saveReplayMark(commit) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 
-/* Hidden scoreboard watcher. Lives in its own WinExe so a global hotkey and
-   a 2.5s desktop blit do not sit on this Node event loop. It takes its own
-   mutex, so a restart of this file will not stack a second copy if the last
-   one is still up. */
+/* Hidden scoreboard watcher. Lives in its own hidden PowerShell process so a
+   global hotkey and a 2.5s desktop blit do not sit on this Node event loop.
+   It takes its own mutex, so a restart of this file will not stack a second
+   copy if the last one is still up. */
 function startCodAar() {
   if (process.platform !== "win32") return;
-  const exe = path.join(HERE, "zoi-cod-aar.exe");
-  if (!existsSync(exe)) {
-    log("Call of Duty scoreboard capture is not installed (zoi-cod-aar.exe is missing).");
+  const script = path.join(HERE, "zoi-cod-aar.ps1");
+  if (!existsSync(script)) {
+    log("Call of Duty scoreboard capture is not installed (zoi-cod-aar.ps1 is missing).");
     return;
   }
+  const exe = process.env.SystemRoot
+    ? path.join(process.env.SystemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+    : "powershell.exe";
   try {
-    const child = spawn(exe, [], { detached: true, windowsHide: true, stdio: "ignore", cwd: HERE });
+    const child = spawn(exe, [
+      "-WindowStyle", "Hidden",
+      "-NoProfile",
+      "-ExecutionPolicy", "Bypass",
+      "-File", script,
+    ], { detached: true, windowsHide: true, stdio: "ignore", cwd: HERE });
     child.unref();
     log("Call of Duty scoreboard capture is on: it watches the screen while the game is running. F9 is a backup.");
   } catch (e) {

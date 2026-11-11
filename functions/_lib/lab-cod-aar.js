@@ -200,7 +200,19 @@ export const OCR_PROMPT = [
 
 export function modelTextOf(result) {
   if (result == null) return "";
-  if (typeof result === "string") return result;
+  if (typeof result === "string") {
+    const obj = parseJsonObject(result);
+    if (obj && typeof obj === "object" && (obj.choices || obj.response || obj.result || obj.output_text)) {
+      const inner = modelTextOf(obj);
+      if (inner) return inner;
+    }
+    return result;
+  }
+  if (Array.isArray(result.choices) && result.choices[0]) {
+    const c = result.choices[0];
+    if (c && c.message && typeof c.message.content === "string") return c.message.content;
+    if (c && typeof c.text === "string") return c.text;
+  }
   if (typeof result.response === "string") return result.response;
   if (result.result && typeof result.result.response === "string") return result.result.response;
   if (typeof result.output_text === "string") return result.output_text;
