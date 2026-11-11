@@ -1,14 +1,16 @@
-# Zoi lab: watch for a Call of Duty after-action report on the player's
-# own screen and send one picture per match to the lab.
-# Desktop blit only. No hooks, overlay, or injection. Frames that are not
-# an AAR are dropped immediately and never written. F9 is a backup.
+# Zoi lab: watch for a Call of Duty after-action report, and for ROB RUN
+# city-shift HUD values, on the player's own screen.
+# Desktop blit only. No hooks, overlay, or injection. COD frames that are
+# not an AAR are dropped immediately. ROB RUN HUD samples are sent only
+# when a value changes, or when a shift starts or ends. F9 is a COD backup.
 # Hidden: start with powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File this.
 
 param(
   [switch]$Bench,
   [switch]$Once,
   [string]$File,
-  [int]$RereadId = 0
+  [int]$RereadId = 0,
+  [switch]$RobRun
 )
 
 $ErrorActionPreference = 'Stop'
@@ -144,6 +146,7 @@ if (-not $script:Token -or -not $endpoint) { Log 'The lab config is missing a to
 if ($endpoint -match '/api/lab-sync$') { $script:Endpoint = $endpoint -replace '/api/lab-sync$','/api/lab-cod-aar' }
 elseif ($endpoint -notmatch '/api/lab-cod-aar') { $script:Endpoint = ([Uri]$endpoint).GetLeftPart([System.UriPartial]::Authority) + '/api/lab-cod-aar' }
 else { $script:Endpoint = $endpoint }
+$script:RobEndpoint = $script:Endpoint -replace '/api/lab-cod-aar$','/api/lab-robrun-aar' 
 
 # WinRT OCR
 [Windows.Media.Ocr.OcrEngine,Windows.Foundation,ContentType=WindowsRuntime] | Out-Null
@@ -711,6 +714,13 @@ $script:Busy = $false
 $script:InAar = $false
 $script:LastMode = ''
 $script:LastFingerprint = ''
+$script:RobWasRunning = $false
+$script:RobInShift = $false
+$script:RobLastSig = ''
+$script:RobLastOcrAt = [DateTime]::MinValue
+$script:RobLastSendAt = [DateTime]::MinValue
+$script:RobAwaySince = [DateTime]::MinValue
+$script:RobForce = $false
 $script:SampleMs = New-Object System.Collections.Generic.List[int]
 $script:OcrMs = New-Object System.Collections.Generic.List[int]
 $script:Samples = 0
@@ -739,13 +749,241 @@ function Write-Perf([string]$Why, [bool]$Final) {
   if ($Final) { try { Set-Content -LiteralPath (Join-Path $AarDir 'bench.log') -Value $line } catch {} }
 }
 
+
+function Get-RobRunProcess { Get-Process -Name 'ROB RUN' -ErrorAction SilentlyContinue | Select-Object -First 1 }
+function Get-RobRunMonitor {
+  $p = Get-RobRunProcess
+  if (-not $p) { return $null }
+  $hwnd = $p.MainWindowHandle
+  if ($hwnd -ne [IntPtr]::Zero) {
+    $r = [ZoiGrab]::MonitorFromHwnd($hwnd)
+    if ($r.Width -gt 0) { return $r }
+  }
+  $s = [System.Windows.Forms.Screen]::PrimaryScreen
+  if ($s) { return $s.Bounds }
+  return [System.Drawing.Rectangle]::new(0, 0, 2560, 1440)
+}
+
+function Parse-RobRunHud([string]$Text) {
+  $fields = [ordered]@{
+    layout = 'other'; player_name = $null; role = $null; notoriety = $null
+    party = $null; bonuses = @(); banner = $null; banner_seconds = $null
+    chat = @(); cash = $null; shift_remaining_s = $null
+  }
+  if ([string]::IsNullOrEmpty($Text)) { return $fields }
+  $n = [regex]::Replace($Text, '\s+', ' ').Trim()
+  if ($Text -match '(?i)ADD MARKER' -and $Text -match '(?i)LOOTY\s*BAY') { $fields.layout = 'city_map' }
+  elseif ($Text -match '(?i)\bFPS' -or $Text -match '(?i)\bSOLO\b' -or $Text -match '(?i)\blvl\s*\d+' -or $Text -match '(?i)BECOME A CRIMINAL') { $fields.layout = 'world_hud' }
+  if ($Text -match '(?i)LEAVE THE CITY BEFORE THE FEDS' -or $Text -match '(?i)\bYOU\s+(DIED|WERE ARRESTED)\b' -or $Text -match '(?i)\bSHIFT\s+(REPORT|SUMMARY|COMPLETE|ENDED)\b') {
+    $fields.layout = 'summary'
+  }
+  if ($Text -match '(?i)BECOME A CRIMINAL|put on a mask to become a criminal') { $fields.role = 'civilian' }
+  elseif ($Text -match '(?i)\blvl\s*\d+') { $fields.role = 'criminal' }
+  if ($n -match '(?i)\blvl\s*(\d+)\b') {
+    $v = [int]$Matches[1]
+    if ($v -ge 1 -and $v -le 20) { $fields.notoriety = $v }
+  }
+  if ($Text -match '(?i)\b(SOLO|DUO|TRIO|SQUAD)\b') { $fields.party = $Matches[1].ToUpper() }
+  $pct = [regex]::Matches($Text, '\+(\d+)%')
+  foreach ($m in $pct) { $fields.bonuses += [int]$m.Groups[1].Value }
+  if ($Text -match '(?i)\b([A-Za-z][A-Za-z0-9_]{2,20})\s+(SOLO|DUO|TRIO|SQUAD)\b') { $fields.player_name = $Matches[1] }
+  elseif ($Text -match '(?im)^\s*([A-Z][A-Za-z0-9_]{2,20})\s*$') { $fields.player_name = $Matches[1] }
+  $chatRe = [regex]::Matches($Text, '(\d{1,2}:\d{2})\s+(?:\[[^\]]+\]\s+)?(\S.*?)\s+(was arrested|died)!')
+  foreach ($m in $chatRe) {
+    $kind = if ($m.Groups[3].Value -match '(?i)died') { 'died' } else { 'arrested' }
+    $fields.chat += @{ at = $m.Groups[1].Value; name = $m.Groups[2].Value.Trim(); kind = $kind }
+  }
+  if ($Text -match '(?i)ALARM\s+GOES\s+OFF\s+IN') {
+    $fields.banner = 'alarm'
+    $tail = [regex]::Replace($Text, '(?is)^.*ALARM\s+GOES\s+OFF\s+IN', ' ')
+    if ($tail -match '\b(\d{1,3})\b') {
+      $s = [int]$Matches[1]
+      if ($s -ge 0 -and $s -le 600) { $fields.banner_seconds = $s }
+    }
+  } elseif ($Text -match '(?i)LEAVE THE CITY BEFORE THE FEDS') {
+    $fields.banner = 'leave_city'
+  }
+  if ($Text -match '(?i)(?:CASH|MONEY|WALLET)\s*[:$]?\s*\$?\s*([\d,]{2,})') {
+    $v = [int]($Matches[1] -replace ',', '')
+    if ($v -ge 0) { $fields.cash = $v }
+  }
+  return $fields
+}
+
+function Rob-HudSig($Fields) {
+  if (-not $Fields) { return '' }
+  $bits = @(
+    [string]$Fields.layout
+    [string]$Fields.role
+    [string]$Fields.notoriety
+    [string]$Fields.party
+    [string]$Fields.player_name
+    [string]$Fields.banner
+    [string]$Fields.banner_seconds
+    [string]$Fields.cash
+    (($Fields.bonuses | ForEach-Object { $_ }) -join ',')
+    (($Fields.chat | ForEach-Object { $_.at + $_.kind + $_.name }) -join ',')
+  )
+  return ($bits -join '|')
+}
+
+function Send-RobRun($Payload) {
+  $body = $Payload | ConvertTo-Json -Depth 8 -Compress
+  try {
+    $req = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Post, $script:RobEndpoint)
+    $req.Headers.Authorization = [System.Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $script:Token)
+    $req.Content = [System.Net.Http.StringContent]::new($body, [Text.Encoding]::UTF8, 'application/json')
+    $res = $script:Http.SendAsync($req).GetAwaiter().GetResult()
+    $code = [int]$res.StatusCode
+    $text = $res.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+    if ($code -eq 200 -or $code -eq 201) { return $true }
+    Log "Lab returned HTTP $code for a ROB RUN sample."
+    return $false
+  } catch {
+    Log ("Couldn't reach the lab for ROB RUN: " + $_.Exception.Message)
+    return $false
+  }
+}
+
+function Invoke-RobRunFile([string]$Path) {
+  if (-not (Test-Path -LiteralPath $Path)) { Log "No screenshot at $Path."; exit 1 }
+  $bmp = [System.Drawing.Bitmap]::FromFile($Path)
+  try {
+    $text, $fields = Read-RobRunFrame $bmp
+    $tmp = Join-Path $AarDir ('robrun-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '.jpg')
+    Save-Jpeg $bmp $tmp 80
+    $payload = New-RobPayload $tmp $text $fields 'sample'
+    if (-not (Send-RobRun $payload)) { Log "The lab did not take the ROB RUN screenshot."; exit 2 }
+    Log "Sent a ROB RUN HUD sample to the lab."
+  } finally { $bmp.Dispose() }
+}
+
+function Read-RobRunFrame([System.Drawing.Bitmap]$Bmp) {
+  $parts = New-Object System.Collections.Generic.List[string]
+  $full = Recognize-Bitmap $Bmp
+  if ($full) { [void]$parts.Add($full) }
+  $bands = @(
+    @(0.0, 0.0, 1.0, 0.28),
+    @(0.0, 0.55, 0.40, 0.35),
+    @(0.0, 0.70, 0.70, 0.30)
+  )
+  foreach ($b in $bands) {
+    $crop = Crop-Frac $Bmp $b[0] $b[1] $b[2] $b[3]
+    if (-not $crop) { continue }
+    try {
+      $hi = Scale-Bitmap $crop 2
+      try {
+        $t = Recognize-Bitmap $(if ($hi) { $hi } else { $crop })
+        if ($t) { [void]$parts.Add($t) }
+      } finally { if ($hi) { $hi.Dispose() } }
+    } finally { $crop.Dispose() }
+  }
+  $text = [string]::Join("`n", $parts)
+  $fields = Parse-RobRunHud $text
+  return @($text, $fields)
+}
+
+function New-RobPayload([string]$Path, [string]$Text, $Fields, [string]$Event) {
+  $bytes = [IO.File]::ReadAllBytes($Path)
+  $b64 = [Convert]::ToBase64String($bytes)
+  $taken = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+  $local = [ordered]@{ text = $Text; fields = $Fields }
+  return [ordered]@{
+    taken_at = $taken
+    event = $Event
+    image = 'data:image/jpeg;base64,' + $b64
+    local_ocr = $local
+    fingerprint = Get-Fingerprint ($Text + '|' + (Rob-HudSig $Fields))
+  }
+}
+
+function New-RobPayloadNoImage([string]$Text, $Fields, [string]$Event) {
+  $taken = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+  return [ordered]@{
+    taken_at = $taken
+    event = $Event
+    local_ocr = [ordered]@{ text = $Text; fields = $Fields }
+    fingerprint = Get-Fingerprint ($Text + '|' + (Rob-HudSig $Fields))
+  }
+}
+
+function Invoke-RobRunSample {
+  $mon = Get-RobRunMonitor
+  if (-not $mon) { return }
+  $now = [DateTime]::UtcNow
+  if ($script:RobLastOcrAt -ne [DateTime]::MinValue -and ($now - $script:RobLastOcrAt).TotalMilliseconds -lt 5000 -and -not $script:RobForce) {
+    return
+  }
+  $script:RobLastOcrAt = $now
+  $bmp = $null
+  try {
+    $bmp = [ZoiGrab]::Grab($mon, 2560)
+    if (-not $bmp) { return }
+    $text, $fields = Read-RobRunFrame $bmp
+    $inCity = $fields.layout -eq 'world_hud' -or $fields.layout -eq 'city_map' -or $fields.layout -eq 'summary'
+    $sig = Rob-HudSig $fields
+    $changed = $sig -ne $script:RobLastSig
+    $event = 'sample'
+    if ($inCity -and -not $script:RobInShift) { $event = 'sample'; $script:RobInShift = $true; $changed = $true }
+    if ($fields.layout -eq 'summary' -and $fields.banner -eq 'leave_city') { $event = 'leave_city'; $changed = $true }
+    if (-not $inCity) {
+      if ($script:RobInShift) {
+        if ($script:RobAwaySince -eq [DateTime]::MinValue) { $script:RobAwaySince = $now }
+        elseif (($now - $script:RobAwaySince).TotalMinutes -ge 3) {
+          $event = 'shift_end'
+          $changed = $true
+          $script:RobInShift = $false
+          $script:RobAwaySince = [DateTime]::MinValue
+        }
+      }
+    } else {
+      $script:RobAwaySince = [DateTime]::MinValue
+    }
+    $heartbeat = $script:RobLastSendAt -ne [DateTime]::MinValue -and ($now - $script:RobLastSendAt).TotalSeconds -ge 60 -and $inCity
+    $wantImage = $changed -or $event -ne 'sample' -or $script:RobLastSig -eq ''
+    if (-not $changed -and -not $heartbeat -and $event -eq 'sample') { return }
+    $name = (Get-Date).ToString('yyyyMMdd-HHmmss') + '-robrun.jpg'
+    $path = Join-Path $AarDir $name
+    $payload = $null
+    if ($wantImage) {
+      Save-Jpeg $bmp $path 80
+      $payload = New-RobPayload $path $text $fields $event
+    } else {
+      $payload = New-RobPayloadNoImage $text $fields $event
+    }
+    if (Send-RobRun $payload) {
+      $script:RobLastSig = $sig
+      $script:RobLastSendAt = $now
+      if ($event -ne 'sample') { Log "Logged a ROB RUN $event." }
+    }
+  } finally {
+    if ($bmp) { $bmp.Dispose() }
+  }
+}
+
 function Invoke-Sample {
   if ($script:Busy) { return }
   $script:Busy = $true
   $sw = [System.Diagnostics.Stopwatch]::StartNew()
   $small = $null
   try {
-    if (-not (Get-CodProcess)) { $script:InAar = $false; $script:LastMode = ''; return }
+    if (-not (Get-CodProcess)) {
+      $script:InAar = $false
+      $script:LastMode = ''
+      if (Get-RobRunProcess) {
+        $script:RobWasRunning = $true
+        Invoke-RobRunSample
+      } elseif ($script:RobWasRunning) {
+        $script:RobWasRunning = $false
+        if ($script:RobInShift) {
+          $end = New-RobPayloadNoImage '' @{ layout = 'other' } 'process_exit'
+          [void](Send-RobRun $end)
+          $script:RobInShift = $false
+          Log 'ROB RUN closed; the open city shift was ended.'
+        }
+      }
+      return
+    }
     $mon = Get-CodMonitor
     if (-not $mon) { return }
     $small = [ZoiGrab]::Grab($mon, $script:DetectWidth)
@@ -807,7 +1045,11 @@ function Invoke-ForceCapture([string]$Reason) {
   }
 }
 
-if ($File) { Invoke-FileCapture $File; exit 0 }
+if ($File) {
+  if ($RobRun) { Invoke-RobRunFile $File; exit 0 }
+  Invoke-FileCapture $File
+  exit 0
+}
 if ($Once) { Invoke-ForceCapture 'once'; exit 0 }
 
 if ($Bench) {
@@ -827,7 +1069,7 @@ $created = $false
 $mutex = New-Object System.Threading.Mutex($true, 'Local\ZoiLabCodAar', [ref]$created)
 if (-not $created) { exit 0 }
 try {
-  Log 'Call of Duty scoreboard capture is on. It watches the screen while the game is running; F9 is a backup.'
+  Log 'Call of Duty scoreboard capture and ROB RUN HUD sampling are on. They watch the screen only while those games are running. F9 is a Call of Duty backup.'
   $form = New-Object System.Windows.Forms.Form
   $form.ShowInTaskbar = $false
   $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedToolWindow

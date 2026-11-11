@@ -44,10 +44,8 @@ const nodes = {
   chartDmg: $('chart-dmg'), chartDmgBox: $('chart-dmg-box'),
   chartWin: $('chart-win'), chartWinBox: $('chart-win-box'), chartWinTitle: $('chart-win-title'),
   chartLegend: $('chart-legend'), chartEmpty: $('chart-empty'),
-  codLog: $('cod-log'), codLogMode: $('cod-log-mode'), codLogKills: $('cod-log-kills'),
-  codLogDeaths: $('cod-log-deaths'), codLogExtractedWrap: $('cod-log-extracted-wrap'),
-  codLogWonWrap: $('cod-log-won-wrap'), codLogError: $('cod-log-error'),
-  codLogSubmit: $('cod-log-submit'),
+  matchesTitle: $('cod-matches-title'),
+  matchesNote: $('cod-matches-note'),
   codMatches: $('cod-matches'), codMatchList: $('cod-match-list'),
   codMatchesEmpty: $('cod-matches-empty'),
   pcConnect: $('pc-connect'), pcLabel: $('pc-label'), pcAdd: $('pc-add'),
@@ -221,11 +219,22 @@ function syncCodOutcomeFields() {
 
 function renderCodMatches() {
   if (!nodes.codMatches) return;
-  if (state.game !== 'cod') { hide(nodes.codMatches); return; }
+  if (state.game !== 'cod' && state.game !== 'robrun') { hide(nodes.codMatches); return; }
+  if (nodes.matchesTitle) nodes.matchesTitle.textContent = state.game === 'robrun' ? 'Shifts' : 'Matches';
+  if (nodes.matchesNote) {
+    nodes.matchesNote.textContent = state.game === 'robrun'
+      ? 'While ROB RUN is running, the lab reads the HUD and files each city shift automatically.'
+      : 'While Call of Duty is running, the lab watches for the after-action report on this PC and files every readable stat automatically. F9 captures the screen as a backup.';
+  }
+  if (nodes.codMatchesEmpty) {
+    nodes.codMatchesEmpty.textContent = state.game === 'robrun'
+      ? 'No shifts yet. Stay in Looty Bay for a bit and the lab will pick the HUD up on its own.'
+      : 'No matches yet. Play a game and leave the after-action report up for a couple of seconds.';
+  }
   show(nodes.codMatches);
   const all = (state.perf && Array.isArray(state.perf.recent_matches)) ? state.perf.recent_matches : [];
   const current = (state.perf && state.perf.mode) || state.mode || '';
-  const rows = all.filter(m => !current || m.mode === current);
+  const rows = state.game === 'robrun' ? all : all.filter(m => !current || m.mode === current);
   const seen = new Set();
   const ordered = [];
   for (const m of rows) {
@@ -241,7 +250,7 @@ function renderCodMatches() {
   }
   if (nodes.codMatchesEmpty) hide(nodes.codMatchesEmpty);
   for (const m of ordered) {
-    nodes.codMatchList.append(codMatchRow(m));
+    nodes.codMatchList.append(state.game === 'robrun' ? robrunShiftRow(m) : codMatchRow(m));
   }
 }
 
@@ -278,7 +287,7 @@ function codMatchRow(m) {
   title.textContent = bits.join(' · ');
   li.append(title);
   const meta = el('p', 'lab-match-meta');
-  const src = m.source === 'ocr' ? 'From the scoreboard' : 'Logged by hand';
+  const src = m.source === 'ocr' ? 'From the scoreboard' : 'From an earlier log';
   const when = fmtWhen(m.played_at);
   meta.textContent = [when, src].filter(Boolean).join(' · ');
   li.append(meta);
@@ -298,6 +307,59 @@ function codMatchRow(m) {
     li.append(actions);
   }
   return li;
+}
+
+function robrunShiftRow(m) {
+  const li = el('li', 'lab-match');
+  const title = el('p', 'lab-match-line');
+  const bits = [];
+  const role = m.role ? (m.role.charAt(0).toUpperCase() + m.role.slice(1)) : null;
+  if (role) bits.push(role);
+  if (m.notoriety != null) bits.push('notoriety ' + m.notoriety);
+  if (m.party) bits.push(m.party);
+  if (m.duration_s != null) bits.push(fmtMins(m.duration_s) + ' in the city');
+  if (m.arrests) bits.push(m.arrests === 1 ? '1 arrest' : m.arrests + ' arrests');
+  if (m.deaths) bits.push(m.deaths === 1 ? '1 death' : m.deaths + ' deaths');
+  if (m.cash_delta != null) bits.push((m.cash_delta >= 0 ? '+' : '') + group(m.cash_delta) + ' cash');
+  else if (m.cash != null) bits.push(group(m.cash) + ' cash');
+  if (m.outcome === 'in_progress' || !m.ended_at) bits.push('in progress');
+  else if (m.outcome === 'left') bits.push('left the city');
+  else if (m.outcome === 'arrested') bits.push('ended in an arrest');
+  else if (m.outcome === 'died') bits.push('died');
+  else if (m.outcome === 'disconnected') bits.push('disconnected');
+  title.textContent = bits.join(' · ') || 'City shift';
+  li.append(title);
+  const meta = el('p', 'lab-match-meta');
+  meta.textContent = [fmtWhen(m.started_at), 'From the HUD'].filter(Boolean).join(' · ');
+  li.append(meta);
+  if (m.image) {
+    const img = document.createElement('img');
+    img.className = 'lab-match-shot';
+    img.src = m.image;
+    img.alt = 'ROB RUN HUD';
+    li.append(img);
+  }
+  if (m.id) {
+    const actions = el('div', 'lab-match-actions');
+    const rm = el('button', 'lab-mini', 'Remove');
+    rm.type = 'button';
+    rm.addEventListener('click', () => patchRobRunShift(m.id, rm));
+    actions.append(rm);
+    li.append(actions);
+  }
+  return li;
+}
+
+async function patchRobRunShift(id, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api('/api/lab/robrun-shifts', { method: 'PATCH', body: { id, deleted: true } });
+    if (!r.ok) throw new Error('fail');
+    await load();
+  } catch (e) {
+    if (e instanceof AuthError) { needSignIn(); return; }
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function patchCodMatch(id, body, btn) {
@@ -652,6 +714,68 @@ function lineChart(series, opts) {
   return box;
 }
 
+function fmtMins(s) {
+  if (!isNum(s)) return '';
+  const m = Math.round(s / 60);
+  return m + 'm';
+}
+
+function renderRobRunCharts(chart, p) {
+  const minGames = p.chart_min_games || 5;
+  if (!chart.length) {
+    hide(nodes.chartKpm);
+    if (nodes.chartDmg) hide(nodes.chartDmg);
+    hide(nodes.chartWin);
+    hide(nodes.chartLegend);
+    hide(nodes.chartEmpty);
+    hide(nodes.chartsBlock);
+    return;
+  }
+  show(nodes.chartsBlock);
+  hide(nodes.chartEmpty);
+  const first = chart[0], last = chart[chart.length - 1];
+  const firstLabel = fmtDay(first.to || first.at);
+  const lastLabel = fmtDay(first.to || first.at) === fmtDay(last.to || last.at) ? '' : fmtDay(last.to || last.at);
+  const series = v => chart.map(s => ({
+    v: v(s), mark: Boolean(s.change), thin: chart.length < minGames,
+    lo: null, hi: null,
+  }));
+  const kTitle = document.querySelector('#chart-kpm .lab-chart-k');
+  if (kTitle) kTitle.textContent = 'Notoriety';
+  show(nodes.chartKpm);
+  nodes.chartKpmBox.append(lineChart(series(s => s.notoriety), {
+    min: 0, max: 5, label: 'Notoriety by shift',
+    axis: v => String(Math.round(v)),
+    firstLabel, lastLabel,
+    empty: 'Notoriety needs a level read from the HUD.',
+  }));
+  if (nodes.chartDmg && nodes.chartDmgBox) {
+    const dTitle = document.querySelector('#chart-dmg .lab-chart-k');
+    if (dTitle) dTitle.textContent = 'Time in the city';
+    show(nodes.chartDmg);
+    nodes.chartDmgBox.append(lineChart(series(s => s.duration_s != null ? s.duration_s / 60 : null), {
+      min: 0, max: 40, label: 'Minutes in the city',
+      axis: v => String(Math.round(v)),
+      firstLabel, lastLabel,
+      empty: 'Time in the city needs a finished shift.',
+    }));
+  }
+  if (nodes.chartWinTitle) nodes.chartWinTitle.textContent = 'Left the city';
+  show(nodes.chartWin);
+  nodes.chartWinBox.append(lineChart(series(s => s.survived), {
+    min: 0, max: 0.15, cap: 1, label: 'Left the city by shift',
+    axis: v => Math.round(v * 100) + '%',
+    firstLabel, lastLabel,
+    empty: 'Leaving the city is counted when a shift ends on the HUD.',
+  }));
+  if (chart.length < minGames) {
+    nodes.chartLegend.append(el('span', null, '\u25cb under ' + minGames + ' shifts'));
+    show(nodes.chartLegend);
+  } else {
+    hide(nodes.chartLegend);
+  }
+}
+
 function renderCharts() {
   const p = state.perf || {};
   const chart = Array.isArray(p.chart) ? p.chart : [];
@@ -667,6 +791,11 @@ function renderCharts() {
     hide(nodes.chartLegend);
     hide(nodes.chartEmpty);
     hide(nodes.chartsBlock);
+    return;
+  }
+
+  if (state.game === 'robrun') {
+    renderRobRunCharts(chart, p);
     return;
   }
 
@@ -763,14 +892,13 @@ function prettySetting(v) {
 function render() {
   renderGameSwitch();
   renderModeSwitch();
-  renderCodLog();
   renderCodMatches();
   const list = (state.perf && Array.isArray(state.perf.changes)) ? state.perf.changes : [];
   const open = list.filter(isOpenChange);
   const past = list.filter(c => !isOpenChange(c));
   const lead = pickLead(open, past);
   const settled = isSettledLead(lead);
-  const hasCodMatches = state.game === 'cod' && state.perf && Array.isArray(state.perf.recent_matches) && state.perf.recent_matches.length;
+  const hasCodMatches = (state.game === 'cod' || state.game === 'robrun') && state.perf && Array.isArray(state.perf.recent_matches) && state.perf.recent_matches.length;
   const hasCurrent = renderCurrentSettings();
 
   nodes.nowLead.replaceChildren();
@@ -1048,8 +1176,6 @@ function boot() {
       load();
     });
   }
-  if (nodes.codLog) nodes.codLog.addEventListener('submit', submitCodLog);
-  if (nodes.codLogMode) nodes.codLogMode.addEventListener('change', syncCodOutcomeFields);
   if (nodes.pcConnect) bootPc();
   load();
   if (nodes.pcConnect) loadPc();

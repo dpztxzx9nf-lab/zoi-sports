@@ -20,10 +20,10 @@ import { gate } from "./_lib/lab.js";
    They sit beside /api/lab/ rather than inside it on purpose. Cloudflare Access
    has no negated-path option: it matches protected paths one by one and cannot
    carve an exception out of a prefix it protects. So the agent's paths are
-   sibling segments, /api/lab-sync and /api/lab-cod-aar, which its /api/lab and
+   sibling segments, /api/lab-sync, /api/lab-cod-aar and /api/lab-robrun-aar, which its /api/lab and
    /api/lab/* entries do not match, and the token is the only thing standing in
    front of them. Access's list is a dashboard setting; this file cannot change it. */
-const OPEN_PATHS = new Set(["/api/lab-sync", "/api/lab-cod-aar"]);
+const OPEN_PATHS = new Set(["/api/lab-sync", "/api/lab-cod-aar", "/api/lab-robrun-aar"]);
 
 const isLabPage = (p) => p === "/lab" || p.startsWith("/lab/") || p === "/lab.html";
 const isLabApi = (p) => p === "/api/lab" || p.startsWith("/api/lab/");
