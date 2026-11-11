@@ -115,3 +115,34 @@ test("an unrecognized screen does not invent kills", () => {
   assert.equal(parsed.mode, UNRECOGNIZED_MODE);
   assert.equal(parsed.kills, null);
 });
+
+test("model keys with trailing colons and 31ST PLACE still parse, and unrecognized votes do not wipe the mode", () => {
+  const vision = parseOcrPayload({
+    "mode": "resurgence",
+    "mode_label": "RESURGENCE SOLOS",
+    "kills:": 1,
+    "deaths:": 2,
+    "assists:": 0,
+    "contracts:": 0,
+    "damage:": 502,
+    "placement:": "31ST PLACE",
+    "won:": false,
+    "confidence": 1,
+  });
+  assert.equal(vision.mode, "resurgence");
+  assert.equal(vision.kills, 1);
+  assert.equal(vision.placement, 31);
+  assert.equal(vision.won, 0);
+  const local = parseOcrPayload({ mode: "unrecognized", deaths: 2, damage: 502, placement: 81, won: 0, confidence: 0 });
+  const crop = parseOcrPayload({ mode: "warzone", kills: 1, deaths: 2, assists: 0, contracts: 0, placement: 31, damage: 502, extracted: true, confidence: 0 });
+  const merged = mergeMatchReads([local, vision, crop]);
+  assert.equal(merged.mode, "resurgence");
+  assert.equal(merged.placement, 31);
+  assert.equal(merged.kills, 1);
+  assert.equal(merged.deaths, 2);
+  assert.equal(merged.assists, 0);
+  assert.equal(merged.contracts, 0);
+  assert.equal(merged.damage, 502);
+  assert.equal(merged.won, 0);
+  assert.equal(merged.extracted, null);
+});

@@ -328,15 +328,18 @@ function Parse-WarzoneStats([System.Drawing.Bitmap]$Bmp, $FooterWords, [string]$
   $allText = ((Normalize-Text ($HeaderText + ' ' + $FooterText)).Trim())
   if ($allText -match 'resurgence' -or $allText -match 'rebirth') { $fields.mode = 'resurgence'; $fields.mode_label = 'RESURGENCE SOLOS' }
   elseif ($allText -match 'warzone' -or $allText -match 'battle royale') { $fields.mode = 'warzone'; $fields.mode_label = 'WARZONE' }
-  $placeWord = $null
-  foreach ($w in $FooterWords) {
-    if ($w.Text -match '^(\d+)(ST|ND|RD|TH)$') {
-      $fields.placement = [int]$Matches[1]
-      $placeWord = $w
-    }
-  }
-  if (-not $fields.ContainsKey('placement') -and $FooterText -match '(\d+)\s*(ST|ND|RD|TH)\s*PLACE') {
+  if ($FooterText -match '(\d+)\s*(ST|ND|RD|TH)\s*PLACE') {
     $fields.placement = [int]$Matches[1]
+  } else {
+    $best = $null
+    foreach ($w in $FooterWords) {
+      if ($w.Text -match '^(\d+)(ST|ND|RD|TH)$') {
+        if (-not $best -or $w.H -gt $best.H) {
+          $best = $w
+          $fields.placement = [int]$Matches[1]
+        }
+      }
+    }
   }
   $labelSets = @{
     contracts = @('contracts','contract')
@@ -459,7 +462,12 @@ function Score-Text([string]$Text) {
   # Warzone / Resurgence AAR: "31ST PLACE" is the distinctive line. 640px OCR
   # often gets this even when it misses RESURGENCE and MATCH SUMMARY.
   if ([regex]::IsMatch($n, '\d+\s*(st|nd|rd|th)\s+place')) { $score += 3; $hits += 'nth-place' }
-  return @{ Score = $score; Hits = ($hits -join ',') }
+  $joined = ($hits -join ',')
+  $hasResult = [regex]::IsMatch($joined, 'nth-place|your stats|total damage|kills\+deaths|you extracted|failed to extract|after action|match results|mission results')
+  # A Victory / squad / enemy-operators sting without the stats bar is the same
+  # match, not a new one.
+  if (-not $hasResult) { $score = [Math]::Min($score, $script:NearMiss - 0.1) }
+  return @{ Score = $score; Hits = $joined }
 }
 
 function Get-Fingerprint([string]$Text) {
