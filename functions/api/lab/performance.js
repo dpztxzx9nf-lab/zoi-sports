@@ -14,6 +14,7 @@ import { CATALOG, SELECT_TEST, identity, json, currentOf } from "../../_lib/lab.
 import { performance } from "../../_lib/lab-perf.js";
 import { COD_CATALOG, COD_GAME, COD_MODES, currentCodOf, fortniteGameSql, gamesPresent, hasColumn, isCodMode, modeOf } from "../../_lib/lab-cod.js";
 import { modesWithMatches, performanceCod, pickCodMode } from "../../_lib/lab-cod-perf.js";
+import { ROBRUN_CATALOG, ROBRUN_GAME, currentRobRunOf } from "../../_lib/lab-robrun.js";
 
 const READING_COLUMNS = "taken_at,created_at,matches,wins,kills,deaths,kd,win_rate";
 /* Everything a session label or the page's mode line needs, and nothing else. The
@@ -191,6 +192,56 @@ function recentCodMatches(rows) {
   });
 }
 
+
+async function performanceForRobRun(env, who) {
+  const games = await gamesPresent(env, who.id);
+
+  let tests = [];
+  if (await hasColumn(env, "lab_tests", "game")) {
+    const rows = await env.DB.prepare(
+      `${SELECT_TEST} WHERE owner = ? AND game = ? ORDER BY started_at ASC, id ASC`
+    ).bind(who.id, ROBRUN_GAME).all();
+    tests = rows.results || [];
+  }
+
+  let snapshot = null;
+  if (await hasColumn(env, "lab_snapshots", "game")) {
+    snapshot = await env.DB.prepare(
+      "SELECT taken_at,payload FROM lab_snapshots WHERE owner = ? AND game = ? ORDER BY id DESC LIMIT 1"
+    ).bind(who.id, ROBRUN_GAME).first();
+  }
+
+  const changes = tests.map((t) => ({
+    id: t.id, setting: t.setting, label: t.label, from_value: t.from_value, to_value: t.to_value,
+    status: t.status, started_at: t.started_at, decided_at: t.decided_at, result_note: t.result_note,
+    verdict: "too-soon", kills_delta: null, before: { matches: 0 }, after: { matches: 0 },
+  }));
+
+  return json({
+    ok: true,
+    me: { email: who.email, name: who.name },
+    game: ROBRUN_GAME,
+    games,
+    modes: [],
+    mode_catalog: [],
+    catalog: ROBRUN_CATALOG,
+    mode: null,
+    mode_label: null,
+    outcome: null,
+    outcome_label: null,
+    min_games: 25,
+    chart_min_games: 5,
+    changes,
+    chart: [],
+    match_count: 0,
+    lastMatch: null,
+    replays_available: false,
+    current: currentRobRunOf(snapshot),
+    recent_matches: [],
+  });
+}
+
+
 export async function onRequest({ request, env }) {
   if (request.method !== "GET") return json({ ok: false, error: "Method not allowed." }, 405);
 
@@ -201,6 +252,7 @@ export async function onRequest({ request, env }) {
     const url = new URL(request.url);
     const game = (url.searchParams.get("game") || "fortnite").trim();
     if (game === COD_GAME) return await performanceForCod(env, who, request);
+    if (game === ROBRUN_GAME) return await performanceForRobRun(env, who);
 
     const games = await gamesPresent(env, who.id);
     const gameCol = await hasColumn(env, "lab_tests", "game");

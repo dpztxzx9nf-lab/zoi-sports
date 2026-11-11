@@ -16,6 +16,7 @@ import {
 import { epicIdOf, fetchStats, recordStats, summarize, updateGamesPlayed } from "../_lib/lab-stats.js";
 import { FORTNITE_GAME, fortniteGameSql, hasColumn } from "../_lib/lab-cod.js";
 import { syncCodSnapshot } from "../_lib/lab-cod-sync.js";
+import { syncRobRunSnapshot } from "../_lib/lab-robrun-sync.js";
 
 const TAKEN_AT_MAX = 40;
 const SOURCE_MAX = 40;
@@ -130,7 +131,9 @@ export async function onRequest({ request, env }) {
     && Object.keys(settings).length > 0);
   const hasCod = Boolean(body.cod && typeof body.cod === "object" && !Array.isArray(body.cod)
     && body.cod.settings && typeof body.cod.settings === "object");
-  if (!hasFortnite && !hasCod) {
+  const hasRobRun = Boolean(body.robrun && typeof body.robrun === "object" && !Array.isArray(body.robrun)
+    && body.robrun.settings && typeof body.robrun.settings === "object");
+  if (!hasFortnite && !hasCod && !hasRobRun) {
     return badRequest("settings has to be an object of name to value.");
   }
   const names = hasFortnite ? Object.keys(settings) : [];
@@ -150,17 +153,20 @@ export async function onRequest({ request, env }) {
   let stats = { skipped: "no fortnite snapshot" };
 
   if (!hasFortnite) {
-    /* A COD-only send still carries takenAt, and may ride with no Fortnite
-       config at all. Matches and career stats stay Fortnite-only. */
+    /* A COD- or ROB RUN-only send still carries takenAt, and may ride with
+       no Fortnite config at all. Matches and career stats stay Fortnite-only. */
     let codResult = { created: [], closed: [], duplicate: false, skipped: true };
+    let robrunResult = { created: [], closed: [], duplicate: false, skipped: true };
     try {
-      codResult = await syncCodSnapshot(env, owner, body, takenAt);
+      if (hasCod) codResult = await syncCodSnapshot(env, owner, body, takenAt);
+      if (hasRobRun) robrunResult = await syncRobRunSnapshot(env, owner, body, takenAt);
     } catch (e) {
-      console.error("lab sync cod failed", e);
+      console.error("lab sync settings failed", e);
       return json({ ok: false, error: "Couldn't save that snapshot." }, 500);
     }
     if (codResult.error) return json({ ok: false, errors: [codResult.error] }, 422);
-    return json({ ok: true, created: [], skipped: [], closed: [], duplicate: false, stats, matches: matchResult, replayStats: replayResult, cod: codResult });
+    if (robrunResult.error) return json({ ok: false, errors: [robrunResult.error] }, 422);
+    return json({ ok: true, created: [], skipped: [], closed: [], duplicate: false, stats, matches: matchResult, replayStats: replayResult, cod: codResult, robrun: robrunResult });
   }
 
   /* The PC agent finds the Epic id in its own Saved\Cloud\<id>\ folder and
@@ -387,7 +393,14 @@ export async function onRequest({ request, env }) {
     console.error("lab sync cod failed", e);
     codResult = { created: [], closed: [], duplicate: false, skipped: true, error: "Couldn't save the COD snapshot." };
   }
-  return json({ ok: true, created, skipped, closed, duplicate, stats, matches: matchResult, replayStats: replayResult, cod: codResult });
+  let robrunResult = { created: [], closed: [], duplicate: false, skipped: true };
+  try {
+    robrunResult = await syncRobRunSnapshot(env, owner, body, takenAt);
+  } catch (e) {
+    console.error("lab sync robrun failed", e);
+    robrunResult = { created: [], closed: [], duplicate: false, skipped: true, error: "Couldn't save the ROB RUN snapshot." };
+  }
+  return json({ ok: true, created, skipped, closed, duplicate, stats, matches: matchResult, replayStats: replayResult, cod: codResult, robrun: robrunResult });
 }
 
 /* ------------------------------------------------------------- the stats ---

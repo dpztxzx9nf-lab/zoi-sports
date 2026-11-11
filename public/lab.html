@@ -19,7 +19,7 @@
 <meta name="apple-mobile-web-app-title" content="Zoi Lab">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="styles.css?v=53">
+<link rel="stylesheet" href="styles.css?v=54">
 </head>
 <body class="lab-page">
 <header class="nav"><a href="/" class="brand"><img class="zw" src="/assets/zoi-wordmark-gold.png?v=10" alt="Zoi" width="600" height="320"></a>
@@ -36,9 +36,14 @@
  <div class="lab-switch" id="game-switch" hidden>
   <button type="button" class="lab-switch-btn" id="game-fortnite" aria-pressed="true">Fortnite</button>
   <button type="button" class="lab-switch-btn" id="game-cod" aria-pressed="false">Call of Duty</button>
+  <button type="button" class="lab-switch-btn" id="game-robrun" aria-pressed="false">Rob Run</button>
  </div>
  <div class="lab-switch lab-switch-modes" id="mode-switch" hidden></div>
  <p class="lab-empty-line" id="empty" hidden>Nothing logged yet.</p>
+ <section class="lab-current" id="current-settings" hidden>
+  <p class="lab-log-k">Settings</p>
+  <dl class="lab-current-list" id="current-settings-list"></dl>
+ </section>
  <div id="now-lead" hidden></div>
  <section class="lab-charts" id="charts-block" hidden>
   <div class="lab-charts-grid">
@@ -96,6 +101,6 @@
 
 <script src="main.js?v=23" defer></script>
 <script src="account.js?v=7" defer></script>
-<script src="lab.js?v=26" defer></script>
+<script src="lab.js?v=27" defer></script>
 </body>
 </html>
