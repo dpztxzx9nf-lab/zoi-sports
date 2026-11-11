@@ -10,7 +10,8 @@ param(
   [switch]$Once,
   [string]$File,
   [int]$RereadId = 0,
-  [switch]$RobRun
+  [switch]$RobRun,
+  [switch]$RobBackfill
 )
 
 $ErrorActionPreference = 'Stop'
@@ -773,25 +774,28 @@ function Parse-RobRunHud([string]$Text) {
   if ([string]::IsNullOrEmpty($Text)) { return $fields }
   $n = [regex]::Replace($Text, '\s+', ' ').Trim()
   if ($Text -match '(?i)ADD MARKER' -and $Text -match '(?i)LOOTY\s*BAY') { $fields.layout = 'city_map' }
-  elseif ($Text -match '(?i)\bFPS' -or $Text -match '(?i)\bSOLO\b' -or $Text -match '(?i)\blvl\s*\d+' -or $Text -match '(?i)BECOME A CRIMINAL') { $fields.layout = 'world_hud' }
+  elseif ($Text -match '(?i)\bFPS' -or $Text -match '(?i)\bSOLO\b' -or $Text -match '(?i)(?:^|[^A-Za-z0-9])[lI1|][vV][lI1|]\s*\.?\s*\d{1,2}\b' -or $Text -match '(?i)BECOME A CRIMINAL') { $fields.layout = 'world_hud' }
   if ($Text -match '(?i)LEAVE THE CITY BEFORE THE FEDS' -or $Text -match '(?i)\bYOU\s+(DIED|WERE ARRESTED)\b' -or $Text -match '(?i)\bSHIFT\s+(REPORT|SUMMARY|COMPLETE|ENDED)\b') {
     $fields.layout = 'summary'
   }
   if ($Text -match '(?i)BECOME A CRIMINAL|put on a mask to become a criminal') { $fields.role = 'civilian' }
-  elseif ($Text -match '(?i)\blvl\s*\d+') { $fields.role = 'criminal' }
-  if ($n -match '(?i)\blvl\s*(\d+)\b') {
+  elseif ($Text -match '(?i)(?:^|[^A-Za-z0-9])[lI1|][vV][lI1|]\s*\.?\s*\d{1,2}\b') { $fields.role = 'criminal' }
+  if ($n -match '(?i)(?:^|[^A-Za-z0-9])[lI1|][vV][lI1|]\s*\.?\s*(\d{1,2})\b') {
     $v = [int]$Matches[1]
     if ($v -ge 1 -and $v -le 20) { $fields.notoriety = $v }
   }
   if ($Text -match '(?i)\b(SOLO|DUO|TRIO|SQUAD)\b') { $fields.party = $Matches[1].ToUpper() }
   $pct = [regex]::Matches($Text, '\+(\d+)%')
   foreach ($m in $pct) { $fields.bonuses += [int]$m.Groups[1].Value }
-  if ($Text -match '(?i)\b([A-Za-z][A-Za-z0-9_]{2,20})\s+(SOLO|DUO|TRIO|SQUAD)\b') { $fields.player_name = $Matches[1] }
-  elseif ($Text -match '(?im)^\s*([A-Z][A-Za-z0-9_]{2,20})\s*$') { $fields.player_name = $Matches[1] }
+  $deny = @('FPS','PING','LOSS','TAB','SOLO','DUO','TRIO','SQUAD','CITY','LOOTY','BAY','ESC','BACK','SCALE','CHAT','ALARM')
+  if ($Text -match '(?i)\b([A-Za-z][A-Za-z0-9_]{2,20})\s+(SOLO|DUO|TRIO|SQUAD)\b' -and ($deny -notcontains $Matches[1].ToUpper())) { $fields.player_name = $Matches[1] }
   $chatRe = [regex]::Matches($Text, '(\d{1,2}:\d{2})\s+(?:\[[^\]]+\]\s+)?(\S.*?)\s+(was arrested|died)!')
   foreach ($m in $chatRe) {
     $kind = if ($m.Groups[3].Value -match '(?i)died') { 'died' } else { 'arrested' }
-    $fields.chat += @{ at = $m.Groups[1].Value; name = $m.Groups[2].Value.Trim(); kind = $kind }
+    $nm = $m.Groups[2].Value.Trim()
+    if (@($fields.chat | Where-Object { $_.at -eq $m.Groups[1].Value -and $_.name -eq $nm -and $_.kind -eq $kind }).Count -eq 0) {
+      $fields.chat += @{ at = $m.Groups[1].Value; name = $nm; kind = $kind }
+    }
   }
   if ($Text -match '(?i)ALARM\s+GOES\s+OFF\s+IN') {
     $fields.banner = 'alarm'
@@ -845,16 +849,29 @@ function Send-RobRun($Payload) {
   }
 }
 
+# Capture time from the file name (yyyyMMdd-HHmmss, local) or its write time.
+function Get-RobCaptureTime([string]$Path) {
+  $n = [IO.Path]::GetFileNameWithoutExtension($Path)
+  if ($n -match '(\d{8})-(\d{6})') {
+    $d = [DateTime]::ParseExact($Matches[1] + $Matches[2], 'yyyyMMddHHmmss', [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeLocal)
+    return $d.ToUniversalTime()
+  }
+  return (Get-Item -LiteralPath $Path).LastWriteTimeUtc
+}
+
 function Invoke-RobRunFile([string]$Path) {
-  if (-not (Test-Path -LiteralPath $Path)) { Log "No screenshot at $Path."; exit 1 }
+  $script:RobFileOk = $false
+  if (-not (Test-Path -LiteralPath $Path)) { Log "No screenshot at $Path."; return }
   $bmp = [System.Drawing.Bitmap]::FromFile($Path)
   try {
     $text, $fields = Read-RobRunFrame $bmp
     $tmp = Join-Path $AarDir ('robrun-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '.jpg')
     Save-Jpeg $bmp $tmp 80
     $payload = New-RobPayload $tmp $text $fields 'sample'
-    if (-not (Send-RobRun $payload)) { Log "The lab did not take the ROB RUN screenshot."; exit 2 }
-    Log "Sent a ROB RUN HUD sample to the lab."
+    $payload.taken_at = (Get-RobCaptureTime $Path).ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+    if ($RobBackfill) { $payload.backfill = $true }
+    if ($fields.layout -eq 'world_hud') { $payload = Add-RobBadge $payload $bmp }
+    if (Send-RobRun $payload) { $script:RobFileOk = $true } else { Log "The lab did not take the ROB RUN screenshot." }
   } finally { $bmp.Dispose() }
 }
 
@@ -883,6 +900,29 @@ function Read-RobRunFrame([System.Drawing.Bitmap]$Bmp) {
   return @($text, $fields)
 }
 
+# Tight, 4x Windows OCR on the bottom-left level badge row (SOLO / lvl N / bonuses).
+function Read-RobRunBadge([System.Drawing.Bitmap]$Bmp) {
+  $crop = Crop-Frac $Bmp 0.17 0.895 0.17 0.07
+  if (-not $crop) { return @('', $null) }
+  try {
+    $hi = Scale-Bitmap $crop 4
+    try {
+      $t = Recognize-Bitmap $hi
+      $url = Jpeg-DataUrl $crop 90
+      return @([string]$t, $url)
+    } finally { $hi.Dispose() }
+  } finally { $crop.Dispose() }
+}
+
+function Add-RobBadge($Payload, [System.Drawing.Bitmap]$Bmp) {
+  $bt, $burl = Read-RobRunBadge $Bmp
+  $Payload.local_ocr.badge_text = $bt
+  if ($burl) { $Payload.crops = [ordered]@{ badge = $burl } }
+  return $Payload
+}
+
+function Get-TzOffsetMin { return [int][TimeZoneInfo]::Local.GetUtcOffset([DateTime]::Now).TotalMinutes }
+
 function New-RobPayload([string]$Path, [string]$Text, $Fields, [string]$Event) {
   $bytes = [IO.File]::ReadAllBytes($Path)
   $b64 = [Convert]::ToBase64String($bytes)
@@ -890,6 +930,7 @@ function New-RobPayload([string]$Path, [string]$Text, $Fields, [string]$Event) {
   $local = [ordered]@{ text = $Text; fields = $Fields }
   return [ordered]@{
     taken_at = $taken
+    tz_offset_min = (Get-TzOffsetMin)
     event = $Event
     image = 'data:image/jpeg;base64,' + $b64
     local_ocr = $local
@@ -901,6 +942,7 @@ function New-RobPayloadNoImage([string]$Text, $Fields, [string]$Event) {
   $taken = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
   return [ordered]@{
     taken_at = $taken
+    tz_offset_min = (Get-TzOffsetMin)
     event = $Event
     local_ocr = [ordered]@{ text = $Text; fields = $Fields }
     fingerprint = Get-Fingerprint ($Text + '|' + (Rob-HudSig $Fields))
@@ -948,6 +990,7 @@ function Invoke-RobRunSample {
     if ($wantImage) {
       Save-Jpeg $bmp $path 80
       $payload = New-RobPayload $path $text $fields $event
+      if ($fields.layout -eq 'world_hud') { $payload = Add-RobBadge $payload $bmp }
     } else {
       $payload = New-RobPayloadNoImage $text $fields $event
     }
@@ -1046,7 +1089,13 @@ function Invoke-ForceCapture([string]$Reason) {
 }
 
 if ($File) {
-  if ($RobRun) { Invoke-RobRunFile $File; exit 0 }
+  if ($RobRun) {
+    $paths = @($File -split ';' | Where-Object { $_ })
+    $bad = 0
+    foreach ($fp in $paths) { [void](Invoke-RobRunFile $fp); if (-not $script:RobFileOk) { $bad++ } }
+    Log ("Sent " + ($paths.Count - $bad) + " of " + $paths.Count + " ROB RUN screenshots to the lab.")
+    if ($bad) { exit 2 } else { exit 0 }
+  }
   Invoke-FileCapture $File
   exit 0
 }

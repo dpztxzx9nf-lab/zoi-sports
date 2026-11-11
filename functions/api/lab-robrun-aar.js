@@ -4,12 +4,48 @@
 import { json, sha256Hex } from "../_lib/lab.js";
 import { sniffImage } from "../_lib/media.js";
 import { AAR_MAX_BYTES } from "../_lib/lab-cod-aar.js";
-import { parseRobRunHud, selfEvents } from "../_lib/lab-robrun-aar.js";
+import { OCR_MODEL, modelTextOf } from "../_lib/lab-cod-aar.js";
+import {
+  parseRobRunHud, selfEvents, parseBadgeText, parseVisionBadge, reconcileNotoriety,
+  BADGE_PROMPT, BADGE_GUIDED_JSON, chatTimeIso, tzOffsetOf, eventsInShift,
+} from "../_lib/lab-robrun-aar.js";
 
 const unauthorized = () => json({ ok: false, error: "Unauthorized." }, 401);
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
 const OPEN_GAP_MS = 8 * 60 * 1000;
 const SHIFT_MAX_MS = 50 * 60 * 1000;
+const VISION_EVERY_MS = 60 * 1000;
+
+function b64Of(bytes) {
+  const chars = [];
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    chars.push(String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)));
+  }
+  return btoa(chars.join(""));
+}
+
+/* Same vision model as the Call of Duty scoreboards, on the badge crop. */
+async function readBadgeVision(env, pic) {
+  if (!pic || !env.AI || typeof env.AI.run !== "function") return null;
+  try {
+    const result = await env.AI.run(OCR_MODEL, {
+      messages: [
+        { role: "system", content: "You read HUD labels from a game screenshot. Reply with JSON only." },
+        { role: "user", content: [
+          { type: "image_url", image_url: { url: "data:" + pic.mime + ";base64," + b64Of(pic.bytes) } },
+          { type: "text", text: BADGE_PROMPT },
+        ] },
+      ],
+      max_tokens: 60,
+      temperature: 0,
+      guided_json: BADGE_GUIDED_JSON,
+    });
+    return parseVisionBadge(modelTextOf(result));
+  } catch (e) {
+    console.error("robrun badge vision failed", e);
+    return null;
+  }
+}
 
 function tokenFrom(request) {
   const auth = request.headers.get("authorization") || "";
@@ -84,13 +120,13 @@ function eventOf(body, fields) {
   return ev || "sample";
 }
 
-function mergeStats(prev, fields, takenAt, event) {
+function mergeStats(prev, fields, takenAt, event, ctx = {}) {
   let stats = {};
   if (prev && typeof prev === "string" && prev.trim()) {
     try { stats = JSON.parse(prev) || {}; } catch { stats = {}; }
   } else if (prev && typeof prev === "object") stats = { ...prev };
   const samples = Array.isArray(stats.samples) ? stats.samples.slice(-40) : [];
-  samples.push({
+  if (!ctx.backfill) samples.push({
     at: takenAt,
     layout: fields.layout,
     role: fields.role,
@@ -111,19 +147,36 @@ function mergeStats(prev, fields, takenAt, event) {
   if (fields.notoriety != null) {
     stats.notoriety_peak = Math.max(Number(stats.notoriety_peak) || 0, fields.notoriety);
   }
+  if (ctx.tz != null) stats.tz_offset_min = ctx.tz;
+  const tz = stats.tz_offset_min != null ? Number(stats.tz_offset_min) : null;
   const self = selfEvents(fields);
+  const fresh = (self.events || []).map((e) => ({
+    ...e,
+    at_iso: tz != null ? chatTimeIso(e.at, takenAt, tz) : null,
+  }));
   const evs = [];
   const have = new Set();
-  for (const e of (stats.self_events || []).concat(self.events || [])) {
+  for (const e of (stats.self_events || []).concat(stats.outside_events || [], fresh)) {
     if (!e) continue;
-    const k = String(e.at || "") + ":" + String(e.kind || "") + ":" + String(e.name || "").toLowerCase();
+    const k = String(e.at_iso || e.at || "") + ":" + String(e.kind || "") + ":" + String(e.name || "").toLowerCase();
     if (have.has(k)) continue;
     have.add(k);
     evs.push(e);
   }
-  stats.self_events = evs;
-  stats.seen_deaths = evs.filter((e) => e.kind === "died").length;
-  stats.seen_arrests = evs.filter((e) => e.kind === "arrested").length;
+  /* Only events inside this shift's window count. Lines we can't pin to a
+     time (no clock offset yet) are held aside, never counted. */
+  const inside = ctx.startedAt ? eventsInShift(evs, ctx.startedAt, ctx.endedAt || null) : [];
+  const insideSet = new Set(inside);
+  stats.self_events = inside;
+  stats.outside_events = evs.filter((e) => !insideSet.has(e)).slice(-20);
+  stats.seen_deaths = inside.filter((e) => e.kind === "died").length;
+  stats.seen_arrests = inside.filter((e) => e.kind === "arrested").length;
+  if (ctx.badge) {
+    const reads = Array.isArray(stats.notoriety_reads) ? stats.notoriety_reads.slice(-19) : [];
+    reads.push({ at: takenAt, ...ctx.badge });
+    stats.notoriety_reads = reads;
+    if (ctx.badge.vision_ran) stats.vision_last_at = takenAt;
+  }
   return stats;
 }
 
@@ -241,6 +294,40 @@ export async function onRequest({ request, env }) {
     }
   }
 
+  const backfill = body.backfill === true;
+  const tz = tzOffsetOf(body);
+
+  /* Level badge: tight Windows OCR crop + the vision model, low cadence. */
+  let badge = null;
+  if (fields.layout === "world_hud") {
+    const local = body.local_ocr || {};
+    const localLvl = parseBadgeText(local.badge_text) ?? fields.notoriety ?? null;
+    const crops = body.crops && typeof body.crops === "object" ? body.crops : {};
+    const badgePic = typeof crops.badge === "string" ? imageFromBody({ image: crops.badge }) : { none: true };
+    let prevStats = {};
+    try { prevStats = open && open.stats ? JSON.parse(open.stats) || {} : {}; } catch { prevStats = {}; }
+    const lastMs = Date.parse(prevStats.vision_last_at || "");
+    const due = !Number.isFinite(lastMs) || Math.abs(Date.parse(takenAt) - lastMs) >= VISION_EVERY_MS
+      || (localLvl != null && open && Number(open.notoriety) !== localLvl);
+    let vision = null;
+    if (due && !badgePic.error && !badgePic.none) vision = await readBadgeVision(env, badgePic);
+    const r = reconcileNotoriety(localLvl, vision ? vision.level : null);
+    badge = {
+      local: localLvl,
+      vision: vision ? vision.level : null,
+      mask_badge: vision ? vision.mask_badge : null,
+      value: r.value,
+      source: r.source,
+      vision_ran: !!vision,
+    };
+    if (vision || localLvl != null) {
+      fields.notoriety = r.value;
+      if (r.value != null) fields.role = "criminal";
+      else if (r.source === "conflict" && fields.role === "criminal") fields.role = null;
+    }
+    if (fields.role == null && vision && vision.mask_badge === true && r.source !== "conflict") fields.role = "criminal";
+  }
+
   const closing = event === "shift_end" || event === "process_exit" || event === "disconnected" || event === "leave_city";
   if (!open && !inCity && closing) {
     return json({ ok: true, skipped: true, reason: "no open shift" });
@@ -248,8 +335,8 @@ export async function onRequest({ request, env }) {
 
   try {
     if (!open && inCity) {
-      const stats = mergeStats(null, fields, takenAt, event);
-      const self = selfEvents(fields);
+      const stats = mergeStats(null, fields, takenAt, event, { tz, badge, backfill, startedAt: takenAt, endedAt: closing ? takenAt : null });
+      const self = { deaths: stats.seen_deaths || 0, arrests: stats.seen_arrests || 0 };
       const outcome = closing ? finalizeOutcome(event, fields, stats) : "in_progress";
       const ended = closing ? takenAt : null;
       const dur = ended ? 0 : null;
@@ -266,8 +353,11 @@ export async function onRequest({ request, env }) {
 
     if (!open) return json({ ok: true, skipped: true, reason: "not in a city shift" });
 
-    const stats = mergeStats(open.stats, fields, takenAt, event);
-    const self = selfEvents(fields);
+    const startedAt = Number.isFinite(takenMs) && takenMs < Date.parse(open.started_at)
+      ? takenAt : open.started_at;
+    const stats = mergeStats(open.stats, fields, takenAt, event, {
+      tz, badge, backfill, startedAt, endedAt: closing ? takenAt : open.ended_at,
+    });
     const deaths = Number(stats.seen_deaths) || 0;
     const arrests = Number(stats.seen_arrests) || 0;
     const role = pickRole(open.role, fields.role);
@@ -276,29 +366,29 @@ export async function onRequest({ request, env }) {
       : (open.notoriety ?? null);
     const party = fields.party || open.party || null;
     const player_name = open.player_name || fields.player_name || null;
-    const aarKey = key || open.aar_key || null;
+    const aarKey = backfill ? (open.aar_key || key || null) : (key || open.aar_key || null);
     let ended = open.ended_at;
     let outcome = open.outcome || "in_progress";
-    let duration_s = open.duration_s;
+    let duration_s = open.duration_s ?? null;
     if (closing) {
       ended = takenAt;
       outcome = finalizeOutcome(event, fields, stats);
-      const startMs = Date.parse(open.started_at);
+      const startMs = Date.parse(startedAt);
       duration_s = Number.isFinite(startMs) && Number.isFinite(takenMs)
         ? Math.max(0, Math.round((takenMs - startMs) / 1000))
         : duration_s;
     }
     await env.DB.prepare(
       `UPDATE lab_robrun_shifts SET
-         ended_at = ?, role = ?, notoriety = ?, party = ?, player_name = ?,
+         started_at = ?, ended_at = ?, role = ?, notoriety = ?, party = ?, player_name = ?,
          outcome = ?, duration_s = ?, deaths = ?, arrests = ?,
          aar_key = ?, ocr_json = ?, stats = ?, updated_at = datetime('now')
        WHERE id = ? AND owner = ?`
     ).bind(
-      ended, role, notoriety, party, player_name, outcome, duration_s, deaths, arrests,
-      aarKey, ocr, JSON.stringify(stats), open.id, owner
+      startedAt, ended, role, notoriety, party, player_name, outcome, duration_s, deaths, arrests,
+      aarKey, backfill ? open.ocr_json : ocr, JSON.stringify(stats), open.id, owner
     ).run();
-    return json({ ok: true, id: open.id, started_at: open.started_at, ended_at: ended, outcome, fields });
+    return json({ ok: true, id: open.id, started_at: startedAt, ended_at: ended, outcome, notoriety, role, arrests, deaths, badge, fields });
   } catch (e) {
     console.error("robrun shift write failed", e);
     return json({ ok: false, error: "Couldn't save that shift just now." }, 500);
