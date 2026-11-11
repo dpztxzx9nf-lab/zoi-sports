@@ -94,10 +94,56 @@ export function parseJsonObject(text) {
   if (!raw) return null;
   const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const body = fence ? fence[1].trim() : raw;
+  const recovered = recoverFieldsFromText(body);
   const start = body.indexOf("{");
   const end = body.lastIndexOf("}");
-  if (start === -1 || end <= start) return null;
-  try { return sanitizeKeys(JSON.parse(body.slice(start, end + 1))); } catch { return null; }
+  let parsed = null;
+  if (start !== -1 && end > start) {
+    try { parsed = sanitizeKeys(JSON.parse(body.slice(start, end + 1))); } catch { parsed = null; }
+  }
+  if (!parsed && !Object.keys(recovered).length) return null;
+  if (!parsed) return recovered;
+  const out = { ...recovered, ...parsed };
+  for (const [k, v] of Object.entries(recovered)) {
+    if (out[k] === undefined || out[k] === null || out[k] === "") out[k] = v;
+  }
+  return out;
+}
+
+/* Pull labeled numbers out of messy model text when the JSON is broken. */
+export function recoverFieldsFromText(text) {
+  const s = String(text || "");
+  if (!s.trim()) return {};
+  const out = {};
+  const grabInt = (re, key, min, max) => {
+    if (out[key] != null) return;
+    const m = s.match(re);
+    if (!m) return;
+    const n = Number(m[1]);
+    if (Number.isInteger(n) && n >= min && n <= max) out[key] = n;
+  };
+  grabInt(/\bkills["'\s:]*(-?\d+)/i, "kills", 0, 200);
+  grabInt(/\bdeaths["'\s:]*(-?\d+)/i, "deaths", 0, 200);
+  grabInt(/\bassists["'\s:]*(-?\d+)/i, "assists", 0, 200);
+  grabInt(/\bcontracts["'\s:]*(-?\d+)/i, "contracts", 0, 50);
+  grabInt(/\b(?:total[_\s]?damage|damage_dealt|damage)["'\s:]*(-?\d+)/i, "damage", 0, 100000);
+  grabInt(/placement[^0-9]{1,24}(\d{1,3})/i, "placement", 1, 200);
+  grabInt(/(\d+)\s*(?:st|nd|rd|th)\s*place/i, "placement", 1, 200);
+  grabInt(/win\s*streaks?[^0-9]{0,12}(-?\d+)/i, "winstreaks", 0, 100);
+  grabInt(/\brevives["'\s:]*(-?\d+)/i, "revives", 0, 100);
+  const ed = s.match(/\be\s*\/?\s*d(?:\s*ratio)?[^0-9]{0,12}(\d+\.\d+)/i)
+    || s.match(/\bed_ratio["'\s:]*(\d+\.\d+)/i);
+  if (ed) out.ed_ratio = Number(ed[1]);
+  const won = s.match(/\bwon["'\s:]*(true|false|1|0)/i);
+  if (won) out.won = /true|1/i.test(won[1]);
+  const extracted = s.match(/\bextracted["'\s:]*(true|false|1|0|null)/i);
+  if (extracted && !/^null$/i.test(extracted[1])) out.extracted = /true|1/i.test(extracted[1]);
+  const mode = s.match(/\bmode_label["'\s:]*["']([^"']+)["']/) || s.match(/\bmode["'\s:]*["']([^"']+)["']/);
+  if (mode) {
+    if (!out.mode) out.mode = mode[1];
+    if (!out.mode_label) out.mode_label = mode[1];
+  }
+  return out;
 }
 
 function sanitizeKeys(value) {
@@ -140,12 +186,10 @@ export function parseOcrPayload(input) {
   if (mode !== UNRECOGNIZED_MODE && modeOutcome(mode) === "extraction") {
     extracted = flag(obj.extracted);
     won = null;
-  } else if (mode !== UNRECOGNIZED_MODE) {
+  } else {
+    // extracted is a DMZ field only; never store it for BR, Resurgence, or MP.
     won = flag(obj.won);
     extracted = null;
-  } else {
-    extracted = flag(obj.extracted);
-    won = flag(obj.won);
   }
 
   const assists = whole(firstVal(obj, ["assists"]), 0, 200);
@@ -158,6 +202,8 @@ export function parseOcrPayload(input) {
   const timeAlive = stringStat(firstVal(obj, ["time_alive", "time"]));
   const map = stringStat(firstVal(obj, ["map", "map_name"]));
   const modeLabel = typeof obj.mode_label === "string" ? obj.mode_label.trim().slice(0, 80) : "";
+  const edRatio = ratioStat(firstVal(obj, ["ed_ratio", "ed", "kd", "kd_ratio", "e_d_ratio", "e/d"]));
+  const winstreaks = whole(firstVal(obj, ["winstreaks", "winstreak", "win_streaks"]), 0, 100);
 
   const core = {
     ok: true,
@@ -175,6 +221,8 @@ export function parseOcrPayload(input) {
     xp: xp.empty || xp.bad ? null : xp.value,
     time_alive: timeAlive,
     map,
+    ed_ratio: edRatio,
+    winstreaks: winstreaks.empty || winstreaks.bad ? null : winstreaks.value,
     extracted,
     won,
     confidence,
@@ -208,6 +256,13 @@ function stringStat(v) {
   return s || null;
 }
 
+function ratioStat(v) {
+  if (v === undefined || v === null || v === "") return null;
+  const n = typeof v === "number" ? v : Number(String(v).trim().replace(/,/g, ""));
+  if (!Number.isFinite(n) || n < 0 || n > 100) return null;
+  return Math.round(n * 100) / 100;
+}
+
 const META_KEYS = new Set([
   "mode", "mode_label", "mode_guess", "confidence", "notes", "ok", "stats",
   "kills_bad", "deaths_bad", "score_bad", "placement_bad", "assists_bad",
@@ -217,10 +272,12 @@ const META_KEYS = new Set([
 export const STAT_INT_FIELDS = ["kills", "deaths", "score", "placement", "assists", "contracts", "damage", "revives", "xp"];
 export const STAT_FLAG_FIELDS = ["extracted", "won"];
 export const STAT_TEXT_FIELDS = ["time_alive", "map", "mode_label"];
+export const STAT_EXTRA_FIELDS = ["ed_ratio", "winstreaks"];
+export const BR_PLACEMENT_MIN = 50;
 
 function statsBag(obj, core) {
   const bag = {};
-  for (const k of [...STAT_INT_FIELDS, ...STAT_FLAG_FIELDS, ...STAT_TEXT_FIELDS, "mode"]) {
+  for (const k of [...STAT_INT_FIELDS, ...STAT_FLAG_FIELDS, ...STAT_TEXT_FIELDS, ...STAT_EXTRA_FIELDS, "mode"]) {
     if (core[k] !== undefined && core[k] !== null && core[k] !== "") bag[k] = core[k];
   }
   const extra = obj && obj.stats && typeof obj.stats === "object" && !Array.isArray(obj.stats) ? obj.stats : {};
@@ -258,12 +315,52 @@ export function majorityValue(votes) {
   return ranked[0].v;
 }
 
+function isZeroLike(v) {
+  return v === 0 || v === false || v === "0" || v === "0.0" || v === "0.00";
+}
+
+/* Tagged votes: { value, weak }. A crop that did not clearly see a field
+   must abstain. A weak 0 must never override a confidently read 350. */
+export function majorityField(votes) {
+  const list = (votes || []).filter((v) => v && v.value !== undefined && v.value !== null && v.value !== "");
+  if (!list.length) return null;
+  const strong = list.filter((v) => !v.weak);
+  const positives = list.filter((v) => !isZeroLike(v.value));
+  const strongZeros = list.filter((v) => !v.weak && isZeroLike(v.value));
+  if (positives.length && !strongZeros.length) {
+    return majorityValue(positives.map((v) => v.value));
+  }
+  const usable = strong.length ? strong : list.filter((v) => !(v.weak && isZeroLike(v.value)));
+  if (!usable.length) return null;
+  return majorityValue(usable.map((v) => v.value));
+}
+
 export function applyPlacementWon(fields) {
   const row = { ...(fields || {}) };
   if (!isCodMode(row.mode) || modeOutcome(row.mode) !== "win") return row;
   if (row.placement == null) return row;
   const fromPlace = row.placement === 1 ? 1 : 0;
   row.won = fromPlace;
+  return row;
+}
+
+export function applyOutcomeRules(fields) {
+  let row = { ...(fields || {}) };
+  if (!isCodMode(row.mode) || modeOutcome(row.mode) !== "extraction") {
+    row.extracted = null;
+    if (row.stats && typeof row.stats === "object") delete row.stats.extracted;
+  } else {
+    row.won = null;
+    if (row.stats && typeof row.stats === "object") delete row.stats.won;
+  }
+  row = applyPlacementWon(row);
+  if (row.stats && typeof row.stats === "object") {
+    if (row.extracted == null) delete row.stats.extracted;
+    else row.stats.extracted = row.extracted;
+    if (row.won == null) delete row.stats.won;
+    else row.stats.won = row.won;
+    row.stats.mode = row.mode;
+  }
   return row;
 }
 
@@ -278,34 +375,114 @@ export function pickMode(reads) {
   return majorityValue(votes) || UNRECOGNIZED_MODE;
 }
 
-export function mergeMatchReads(reads) {
+function hasResurgenceText(reads, text) {
+  const blob = [text, ...(reads || []).map((r) => [r.mode_label, r.mode_guess, r.map, r.notes].filter(Boolean).join(" "))].join(" ");
+  return /resurgence|rebirth/i.test(blob);
+}
+
+function hasBrTiles(reads, stats) {
+  const bags = [...(reads || []), stats ? { stats } : null].filter(Boolean);
+  return bags.some((r) => {
+    const s = r.stats || r;
+    return s.ed_ratio != null || s.winstreaks != null || r.ed_ratio != null || r.winstreaks != null;
+  });
+}
+
+export function inferMode({ reads, lastMode, text, placement, stats } = {}) {
+  const list = reads || [];
+  const place = placement != null ? placement : majorityValue(list.map((r) => r && r.placement));
+  const resurgenceText = hasResurgenceText(list, text);
+  // A finish of ~50 or worse cannot be a Resurgence lobby.
+  if (place != null && place >= BR_PLACEMENT_MIN && !resurgenceText) return "warzone";
+  const picked = pickMode(list);
+  if (picked && picked !== UNRECOGNIZED_MODE) {
+    if (place != null && place >= BR_PLACEMENT_MIN && picked === "resurgence" && !resurgenceText) {
+      return "warzone";
+    }
+    return picked;
+  }
+  if (hasBrTiles(list, stats) && !resurgenceText) return "warzone";
+  if (lastMode && isCodMode(lastMode)) return lastMode;
+  if (/battle\s*royale|\bwarzone\b|\bbr\b/i.test(String(text || ""))) return "warzone";
+  return UNRECOGNIZED_MODE;
+}
+
+export const CROP_FIELDS = {
+  header: new Set(["mode", "mode_label", "mode_guess", "map"]),
+  place: new Set(["placement", "won"]),
+  footer: new Set(["kills", "deaths", "assists", "contracts", "damage", "score", "placement", "revives", "xp", "time_alive", "ed_ratio", "winstreaks", "won"]),
+  bar: new Set(["kills", "deaths", "assists", "contracts", "damage", "score", "placement", "revives", "xp", "time_alive", "ed_ratio", "winstreaks", "won"]),
+  tiles: new Set(["kills", "deaths", "assists", "contracts", "damage", "score", "placement", "revives", "xp", "time_alive", "ed_ratio", "winstreaks", "won"]),
+  banner: new Set(["placement", "won"]),
+};
+
+export function maskCropRead(parsed, cropName) {
+  if (!parsed || !parsed.ok) return parsed;
+  const allowed = CROP_FIELDS[cropName];
+  if (!allowed) return parsed;
+  const row = { ...parsed, stats: { ...(parsed.stats || {}) } };
+  const keys = [...STAT_INT_FIELDS, ...STAT_FLAG_FIELDS, ...STAT_TEXT_FIELDS, ...STAT_EXTRA_FIELDS];
+  for (const k of keys) {
+    if (k === "mode" || k === "mode_label" || k === "mode_guess") continue;
+    if (!allowed.has(k)) {
+      row[k] = null;
+      if (row.stats) delete row.stats[k];
+    }
+  }
+  // A header/place crop must never vote extracted, and a crop must not
+  // invent a mode the crop cannot show.
+  if (cropName === "header" || cropName === "place") {
+    row.extracted = null;
+    if (row.stats) delete row.stats.extracted;
+  }
+  row._weak = true;
+  row._crop = cropName;
+  return row;
+}
+
+function voteOf(read, key) {
+  const value = read ? (read[key] != null ? read[key] : (read.stats ? read.stats[key] : null)) : null;
+  return { value, weak: Boolean(read && read._weak) };
+}
+
+export function mergeMatchReads(reads, opts = {}) {
   const list = (reads || []).filter((r) => r && r.ok);
   const fields = { ok: true };
-  const keys = [...STAT_INT_FIELDS, ...STAT_FLAG_FIELDS, ...STAT_TEXT_FIELDS, "mode", "mode_guess", "confidence"];
+  const keys = [...STAT_INT_FIELDS, ...STAT_FLAG_FIELDS, ...STAT_TEXT_FIELDS, ...STAT_EXTRA_FIELDS, "mode_guess", "confidence"];
   for (const k of keys) {
-    if (k === "mode") continue;
-    fields[k] = majorityValue(list.map((r) => r[k]));
+    fields[k] = majorityField(list.map((r) => voteOf(r, k)));
   }
-  fields.mode = pickMode(list);
-  const merged = applyPlacementWon(parseOcrPayload({
+  fields.mode = inferMode({
+    reads: list,
+    lastMode: opts.lastMode,
+    text: opts.text,
+    placement: fields.placement,
+    stats: fields,
+  });
+  const merged = applyOutcomeRules(parseOcrPayload({
     ...fields,
     mode: fields.mode,
     mode_label: fields.mode_label,
+    ed_ratio: fields.ed_ratio,
+    winstreaks: fields.winstreaks,
   }));
-  // parseOcrPayload re-validates ranges; restore stats extras by majority too
-  const extraKeys = new Set();
+  const extraKeys = new Set(STAT_EXTRA_FIELDS);
   for (const r of list) {
     if (r.stats && typeof r.stats === "object") Object.keys(r.stats).forEach((k) => extraKeys.add(k));
   }
   const stats = { ...(merged.stats || {}) };
   for (const k of extraKeys) {
-    if (k in stats) continue;
-    const v = majorityValue(list.map((r) => (r.stats ? r.stats[k] : null)));
+    const v = (k in merged && merged[k] != null)
+      ? merged[k]
+      : majorityField(list.map((r) => voteOf(r, k)));
     if (v !== null && v !== undefined) stats[k] = v;
+    else delete stats[k];
   }
   merged.stats = stats;
+  merged.ed_ratio = stats.ed_ratio != null ? stats.ed_ratio : merged.ed_ratio;
+  merged.winstreaks = stats.winstreaks != null ? stats.winstreaks : merged.winstreaks;
   merged.ok = true;
-  return merged;
+  return applyOutcomeRules(merged);
 }
 
 export function fieldsNeedingCrop(localFields, vision) {
@@ -366,6 +543,8 @@ export const OCR_GUIDED_JSON = {
     damage: { type: ["integer", "null"] },
     revives: { type: ["integer", "null"] },
     xp: { type: ["integer", "null"] },
+    ed_ratio: { type: ["number", "null"] },
+    winstreaks: { type: ["integer", "null"] },
     time_alive: { type: ["string", "null"] },
     map: { type: ["string", "null"] },
     extracted: { type: ["boolean", "null"] },
@@ -382,20 +561,22 @@ export const OCR_PROMPT = [
   "This is a screenshot of a Call of Duty: Modern Warfare 4 after-action report or end-of-match scoreboard, or it is not.",
   "Read only the local player's own line if a full scoreboard is shown.",
   "Capture every labeled stat that is visible, not only kills and deaths.",
-  "On a Warzone or Resurgence Match Summary, the numbers are on the bottom bar, labeled CONTRACTS, KILLS, DEATHS, ASSISTS, and TOTAL DAMAGE, next to a large placement like 31ST PLACE. A 0 is a real value and must be read. RESURGENCE SOLOS or WARZONE in the corner is the mode. Put total damage in damage, not in score. Include any other visible stats (revives, time alive, XP, map) in the JSON.",
+  "On a Warzone or Resurgence Match Summary, the numbers are on the bottom bar, labeled CONTRACTS, KILLS, DEATHS, ASSISTS, and TOTAL DAMAGE, next to a large placement like 31ST PLACE. A 0 is a real value and must be read. RESURGENCE SOLOS or WARZONE in the corner is the mode. Put total damage in damage, not in score.",
+  "On a Battle Royale placement sting there may be no mode text: a huge NTH PLACE in the center and five tiles labeled KILLS, E/D RATIO, DAMAGE, CONTRACTS, and WINSTREAKS. Put those in kills, ed_ratio, damage, contracts, and winstreaks. A finish of 50 or worse is Warzone Battle Royale (mode warzone), not Resurgence.",
   "On a multiplayer scoreboard, read the local player's score, kills, deaths, assists, and any objective or damage number on that row.",
-  "On a DMZ result, read whether the player extracted, plus kills and any other visible stats.",
-  "Return JSON with: mode, mode_label, kills, deaths, assists, contracts, damage, score (match score only, never total damage), placement, revives, xp, time_alive, map, extracted (true/false only for DMZ, otherwise null), won (true/false for multiplayer, Warzone, or Resurgence; placement 1 is a win, any other place is not), confidence (0 to 1), notes, and stats (an object of any other labeled numbers).",
+  "On a DMZ result, read whether the player extracted, plus kills and any other visible stats. extracted is only for DMZ; for every other mode it must be null. won is true only for 1st place in Warzone or Resurgence, and for a match win in multiplayer.",
+  "Return JSON with: mode, mode_label, kills, deaths, assists, contracts, damage, score (match score only, never total damage or tile damage), placement, revives, xp, time_alive, map, ed_ratio, winstreaks, extracted, won, confidence (0 to 1), notes, and stats (any other labeled numbers).",
   "If this is not a scoreboard or after-action report, set confidence to 0 and the other fields to null.",
-  "Do not invent numbers you cannot see. A field you cannot read must be null. Preferred mode ids: "
+  "Do not invent numbers you cannot see. A field you cannot read must be null, never a guessed 0. Preferred mode ids: "
     + COD_MODES.map((m) => m.id + " (" + m.label + ")").join(", ") + ".",
 ].join(" ");
 
 export const OCR_CROP_PROMPT = [
-  "This is a crop from a Call of Duty after-action report, often the bottom stats bar or the header.",
-  "Read every labeled number. On the bottom bar, CONTRACTS, KILLS, DEATHS, ASSISTS, and TOTAL DAMAGE each have a number above or beside the label. A 0 is a real value.",
-  "Return the same JSON shape: mode, mode_label, kills, deaths, assists, contracts, damage (total damage), score, placement, revives, xp, time_alive, map, extracted, won, confidence, notes, stats.",
-  "Do not invent numbers. If a field is not in this crop, set it to null.",
+  "This is a crop from a Call of Duty after-action report: a bottom stats bar, a row of tiles, a large placement, or a header.",
+  "Read every labeled number that is actually in this crop. If a label or number is not visible in this crop, that field must be null. Never guess 0 for a field you cannot see. A visible 0 is allowed only when the 0 is in the crop.",
+  "Tiles may be labeled KILLS, E/D RATIO, DAMAGE, CONTRACTS, and WINSTREAKS. A 31ST PLACE or 120TH PLACE is the placement.",
+  "Return JSON with: mode, mode_label, kills, deaths, assists, contracts, damage, score, placement, revives, xp, time_alive, map, ed_ratio, winstreaks, extracted, won, confidence, notes, stats.",
+  "extracted must be null unless this crop is clearly a DMZ extract result. Do not invent a mode if the crop has no mode text.",
 ].join(" ");
 
 export function modelTextOf(result) {

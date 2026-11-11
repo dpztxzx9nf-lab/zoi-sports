@@ -1,0 +1,16 @@
+{
+  "image": "warzone-br-sting.jpg",
+  "note": "Warzone Battle Royale placement sting with no mode text. Tiles: kills, E/D, damage, contracts, winstreaks.",
+  "expected": {
+    "mode": "warzone",
+    "placement": 120,
+    "kills": 0,
+    "deaths": null,
+    "contracts": 0,
+    "damage": 350,
+    "ed_ratio": 0,
+    "winstreaks": 0,
+    "won": 0,
+    "extracted": null
+  }
+}

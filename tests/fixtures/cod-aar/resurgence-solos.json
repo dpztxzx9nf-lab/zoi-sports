@@ -1,0 +1,15 @@
+{
+  "image": "resurgence-solos.jpg",
+  "note": "Warzone Resurgence Solos match summary, Rebirth Island, 10.11.2026.",
+  "expected": {
+    "mode": "resurgence",
+    "placement": 31,
+    "kills": 1,
+    "deaths": 2,
+    "assists": 0,
+    "contracts": 0,
+    "damage": 502,
+    "won": 0,
+    "extracted": null
+  }
+}
