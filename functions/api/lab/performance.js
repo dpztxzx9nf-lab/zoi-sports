@@ -15,6 +15,7 @@ import { performance } from "../../_lib/lab-perf.js";
 import { COD_CATALOG, COD_GAME, COD_MODES, currentCodOf, fortniteGameSql, gamesPresent, hasColumn, isCodMode, modeOf } from "../../_lib/lab-cod.js";
 import { modesWithMatches, performanceCod, pickCodMode } from "../../_lib/lab-cod-perf.js";
 import { ROBRUN_CATALOG, ROBRUN_GAME, currentRobRunOf } from "../../_lib/lab-robrun.js";
+import { recentRobRunShifts, robrunChart } from "../../_lib/lab-robrun-perf.js";
 
 const READING_COLUMNS = "taken_at,created_at,matches,wins,kills,deaths,kd,win_rate";
 /* Everything a session label or the page's mode line needs, and nothing else. The
@@ -217,6 +218,20 @@ async function performanceForRobRun(env, who) {
     verdict: "too-soon", kills_delta: null, before: { matches: 0 }, after: { matches: 0 },
   }));
 
+  let shifts = [];
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT id,started_at,ended_at,role,notoriety,party,player_name,outcome,duration_s,deaths,arrests,source,aar_key,stats
+         FROM lab_robrun_shifts WHERE owner = ? AND deleted_at IS NULL
+         ORDER BY datetime(started_at) ASC, id ASC`
+    ).bind(who.id).all();
+    shifts = rows.results || [];
+  } catch (e) {
+    console.error("lab robrun shifts read failed", e);
+    shifts = [];
+  }
+  const scored = robrunChart(shifts);
+
   return json({
     ok: true,
     me: { email: who.email, name: who.name },
@@ -225,19 +240,19 @@ async function performanceForRobRun(env, who) {
     modes: [],
     mode_catalog: [],
     catalog: ROBRUN_CATALOG,
-    mode: null,
-    mode_label: null,
-    outcome: null,
-    outcome_label: null,
+    mode: "shift",
+    mode_label: "City shift",
+    outcome: "survive",
+    outcome_label: "Left the city",
     min_games: 25,
-    chart_min_games: 5,
+    chart_min_games: scored.chart_min_games,
     changes,
-    chart: [],
-    match_count: 0,
+    chart: scored.chart,
+    match_count: scored.match_count,
     lastMatch: null,
     replays_available: false,
     current: currentRobRunOf(snapshot),
-    recent_matches: [],
+    recent_matches: recentRobRunShifts(shifts),
   });
 }
 
