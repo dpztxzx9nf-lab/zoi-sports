@@ -2,7 +2,7 @@
    Same rules as the COD half of lab-sync, scoped to game = 'robrun'. */
 import { SNAPSHOT_KEEP, canonicalJson, sameValue, sha256Hex, str, valueText } from "./lab.js";
 import { hasColumn } from "./lab-cod.js";
-import { ROBRUN_CATALOG, ROBRUN_GAME, ROBRUN_MIN_TRACKED } from "./lab-robrun.js";
+import { ROBRUN_CATALOG, ROBRUN_GAME, ROBRUN_MIN_TRACKED, withRobRunDefaults } from "./lab-robrun.js";
 
 const labels = new Map(ROBRUN_CATALOG.map((c) => [c.id, c.label]));
 const trackedIds = new Set(ROBRUN_CATALOG.map((c) => c.id));
@@ -33,10 +33,11 @@ export async function syncRobRunSnapshot(env, owner, body, fallbackTakenAt) {
   const takenAt = str(body.robrun.takenAt, TAKEN_AT_MAX) || str(fallbackTakenAt, TAKEN_AT_MAX);
   if (!takenAt) return empty;
 
-  const flat = flattenIncomingRobRun(body.robrun.settings);
-  if (!flat || Object.keys(flat).length < ROBRUN_MIN_TRACKED) {
+  const sent = flattenIncomingRobRun(body.robrun.settings);
+  if (!sent || Object.keys(sent).length < ROBRUN_MIN_TRACKED) {
     return { ...empty, skipped: true, error: "That ROB RUN snapshot does not carry enough tracked settings." };
   }
+  const flat = withRobRunDefaults(sent);
 
   const source = str(body.robrun.source, SOURCE_MAX);
   const stored = { settings: flat, ...(source ? { source } : {}) };
@@ -68,7 +69,7 @@ export async function syncRobRunSnapshot(env, owner, body, fallbackTakenAt) {
     if (previous && previous.payload) {
       try {
         const parsed = JSON.parse(previous.payload);
-        if (parsed && typeof parsed.settings === "object" && parsed.settings) before = parsed.settings;
+        if (parsed && typeof parsed.settings === "object" && parsed.settings) before = withRobRunDefaults(parsed.settings);
       } catch { before = {}; }
     }
 
