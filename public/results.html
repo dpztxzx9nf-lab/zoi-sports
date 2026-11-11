@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Results — Zoi</title>
-<meta name="description" content="Zoi's logged scrim and tournament results for Fortnite Zero Build and Call of Duty: placements, eliminations, fields and points, match by match.">
+<meta name="description" content="Zoi's logged scrim and tournament results for Fortnite Zero Build, Call of Duty and Rob Run: placements, eliminations, fields and points, match by match.">
 <meta name="theme-color" content="#050506">
 <link rel="icon" href="favicon.ico" sizes="any"><link rel="icon" type="image/png" href="favicon-32.png"><link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=9">
 <link rel="canonical" href="https://zoisports.com/results">
-<meta property="og:title" content="Results — Zoi"><meta property="og:description" content="Logged scrim and tournament results for Zoi's Fortnite Zero Build and Call of Duty teams."><meta property="og:url" content="https://zoisports.com/results"><meta property="og:image" content="https://zoisports.com/assets/og.jpg?v=9"><meta property="og:type" content="website"><meta name="twitter:card" content="summary_large_image">
+<meta property="og:title" content="Results — Zoi"><meta property="og:description" content="Logged scrim and tournament results for Zoi's Fortnite Zero Build, Call of Duty and Rob Run teams."><meta property="og:url" content="https://zoisports.com/results"><meta property="og:image" content="https://zoisports.com/assets/og.jpg?v=9"><meta property="og:type" content="website"><meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="styles.css?v=50">
 </head>
 <body>
@@ -22,6 +22,7 @@
 <div class="game-tabs" role="tablist" aria-label="Results by game">
  <button type="button" role="tab" id="res-tab-zb" aria-controls="res-panel-zb" aria-selected="true" tabindex="0">Fortnite Zero Build</button>
  <button type="button" role="tab" id="res-tab-cod" aria-controls="res-panel-cod" aria-selected="false" tabindex="-1"><span class="nw">Call of Duty</span></button>
+ <button type="button" role="tab" id="res-tab-robrun" aria-controls="res-panel-robrun" aria-selected="false" tabindex="-1"><span class="nw">Rob Run</span></button>
 </div>
 <div class="game-panel" role="tabpanel" id="res-panel-zb" aria-labelledby="res-tab-zb" tabindex="0" data-game="Fortnite Zero Build">
  <div class="res-status" aria-live="polite">Loading results…</div>
@@ -31,9 +32,13 @@
  <div class="res-status" aria-live="polite">Loading results…</div>
  <div class="res-list"></div>
 </div>
+<div class="game-panel" role="tabpanel" id="res-panel-robrun" aria-labelledby="res-tab-robrun" tabindex="0" data-game="Rob Run" hidden>
+ <div class="res-status" aria-live="polite">Loading results…</div>
+ <div class="res-list"></div>
+</div>
 </section>
 </main>
-<footer><div class="stripes" aria-hidden="true"></div><img src="assets/zoi-icon.png?v=9" alt="" width="48" height="48"><p>Zoi · ζωή · life</p><p class="small">Contact: <a href="mailto:hello@zoisports.com">hello@zoisports.com</a></p><p class="small">© 2026 Zoi. All rights reserved. · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p><p class="small">Zoi is not affiliated with or endorsed by Epic Games. Fortnite is a trademark of Epic Games, Inc. Zoi is not affiliated with or endorsed by Activision. Call of Duty is a trademark of Activision Publishing, Inc.</p></footer>
+<footer><div class="stripes" aria-hidden="true"></div><img src="assets/zoi-icon.png?v=9" alt="" width="48" height="48"><p>Zoi · ζωή · life</p><p class="small">Contact: <a href="mailto:hello@zoisports.com">hello@zoisports.com</a></p><p class="small">© 2026 Zoi. All rights reserved. · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p><p class="small">Zoi is not affiliated with or endorsed by Epic Games. Fortnite is a trademark of Epic Games, Inc. Zoi is not affiliated with or endorsed by Activision. Call of Duty is a trademark of Activision Publishing, Inc. Zoi is not affiliated with or endorsed by Kefir.</p></footer>
 <script src="results.js" defer></script>
 <script src="account.js?v=7" defer></script>
 </body>

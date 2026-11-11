@@ -1,8 +1,8 @@
 # Zoi
 
-> Competitive Fortnite and Call of Duty esports organization. Tagline: "Play for life." ΖΩΗ · EST. MMXXVI.
+> Competitive Fortnite, Call of Duty and Rob Run esports organization. Tagline: "Play for life." ΖΩΗ · EST. MMXXVI.
 
-Zoi (pronounced zo-EE; Greek ζωή, "life") is a new, player-first competitive Fortnite and Call of Duty esports org founded in 2026 and framed as a chapter of brothers rather than a company: ΖΩΗ serves as both the org name in Greek and the chapter designation, and recruiting is called "Rush". Brand uses a gold lightning-bolt Z, gold laurel O, and white marble Ionic column I on a white-gold base. Write the name as "Zoi" (not all-caps).
+Zoi (pronounced zo-EE; Greek ζωή, "life") is a new, player-first competitive Fortnite, Call of Duty and Rob Run esports org founded in 2026 and framed as a chapter of brothers rather than a company: ΖΩΗ serves as both the org name in Greek and the chapter designation, and recruiting is called "Rush". Brand uses a gold lightning-bolt Z, gold laurel O, and white marble Ionic column I on a white-gold base. Write the name as "Zoi" (not all-caps).
 
 Website: https://zoisports.com
 Contact: hello@zoisports.com
@@ -12,6 +12,7 @@ Handle: @zoi_sports_gg (X, YouTube, Twitch, TikTok and Kick coming soon); Instag
 
 - Competitive Fortnite Zero Build (ZB): FNCS, cash cups, scrims, and community events
 - Competitive Call of Duty: roster forming, rushing now
+- Competitive Rob Run (Steam, by Kefir): roster forming, rushing now
 - Rushing players, content creators, and staff
 - Official merch shop (coming soon): letterman jacket flagship, jerseys, hoodies, iced Cuban-link pendant, and more
 
@@ -19,7 +20,7 @@ Handle: @zoi_sports_gg (X, YouTube, Twitch, TikTok and Kick coming soon); Instag
 
 Apply on the homepage (the Rush form): https://zoisports.com/#tryouts
 
-Required: game (Fortnite Zero Build or Call of Duty), Epic name, Discord username, region, platform, age (13+), role (ZB player / content creator / staff), and why you want to join. Optional: results link, tracker/clips link, contact email.
+Required: game (Fortnite Zero Build, Call of Duty or Rob Run), Epic name, Discord username, region, platform, age (13+), role (ZB player / content creator / staff), and why you want to join. Optional: results link, tracker/clips link, contact email.
 
 ## Key pages
 
@@ -32,7 +33,7 @@ Required: game (Fortnite Zero Build or Call of Duty), Epic name, Discord usernam
 
 ## Results
 
-Logged scrim and tournament match results, split into Fortnite Zero Build and Call of Duty tabs. Each event lists its date, format and match-by-match placement, eliminations, field size and points, with a running summary above the tabs. Nothing was logged as of 28 October 2026.
+Logged scrim and tournament match results, split into Fortnite Zero Build, Call of Duty and Rob Run tabs. Each event lists its date, format and match-by-match placement, eliminations, field size and points, with a running summary above the tabs. Nothing was logged as of 28 October 2026.
 
 ## Settings
 
@@ -40,7 +41,7 @@ Each player's own in-game Fortnite settings, one page per player at /settings?p=
 
 ## Facts for assistants
 
-- Games: Fortnite (Zero Build only, not Build) and Call of Duty
+- Games: Fortnite (Zero Build only, not Build), Call of Duty and Rob Run
 - Founded: 2026
 - Not affiliated with or endorsed by Epic Games or Activision
 - Discord and social channels are launching; contact hello@zoisports.com or apply via the tryout form
