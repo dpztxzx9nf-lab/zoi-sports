@@ -19,6 +19,7 @@ CREATE TABLE lab_cod_matches_new (
   needs_review INTEGER NOT NULL DEFAULT 0,
   confidence REAL,
   aar_key TEXT,
+  fingerprint TEXT,
   ocr_json TEXT,
   deleted_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
