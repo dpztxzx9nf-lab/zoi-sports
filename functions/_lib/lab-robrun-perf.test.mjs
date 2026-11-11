@@ -39,3 +39,35 @@ test("an open shift uses the last time it was seen in the city", () => {
   assert.equal(r.downed_per10, 0.5);
   assert.equal(r.in_progress, true);
 });
+
+import { logSessionRows, logSessionChart } from "./lab-robrun-perf.js";
+import { eventsFromPlayerLog } from "./lab-robrun-log.js";
+import { readFileSync } from "node:fs";
+
+test("game-log sessions give knockdowns per 10 min, tied to settings", () => {
+  const log = readFileSync(new URL("../../tests/fixtures/robrun/player-log-excerpt.txt", import.meta.url), "utf8");
+  const rows = logSessionRows(eventsFromPlayerLog(log, -420), [], [snap("2026-11-11T01:00:00Z", "0.37")]);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].knockdowns, 1);
+  assert.equal(rows[0].arrests, 1);
+  assert.equal(rows[0].minutes, 12.3);
+  assert.equal(rows[0].knockdowns_per10, 0.8);
+  assert.equal(rows[1].knockdowns_per10, 0);
+  assert.equal(rows[0].settings_at, "2026-11-11T01:00:00Z");
+  const { chart } = logSessionChart(rows);
+  assert.equal(chart.length, 2);
+});
+
+test("chat deaths count only inside the session window", () => {
+  const evs = [
+    { at: "2026-11-11T05:00:00.000Z", kind: "role", detail: "citizen" },
+    { at: "2026-11-11T05:20:00.000Z", kind: "role", detail: "hubber" },
+  ];
+  const shifts = [{ stats: JSON.stringify({ self_events: [
+    { kind: "died", at_iso: "2026-11-11T05:10:00.000Z" },
+    { kind: "died", at_iso: "2026-11-11T05:30:00.000Z" },
+  ] }) }];
+  const r = logSessionRows(evs, shifts, [])[0];
+  assert.equal(r.deaths, 1);
+  assert.equal(r.minutes, 20);
+});

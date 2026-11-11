@@ -11,7 +11,8 @@ param(
   [string]$File,
   [int]$RereadId = 0,
   [switch]$RobRun,
-  [switch]$RobBackfill
+  [switch]$RobBackfill,
+  [switch]$RobLog
 )
 
 $ErrorActionPreference = 'Stop'
@@ -148,6 +149,11 @@ if ($endpoint -match '/api/lab-sync$') { $script:Endpoint = $endpoint -replace '
 elseif ($endpoint -notmatch '/api/lab-cod-aar') { $script:Endpoint = ([Uri]$endpoint).GetLeftPart([System.UriPartial]::Authority) + '/api/lab-cod-aar' }
 else { $script:Endpoint = $endpoint }
 $script:RobEndpoint = $script:Endpoint -replace '/api/lab-cod-aar$','/api/lab-robrun-aar' 
+$script:RobLogEndpoint = $script:Endpoint -replace '/api/lab-cod-aar$','/api/lab-robrun-log'
+$script:RobLogDir = Join-Path $env:USERPROFILE 'AppData\LocalLow\Kefir\ROB RUN'
+$script:RobLogLastAt = [DateTime]::MinValue
+$script:RobCrumbSig = ''
+$script:RobPlayerLogSig = @{}
 
 # WinRT OCR
 [Windows.Media.Ocr.OcrEngine,Windows.Foundation,ContentType=WindowsRuntime] | Out-Null
@@ -927,6 +933,71 @@ function New-RobPayloadNoImage([string]$Text, $Fields, [string]$Event) {
   }
 }
 
+# ROB RUN's own log files, read passively (shared read; no process access):
+# the Sentry breadcrumb ring and Player.log. Every 15 s at most, and only
+# when a file changed.
+function Read-SharedBytes([string]$Path) {
+  $fs = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)
+  try {
+    $buf = New-Object byte[] $fs.Length
+    $n = 0
+    while ($n -lt $buf.Length) { $r = $fs.Read($buf, $n, $buf.Length - $n); if ($r -le 0) { break }; $n += $r }
+    return $buf
+  } finally { $fs.Dispose() }
+}
+
+function Send-RobLog($Payload) {
+  $body = $Payload | ConvertTo-Json -Depth 4 -Compress
+  try {
+    $req = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Post, $script:RobLogEndpoint)
+    $req.Headers.Authorization = [System.Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $script:Token)
+    $req.Content = [System.Net.Http.StringContent]::new($body, [Text.Encoding]::UTF8, 'application/json')
+    $res = $script:Http.SendAsync($req).GetAwaiter().GetResult()
+    return ([int]$res.StatusCode -eq 200)
+  } catch { return $false }
+}
+
+function Get-RobPlayerLogLines([string]$Path) {
+  $text = [Text.Encoding]::UTF8.GetString((Read-SharedBytes $Path))
+  $ms = [regex]::Matches($text, '\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d+)\] \[\d+\]\r?\n\[(Info|Network|Warning)\] ([^\r\n]+)')
+  $sb = New-Object System.Text.StringBuilder
+  foreach ($m in $ms) {
+    if ($m.Groups[3].Value -match 'Init role|Change role|Change state|Item (taken|switched)|NetworkStep|BecomeRobber') {
+      [void]$sb.Append('[' + $m.Groups[1].Value + "] [0]`n[" + $m.Groups[2].Value + '] ' + $m.Groups[3].Value + "`n")
+    }
+  }
+  return $sb.ToString()
+}
+
+function Invoke-RobRunLog([switch]$Force) {
+  $now = [DateTime]::UtcNow
+  if (-not $Force -and ($now - $script:RobLogLastAt).TotalSeconds -lt 15) { return }
+  $script:RobLogLastAt = $now
+  if (-not (Test-Path -LiteralPath $script:RobLogDir)) { return }
+  try {
+    $run = Get-ChildItem -LiteralPath (Join-Path $script:RobLogDir '.sentry-native') -Directory -Filter '*.run' -ErrorAction SilentlyContinue |
+      Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+    if ($run) {
+      $files = @(Get-ChildItem -LiteralPath $run.FullName -File -Filter '__sentry-breadcrumb*' -ErrorAction SilentlyContinue)
+      $sig = ($files | ForEach-Object { $_.Name + ':' + $_.Length + ':' + $_.LastWriteTimeUtc.Ticks }) -join '|'
+      if ($files.Count -and $sig -ne $script:RobCrumbSig) {
+        $crumbs = @($files | ForEach-Object { [Convert]::ToBase64String((Read-SharedBytes $_.FullName)) })
+        if (Send-RobLog ([ordered]@{ crumbs = $crumbs; tz_offset_min = (Get-TzOffsetMin) })) { $script:RobCrumbSig = $sig }
+      }
+    }
+    foreach ($name in @('Player.log', 'Player-prev.log')) {
+      $f = Get-Item -LiteralPath (Join-Path $script:RobLogDir $name) -ErrorAction SilentlyContinue
+      if (-not $f -or $f.Length -le 0) { continue }
+      $sig = [string]$f.Length + ':' + $f.LastWriteTimeUtc.Ticks
+      if ($script:RobPlayerLogSig[$name] -eq $sig) { continue }
+      $lines = Get-RobPlayerLogLines $f.FullName
+      if (-not $lines -or (Send-RobLog ([ordered]@{ player_log = $lines; tz_offset_min = (Get-TzOffsetMin) }))) { $script:RobPlayerLogSig[$name] = $sig }
+    }
+  } catch {
+    Log ("Couldn't read the ROB RUN log: " + $_.Exception.Message)
+  }
+}
+
 function Invoke-RobRunSample {
   $mon = Get-RobRunMonitor
   if (-not $mon) { return }
@@ -992,9 +1063,12 @@ function Invoke-Sample {
       $script:LastMode = ''
       if (Get-RobRunProcess) {
         $script:RobWasRunning = $true
+        Invoke-RobRunLog
         Invoke-RobRunSample
       } elseif ($script:RobWasRunning) {
         $script:RobWasRunning = $false
+        Invoke-RobRunLog -Force
+        [void](Send-RobLog ([ordered]@{ event = 'process_exit'; taken_at = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ') }))
         if ($script:RobInShift) {
           $end = New-RobPayloadNoImage '' @{ layout = 'other' } 'process_exit'
           [void](Send-RobRun $end)
@@ -1064,6 +1138,8 @@ function Invoke-ForceCapture([string]$Reason) {
     $script:Busy = $false
   }
 }
+
+if ($RobLog) { Invoke-RobRunLog -Force; Log 'Sent the ROB RUN game log to the lab.'; exit 0 }
 
 if ($File) {
   if ($RobRun) {
