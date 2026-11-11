@@ -132,5 +132,13 @@ test("an arrest before the shift started is not counted in it", () => {
 
 test("a chat time later than the sample belongs to the day before", () => {
   assert.equal(chatTimeIso("23:59", "2026-11-11T07:05:00.000Z", -420), "2026-11-11T06:59:00.000Z");
-  assert.equal(chatTimeIso("23:59", "2026-11-11T06:30:00.000Z", -420), "2026-11-10T06:59:00.000Z");
+  assert.equal(chatTimeIso("23:59", "2026-11-11T06:30:00.000Z", -420), null); // 22.5h old: stale
+  assert.equal(chatTimeIso("23:50", "2026-11-11T07:05:00.000Z", -420), "2026-11-11T06:50:00.000Z");
+});
+
+test("a dropped leading hour digit is restored only when recent", () => {
+  // 22:25 read as 2:25 on a 22:34 sample
+  assert.equal(chatTimeIso("2:25", "2026-11-11T05:34:17.000Z", -420), "2026-11-11T05:25:00.000Z");
+  // 2:25 on a 9 PM sample cannot be repaired (hour starts with no tens digit match) -> null
+  assert.equal(chatTimeIso("2:25", "2026-11-11T04:00:00.000Z", -420), null);
 });

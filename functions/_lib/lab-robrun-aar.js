@@ -196,17 +196,34 @@ export function reconcileNotoriety(local, vision) {
 
 /* Chat lines carry the game's local HH:MM. Pin each one to an absolute
    time using the PC's UTC offset, placing it at or before the sample. */
+const CHAT_MAX_AGE_MS = 90 * 60 * 1000;
+
+function pinLocal(hh, mm, taken, tzOffsetMin) {
+  if (hh > 23 || mm > 59) return null;
+  const localNow = taken + tzOffsetMin * 60000;
+  const d = new Date(localNow);
+  let local = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hh, mm);
+  // A chat line can't be from the future; allow a minute of clock skew.
+  if (local - localNow > 60000) local -= 24 * 3600000;
+  if (localNow - local > CHAT_MAX_AGE_MS) return null;
+  return local - tzOffsetMin * 60000;
+}
+
 export function chatTimeIso(at, takenAt, tzOffsetMin) {
   const m = /^(\d{1,2}):(\d{2})$/.exec(String(at || ""));
   const taken = Date.parse(takenAt);
   if (!m || !Number.isFinite(taken) || !Number.isFinite(tzOffsetMin)) return null;
   const hh = Number(m[1]), mm = Number(m[2]);
-  if (hh > 23 || mm > 59) return null;
-  const localTaken = new Date(taken + tzOffsetMin * 60000);
-  let local = Date.UTC(localTaken.getUTCFullYear(), localTaken.getUTCMonth(), localTaken.getUTCDate(), hh, mm);
-  // A chat line can't be from the future; allow a minute of clock skew.
-  if (local - (taken + tzOffsetMin * 60000) > 60000) local -= 24 * 3600000;
-  return new Date(local - tzOffsetMin * 60000).toISOString();
+  let ms = pinLocal(hh, mm, taken, tzOffsetMin);
+  /* Chat only shows recent lines. OCR sometimes drops the first digit of a
+     two-digit hour (22:25 read as 2:25). Restore it only when the sample's
+     own hour starts with that digit and the result is recent. */
+  if (ms == null && m[1].length === 1) {
+    const localHour = new Date(taken + tzOffsetMin * 60000).getUTCHours();
+    const tens = Math.floor(localHour / 10);
+    if (tens > 0) ms = pinLocal(tens * 10 + hh, mm, taken, tzOffsetMin);
+  }
+  return ms == null ? null : new Date(ms).toISOString();
 }
 
 export function tzOffsetOf(body) {
