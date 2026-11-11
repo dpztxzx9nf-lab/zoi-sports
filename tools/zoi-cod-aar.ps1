@@ -84,9 +84,9 @@ function Write-ZoiLog([string]$Path, [string]$Line) {
 function Log([string]$Line) { Write-ZoiLog $AgentLog $Line }
 
 $script:PollMs = 2500
-$script:DetectWidth = 640
+$script:DetectWidth = 2560
 $script:MinScore = 3
-$script:NearMiss = 1.5
+$script:NearMiss = 1
 $script:Keywords = New-Object System.Collections.Generic.List[object]
 function Add-Kw([string]$Text, [double]$Score) {
   $script:Keywords.Add([pscustomobject]@{ Text = (Normalize-Text $Text).Trim(); Score = $Score })
@@ -95,11 +95,15 @@ function Load-Defaults {
   $script:Keywords.Clear()
   Add-Kw 'after action report' 3
   Add-Kw 'after action' 2.5
+  Add-Kw 'match summary' 3
   Add-Kw 'failed to extract' 2.5
   Add-Kw 'you extracted' 2.5
   Add-Kw 'extraction failed' 2.5
   Add-Kw 'mission results' 2
   Add-Kw 'match results' 2
+  Add-Kw 'resurgence' 2
+  Add-Kw 'your stats' 2
+  Add-Kw 'total damage' 1.5
   Add-Kw 'xp summary' 1.5
   Add-Kw 'victory' 1.5
   Add-Kw 'defeat' 1.5
@@ -184,6 +188,9 @@ function Score-Text([string]$Text) {
     if ($k.Text -and $n.Contains($k.Text)) { $score += $k.Score; $hits += $k.Text }
   }
   if ($n.Contains('kills') -and $n.Contains('deaths')) { $score += 0.5; $hits += 'kills+deaths' }
+  # Warzone / Resurgence AAR: "31ST PLACE" is the distinctive line. 640px OCR
+  # often gets this even when it misses RESURGENCE and MATCH SUMMARY.
+  if ([regex]::IsMatch($n, '\d+\s*(st|nd|rd|th)\s+place')) { $score += 3; $hits += 'nth-place' }
   return @{ Score = $score; Hits = ($hits -join ',') }
 }
 
@@ -311,10 +318,11 @@ function Invoke-Sample {
     $scored = Score-Text $text
     $isAar = $scored.Score -ge $script:MinScore
     $near = (-not $isAar) -and ($scored.Score -ge $script:NearMiss)
-    if ($near) {
+    if ($near -or ($scored.Score -gt 0 -and -not $isAar)) {
       $snip = ((Normalize-Text $text).Trim())
       if ($snip.Length -gt 300) { $snip = $snip.Substring(0,300) }
-      Write-ZoiLog $DetectLog ("near-miss score=" + $scored.Score.ToString('0.0') + " hits=$($scored.Hits) text=$snip")
+      $kind = if ($near) { 'near-miss' } else { 'weak' }
+      Write-ZoiLog $DetectLog ("$kind score=" + $scored.Score.ToString('0.0') + " hits=$($scored.Hits) text=$snip")
     }
     if ($isAar -and -not $script:InAar) {
       $script:InAar = $true
