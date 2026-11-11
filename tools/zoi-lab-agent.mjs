@@ -993,20 +993,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function startCodAar() {
   if (process.platform !== "win32") return;
   const script = path.join(HERE, "zoi-cod-aar.ps1");
+  const vbs = path.join(HERE, "zoi-cod-aar-hidden.vbs");
   if (!existsSync(script)) {
     log("Call of Duty scoreboard capture is not installed (zoi-cod-aar.ps1 is missing).");
     return;
   }
-  const exe = process.env.SystemRoot
-    ? path.join(process.env.SystemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
-    : "powershell.exe";
+  const launcher = existsSync(vbs) ? vbs : null;
   try {
-    const child = spawn(exe, [
-      "-WindowStyle", "Hidden",
-      "-NoProfile",
-      "-ExecutionPolicy", "Bypass",
-      "-File", script,
-    ], { detached: true, windowsHide: true, stdio: "ignore", cwd: HERE });
+    /* wscript is how the agent itself is started hidden; node's detached
+       powershell spawn was exiting immediately on this machine. */
+    const child = launcher
+      ? spawn("wscript.exe", [launcher], { detached: true, windowsHide: true, stdio: "ignore", cwd: HERE })
+      : spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", script], { detached: true, windowsHide: true, stdio: "ignore", cwd: HERE });
     child.unref();
     log("Call of Duty scoreboard capture is on: it watches the screen while the game is running. F9 is a backup.");
   } catch (e) {
