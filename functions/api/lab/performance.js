@@ -221,7 +221,7 @@ async function performanceForRobRun(env, who) {
   let shifts = [];
   try {
     const rows = await env.DB.prepare(
-      `SELECT id,started_at,ended_at,role,notoriety,party,player_name,outcome,duration_s,deaths,arrests,source,aar_key,stats
+      `SELECT id,started_at,ended_at,duration_s,deaths,arrests,source,aar_key,stats
          FROM lab_robrun_shifts WHERE owner = ? AND deleted_at IS NULL
          ORDER BY datetime(started_at) ASC, id ASC`
     ).bind(who.id).all();
@@ -230,7 +230,18 @@ async function performanceForRobRun(env, who) {
     console.error("lab robrun shifts read failed", e);
     shifts = [];
   }
-  const scored = robrunChart(shifts);
+  let snapshots = [];
+  if (await hasColumn(env, "lab_snapshots", "game")) {
+    try {
+      const rows = await env.DB.prepare(
+        "SELECT taken_at,payload FROM lab_snapshots WHERE owner = ? AND game = ? ORDER BY id ASC LIMIT 500"
+      ).bind(who.id, ROBRUN_GAME).all();
+      snapshots = rows.results || [];
+    } catch (e) {
+      console.error("lab robrun snapshots read failed", e);
+    }
+  }
+  const scored = robrunChart(shifts, snapshots);
 
   return json({
     ok: true,
@@ -242,8 +253,8 @@ async function performanceForRobRun(env, who) {
     catalog: ROBRUN_CATALOG,
     mode: "shift",
     mode_label: "City shift",
-    outcome: "survive",
-    outcome_label: "Left the city",
+    outcome: "downed",
+    outcome_label: "Taken down per 10 min",
     min_games: 25,
     chart_min_games: scored.chart_min_games,
     changes,
@@ -252,7 +263,7 @@ async function performanceForRobRun(env, who) {
     lastMatch: null,
     replays_available: false,
     current: currentRobRunOf(snapshot),
-    recent_matches: recentRobRunShifts(shifts),
+    recent_matches: recentRobRunShifts(shifts, snapshots),
   });
 }
 
