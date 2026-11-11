@@ -223,7 +223,7 @@ function renderCodMatches() {
   if (nodes.matchesTitle) nodes.matchesTitle.textContent = state.game === 'robrun' ? 'Shifts' : 'Matches';
   if (nodes.matchesNote) {
     nodes.matchesNote.textContent = state.game === 'robrun'
-      ? 'While ROB RUN is running, the lab reads the HUD and files each city shift automatically.'
+      ? 'While ROB RUN is running, the lab reads the chat on screen and counts each time you are taken down, per 10 minutes in the city, against the settings you had then.'
       : 'While Call of Duty is running, the lab watches for the after-action report on this PC and files every readable stat automatically. F9 captures the screen as a backup.';
   }
   if (nodes.codMatchesEmpty) {
@@ -313,24 +313,16 @@ function robrunShiftRow(m) {
   const li = el('li', 'lab-match');
   const title = el('p', 'lab-match-line');
   const bits = [];
-  const role = m.role ? (m.role.charAt(0).toUpperCase() + m.role.slice(1)) : null;
-  if (role) bits.push(role);
-  if (m.notoriety != null) bits.push('notoriety ' + m.notoriety);
-  if (m.party) bits.push(m.party);
-  if (m.duration_s != null) bits.push(fmtMins(m.duration_s) + ' in the city');
-  if (m.arrests) bits.push(m.arrests === 1 ? '1 arrest' : m.arrests + ' arrests');
-  if (m.deaths) bits.push(m.deaths === 1 ? '1 death' : m.deaths + ' deaths');
-  if (m.cash_delta != null) bits.push((m.cash_delta >= 0 ? '+' : '') + group(m.cash_delta) + ' cash');
-  else if (m.cash != null) bits.push(group(m.cash) + ' cash');
-  if (m.outcome === 'in_progress' || !m.ended_at) bits.push('in progress');
-  else if (m.outcome === 'left') bits.push('left the city');
-  else if (m.outcome === 'arrested') bits.push('ended in an arrest');
-  else if (m.outcome === 'died') bits.push('died');
-  else if (m.outcome === 'disconnected') bits.push('disconnected');
+  if (m.minutes != null) bits.push(Math.round(m.minutes) + 'm in the city');
+  const downed = (m.deaths || 0) + (m.arrests || 0);
+  if (m.deaths != null || m.arrests != null) bits.push(downed === 1 ? 'taken down once' : 'taken down ' + downed + '\u00d7');
+  if (m.downed_per10 != null) bits.push(m.downed_per10 + ' per 10 min');
+  if (m.takedowns != null) bits.push(m.takedowns === 1 ? '1 takedown' : m.takedowns + ' takedowns');
+  if (m.in_progress) bits.push('in progress');
   title.textContent = bits.join(' · ') || 'City shift';
   li.append(title);
   const meta = el('p', 'lab-match-meta');
-  meta.textContent = [fmtWhen(m.started_at), 'From the HUD'].filter(Boolean).join(' · ');
+  meta.textContent = [fmtWhen(m.started_at), m.settings_at ? 'settings from ' + fmtWhen(m.settings_at) : null].filter(Boolean).join(' · ');
   li.append(meta);
   if (m.image) {
     const img = document.createElement('img');
@@ -722,7 +714,8 @@ function fmtMins(s) {
 
 function renderRobRunCharts(chart, p) {
   const minGames = p.chart_min_games || 5;
-  if (!chart.length) {
+  const rated = chart.filter(s => s.downed_per10 != null);
+  if (!rated.length) {
     hide(nodes.chartKpm);
     if (nodes.chartDmg) hide(nodes.chartDmg);
     hide(nodes.chartWin);
@@ -734,42 +727,42 @@ function renderRobRunCharts(chart, p) {
   show(nodes.chartsBlock);
   hide(nodes.chartEmpty);
   const first = chart[0], last = chart[chart.length - 1];
-  const firstLabel = fmtDay(first.to || first.at);
-  const lastLabel = fmtDay(first.to || first.at) === fmtDay(last.to || last.at) ? '' : fmtDay(last.to || last.at);
+  const firstLabel = fmtDay(first.at || first.to);
+  const lastLabel = fmtDay(first.at || first.to) === fmtDay(last.at || last.to) ? '' : fmtDay(last.at || last.to);
   const series = v => chart.map(s => ({
     v: v(s), mark: Boolean(s.change), thin: chart.length < minGames,
     lo: null, hi: null,
   }));
   const kTitle = document.querySelector('#chart-kpm .lab-chart-k');
-  if (kTitle) kTitle.textContent = 'Notoriety';
+  if (kTitle) kTitle.textContent = 'Taken down per 10 min';
   show(nodes.chartKpm);
-  nodes.chartKpmBox.append(lineChart(series(s => s.notoriety), {
-    min: 0, max: 5, label: 'Notoriety by shift',
-    axis: v => String(Math.round(v)),
+  const maxDown = Math.max(1, ...rated.map(s => s.downed_per10));
+  nodes.chartKpmBox.append(lineChart(series(s => s.downed_per10), {
+    min: 0, max: maxDown, label: 'Deaths and arrests per 10 minutes, lower is better',
+    axis: v => (Math.round(v * 10) / 10).toString(),
     firstLabel, lastLabel,
-    empty: 'Notoriety needs a level read from the HUD.',
+    empty: 'Needs a finished shift of 5 minutes or more.',
   }));
-  if (nodes.chartDmg && nodes.chartDmgBox) {
+  const takes = chart.filter(s => s.takedowns_per10 != null);
+  if (nodes.chartDmg && nodes.chartDmgBox && takes.length) {
     const dTitle = document.querySelector('#chart-dmg .lab-chart-k');
-    if (dTitle) dTitle.textContent = 'Time in the city';
+    if (dTitle) dTitle.textContent = 'Takedowns per 10 min';
     show(nodes.chartDmg);
-    nodes.chartDmgBox.append(lineChart(series(s => s.duration_s != null ? s.duration_s / 60 : null), {
-      min: 0, max: 40, label: 'Minutes in the city',
-      axis: v => String(Math.round(v)),
+    nodes.chartDmgBox.append(lineChart(series(s => s.takedowns_per10), {
+      min: 0, max: Math.max(1, ...takes.map(s => s.takedowns_per10)), label: 'Takedowns per 10 minutes',
+      axis: v => (Math.round(v * 10) / 10).toString(),
       firstLabel, lastLabel,
-      empty: 'Time in the city needs a finished shift.',
+      empty: '',
     }));
+  } else if (nodes.chartDmg) {
+    hide(nodes.chartDmg);
   }
-  if (nodes.chartWinTitle) nodes.chartWinTitle.textContent = 'Left the city';
-  show(nodes.chartWin);
-  nodes.chartWinBox.append(lineChart(series(s => s.survived), {
-    min: 0, max: 0.15, cap: 1, label: 'Left the city by shift',
-    axis: v => Math.round(v * 100) + '%',
-    firstLabel, lastLabel,
-    empty: 'Leaving the city is counted when a shift ends on the HUD.',
-  }));
-  if (chart.length < minGames) {
-    nodes.chartLegend.append(el('span', null, '\u25cb under ' + minGames + ' shifts'));
+  hide(nodes.chartWin);
+  const legend = [];
+  if (chart.some(s => s.change)) legend.push('\u25cf settings changed');
+  if (chart.length < minGames) legend.push('\u25cb under ' + minGames + ' shifts');
+  if (legend.length) {
+    for (const l of legend) nodes.chartLegend.append(el('span', null, l));
     show(nodes.chartLegend);
   } else {
     hide(nodes.chartLegend);

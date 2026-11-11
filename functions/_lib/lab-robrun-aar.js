@@ -38,9 +38,21 @@ export function parseChatEvents(text) {
   const seen = new Set();
   const src = String(text || "");
   const re = /(\d{1,2}:\d{2})\s+(\[[^\]]+\]\s+)?([^\n]+?)\s+(was arrested|died)!/gi;
+  /* Attributed lines, if the game ever shows them: "A was arrested by B!"
+     or "A was killed by B!". These are the only takedowns we can count. */
+  const by = /(\d{1,2}:\d{2})\s+(?:\[[^\]]+\]\s+)?([A-Za-z0-9_]{2,24})\s+was\s+(arrested|killed)\s+by\s+([A-Za-z0-9_]{2,24})\s*!/gi;
+  let b;
+  while ((b = by.exec(src))) {
+    const ev = { at: b[1], name: b[2], kind: b[3].toLowerCase() === "killed" ? "died" : "arrested", by: b[4] };
+    const key = ev.at + "|" + ev.name.toLowerCase() + "|" + ev.kind + "|" + ev.by.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    events.push(ev);
+  }
   let m;
   while ((m = re.exec(src))) {
     const kind = m[4].toLowerCase() === "died" ? "died" : "arrested";
+    if (/\s+by\s+\S+$/i.test(m[3]) || /\bwas\s+(arrested|killed)\s+by\b/i.test(m[0])) continue;
     const ev = { at: m[1], name: m[3].trim(), kind };
     const key = ev.at + "|" + ev.name.toLowerCase() + "|" + ev.kind;
     if (seen.has(key)) continue;
@@ -126,76 +138,27 @@ export function parseRobRunHud(input) {
 export function selfEvents(fields) {
   const name = fields && fields.player_name;
   const chat = (fields && fields.chat) || [];
-  if (!name) return { deaths: 0, arrests: 0, events: [] };
+  const attributed = chat.some((ev) => ev && ev.by);
+  if (!name) return { deaths: 0, arrests: 0, takedowns: 0, attributed, events: [] };
   const want = String(name).toLowerCase();
   const events = [];
-  let deaths = 0, arrests = 0;
+  let deaths = 0, arrests = 0, takedowns = 0;
   for (const ev of chat) {
-    if (!ev || String(ev.name || "").toLowerCase() !== want) continue;
+    if (!ev) continue;
+    if (ev.by && String(ev.by).toLowerCase() === want && String(ev.name || "").toLowerCase() !== want) {
+      events.push({ ...ev, kind: "takedown", victim_kind: ev.kind });
+      takedowns += 1;
+      continue;
+    }
+    if (String(ev.name || "").toLowerCase() !== want) continue;
     events.push(ev);
     if (ev.kind === "died") deaths += 1;
     if (ev.kind === "arrested") arrests += 1;
   }
-  return { deaths, arrests, events };
+  return { deaths, arrests, takedowns, attributed, events };
 }
 
 
-/* The tight level-badge crop: only a "lvl N" label counts. */
-export function parseBadgeText(text) {
-  const m = String(text || "").replace(/\s+/g, " ").match(LVL);
-  if (!m) return null;
-  const n = Number(m[1]);
-  return Number.isInteger(n) && n >= 1 && n <= 20 ? n : null;
-}
-
-export const BADGE_PROMPT = [
-  "This is a crop of the bottom-left HUD in the game ROB RUN.",
-  "There may be a row of round icons with labels under them, such as SOLO, a ski-mask icon labeled like 'lvl 4', and green percentage boxes.",
-  "Report only what is clearly visible. level is the integer after 'lvl' under the ski-mask icon, or null if there is no such label or you cannot read it.",
-  "mask_badge is true only if the ski-mask icon with a lvl label is visible, false if the row is visible without it, null if the row is not visible.",
-  "Reply with JSON only: {\"level\": integer|null, \"mask_badge\": true|false|null}.",
-].join(" ");
-
-export const BADGE_GUIDED_JSON = {
-  type: "object",
-  properties: {
-    level: { type: ["integer", "null"] },
-    mask_badge: { type: ["boolean", "null"] },
-  },
-  required: ["level", "mask_badge"],
-};
-
-export function parseVisionBadge(raw) {
-  let obj = null;
-  if (raw && typeof raw === "object") obj = raw;
-  else {
-    const s = String(raw || "");
-    const i = s.indexOf("{"), j = s.lastIndexOf("}");
-    if (i !== -1 && j > i) { try { obj = JSON.parse(s.slice(i, j + 1)); } catch { obj = null; } }
-  }
-  if (!obj || typeof obj !== "object") return { level: null, mask_badge: null };
-  const lv = Number(obj.level);
-  const level = obj.level != null && Number.isInteger(lv) && lv >= 1 && lv <= 20 ? lv : null;
-  const mb = obj.mask_badge === true ? true : obj.mask_badge === false ? false : null;
-  return { level, mask_badge: level != null ? true : mb };
-}
-
-/* Two readers: the vision model and a tight, zoomed Windows OCR crop.
-   They must not disagree. One alone is accepted only when the other
-   abstained. Nothing read means null. */
-export function reconcileNotoriety(local, vision) {
-  const a = Number.isInteger(local) ? local : null;
-  const b = Number.isInteger(vision) ? vision : null;
-  if (a != null && b != null) {
-    return a === b ? { value: a, source: "both" } : { value: null, source: "conflict" };
-  }
-  if (b != null) return { value: b, source: "vision" };
-  if (a != null) return { value: a, source: "local" };
-  return { value: null, source: null };
-}
-
-/* Chat lines carry the game's local HH:MM. Pin each one to an absolute
-   time using the PC's UTC offset, placing it at or before the sample. */
 const CHAT_MAX_AGE_MS = 90 * 60 * 1000;
 
 function pinLocal(hh, mm, taken, tzOffsetMin) {

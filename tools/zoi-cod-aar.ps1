@@ -870,7 +870,6 @@ function Invoke-RobRunFile([string]$Path) {
     $payload = New-RobPayload $tmp $text $fields 'sample'
     $payload.taken_at = (Get-RobCaptureTime $Path).ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
     if ($RobBackfill) { $payload.backfill = $true }
-    if ($fields.layout -eq 'world_hud') { $payload = Add-RobBadge $payload $bmp }
     if (Send-RobRun $payload) { $script:RobFileOk = $true } else { Log "The lab did not take the ROB RUN screenshot." }
   } finally { $bmp.Dispose() }
 }
@@ -898,27 +897,6 @@ function Read-RobRunFrame([System.Drawing.Bitmap]$Bmp) {
   $text = [string]::Join("`n", $parts)
   $fields = Parse-RobRunHud $text
   return @($text, $fields)
-}
-
-# Tight, 4x Windows OCR on the bottom-left level badge row (SOLO / lvl N / bonuses).
-function Read-RobRunBadge([System.Drawing.Bitmap]$Bmp) {
-  $crop = Crop-Frac $Bmp 0.17 0.895 0.17 0.07
-  if (-not $crop) { return @('', $null) }
-  try {
-    $hi = Scale-Bitmap $crop 4
-    try {
-      $t = Recognize-Bitmap $hi
-      $url = Jpeg-DataUrl $crop 90
-      return @([string]$t, $url)
-    } finally { $hi.Dispose() }
-  } finally { $crop.Dispose() }
-}
-
-function Add-RobBadge($Payload, [System.Drawing.Bitmap]$Bmp) {
-  $bt, $burl = Read-RobRunBadge $Bmp
-  $Payload.local_ocr.badge_text = $bt
-  if ($burl) { $Payload.crops = [ordered]@{ badge = $burl } }
-  return $Payload
 }
 
 function Get-TzOffsetMin { return [int][TimeZoneInfo]::Local.GetUtcOffset([DateTime]::Now).TotalMinutes }
@@ -990,7 +968,6 @@ function Invoke-RobRunSample {
     if ($wantImage) {
       Save-Jpeg $bmp $path 80
       $payload = New-RobPayload $path $text $fields $event
-      if ($fields.layout -eq 'world_hud') { $payload = Add-RobBadge $payload $bmp }
     } else {
       $payload = New-RobPayloadNoImage $text $fields $event
     }

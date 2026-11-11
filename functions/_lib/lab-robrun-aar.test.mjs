@@ -98,27 +98,10 @@ test("a name only in chat is not the player name", () => {
   assert.equal(f.player_name, null);
 });
 
-import { parseBadgeText, reconcileNotoriety, chatTimeIso, eventsInShift, parseVisionBadge } from "./lab-robrun-aar.js";
+import { chatTimeIso, eventsInShift } from "./lab-robrun-aar.js";
 
-test("badge OCR variants read the level", () => {
-  assert.equal(parseBadgeText("SOLO IvI 4 +15% +35%"), 4);
-  assert.equal(parseBadgeText("SOLO |v| 12"), 12);
-  assert.equal(parseBadgeText("SOLO +15% +35%"), null);
-  assert.equal(parseBadgeText("level 0 district"), null);
-});
 
-test("readers must agree; one abstaining is fine; none is null", () => {
-  assert.deepEqual(reconcileNotoriety(4, 4), { value: 4, source: "both" });
-  assert.deepEqual(reconcileNotoriety(null, 4), { value: 4, source: "vision" });
-  assert.deepEqual(reconcileNotoriety(4, 5), { value: null, source: "conflict" });
-  assert.deepEqual(reconcileNotoriety(null, null), { value: null, source: null });
-});
 
-test("vision badge parse rejects junk", () => {
-  assert.deepEqual(parseVisionBadge('{"level": 4, "mask_badge": true}'), { level: 4, mask_badge: true });
-  assert.deepEqual(parseVisionBadge('{"level": 99}'), { level: null, mask_badge: null });
-  assert.deepEqual(parseVisionBadge("nope"), { level: null, mask_badge: null });
-});
 
 test("an arrest before the shift started is not counted in it", () => {
   const taken = "2026-11-11T05:27:37.794Z"; // 10:27 PM MT
@@ -141,4 +124,19 @@ test("a dropped leading hour digit is restored only when recent", () => {
   assert.equal(chatTimeIso("2:25", "2026-11-11T05:34:17.000Z", -420), "2026-11-11T05:25:00.000Z");
   // 2:25 on a 9 PM sample cannot be repaired (hour starts with no tens digit match) -> null
   assert.equal(chatTimeIso("2:25", "2026-11-11T04:00:00.000Z", -420), null);
+});
+
+test("attributed lines count takedowns; plain lines don't", () => {
+  const f = parseRobRunHud("FPS: 80\n22:40 Drubie was arrested by Kneczi!\n22:41 Kneczi was killed by Roobs!\n22:42 Jay died!\nKneczi\nSOLO");
+  const s = selfEvents(f);
+  assert.equal(s.takedowns, 1);
+  assert.equal(s.deaths, 1);
+  assert.equal(s.arrests, 0);
+  assert.equal(s.attributed, true);
+});
+
+test("without attribution, takedowns are unknowable", () => {
+  const s = selfEvents(parseRobRunHud("FPS: 80\n22:25 Kneczi was arrested!\n22:27 Drubie was arrested!\nKneczi\nSOLO"));
+  assert.equal(s.attributed, false);
+  assert.equal(s.arrests, 1);
 });

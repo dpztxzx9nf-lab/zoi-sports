@@ -4,49 +4,14 @@
 import { json, sha256Hex } from "../_lib/lab.js";
 import { sniffImage } from "../_lib/media.js";
 import { AAR_MAX_BYTES } from "../_lib/lab-cod-aar.js";
-import { OCR_MODEL, modelTextOf } from "../_lib/lab-cod-aar.js";
 import {
-  parseRobRunHud, selfEvents, parseBadgeText, parseVisionBadge, reconcileNotoriety,
-  BADGE_PROMPT, BADGE_GUIDED_JSON, chatTimeIso, tzOffsetOf, eventsInShift,
+  parseRobRunHud, selfEvents, chatTimeIso, tzOffsetOf, eventsInShift,
 } from "../_lib/lab-robrun-aar.js";
 
 const unauthorized = () => json({ ok: false, error: "Unauthorized." }, 401);
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
 const OPEN_GAP_MS = 8 * 60 * 1000;
 const SHIFT_MAX_MS = 50 * 60 * 1000;
-const VISION_EVERY_MS = 60 * 1000;
-
-function b64Of(bytes) {
-  const chars = [];
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    chars.push(String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)));
-  }
-  return btoa(chars.join(""));
-}
-
-/* Same vision model as the Call of Duty scoreboards, on the badge crop. */
-async function readBadgeVision(env, pic) {
-  if (!pic || !env.AI || typeof env.AI.run !== "function") return null;
-  try {
-    const result = await env.AI.run(OCR_MODEL, {
-      messages: [
-        { role: "system", content: "You read HUD labels from a game screenshot. Reply with JSON only." },
-        { role: "user", content: [
-          { type: "image_url", image_url: { url: "data:" + pic.mime + ";base64," + b64Of(pic.bytes) } },
-          { type: "text", text: BADGE_PROMPT },
-        ] },
-      ],
-      max_tokens: 60,
-      temperature: 0,
-      guided_json: BADGE_GUIDED_JSON,
-    });
-    return parseVisionBadge(modelTextOf(result));
-  } catch (e) {
-    console.error("robrun badge vision failed", e);
-    return null;
-  }
-}
-
 function tokenFrom(request) {
   const auth = request.headers.get("authorization") || "";
   const m = /^Bearer\s+(\S+)$/i.exec(auth.trim());
@@ -171,12 +136,11 @@ function mergeStats(prev, fields, takenAt, event, ctx = {}) {
   stats.outside_events = evs.filter((e) => !insideSet.has(e)).slice(-20);
   stats.seen_deaths = inside.filter((e) => e.kind === "died").length;
   stats.seen_arrests = inside.filter((e) => e.kind === "arrested").length;
-  if (ctx.badge) {
-    const reads = Array.isArray(stats.notoriety_reads) ? stats.notoriety_reads.slice(-19) : [];
-    reads.push({ at: takenAt, ...ctx.badge });
-    stats.notoriety_reads = reads;
-    if (ctx.badge.vision_ran) stats.vision_last_at = takenAt;
-  }
+  /* Takedowns are only knowable once the chat shows who did it. Until an
+     attributed line has been seen, they stay null rather than 0. */
+  if (self.attributed) stats.attributed_chat = true;
+  stats.seen_takedowns = stats.attributed_chat ? inside.filter((e) => e.kind === "takedown").length : null;
+  if (ctx.lastSeenAt) stats.last_seen_at = ctx.lastSeenAt;
   return stats;
 }
 
@@ -297,37 +261,6 @@ export async function onRequest({ request, env }) {
   const backfill = body.backfill === true;
   const tz = tzOffsetOf(body);
 
-  /* Level badge: tight Windows OCR crop + the vision model, low cadence. */
-  let badge = null;
-  if (fields.layout === "world_hud") {
-    const local = body.local_ocr || {};
-    const localLvl = parseBadgeText(local.badge_text) ?? fields.notoriety ?? null;
-    const crops = body.crops && typeof body.crops === "object" ? body.crops : {};
-    const badgePic = typeof crops.badge === "string" ? imageFromBody({ image: crops.badge }) : { none: true };
-    let prevStats = {};
-    try { prevStats = open && open.stats ? JSON.parse(open.stats) || {} : {}; } catch { prevStats = {}; }
-    const lastMs = Date.parse(prevStats.vision_last_at || "");
-    const due = !Number.isFinite(lastMs) || Math.abs(Date.parse(takenAt) - lastMs) >= VISION_EVERY_MS
-      || (localLvl != null && open && Number(open.notoriety) !== localLvl);
-    let vision = null;
-    if (due && !badgePic.error && !badgePic.none) vision = await readBadgeVision(env, badgePic);
-    const r = reconcileNotoriety(localLvl, vision ? vision.level : null);
-    badge = {
-      local: localLvl,
-      vision: vision ? vision.level : null,
-      mask_badge: vision ? vision.mask_badge : null,
-      value: r.value,
-      source: r.source,
-      vision_ran: !!vision,
-    };
-    if (vision || localLvl != null) {
-      fields.notoriety = r.value;
-      if (r.value != null) fields.role = "criminal";
-      else if (r.source === "conflict" && fields.role === "criminal") fields.role = null;
-    }
-    if (fields.role == null && vision && vision.mask_badge === true && r.source !== "conflict") fields.role = "criminal";
-  }
-
   const closing = event === "shift_end" || event === "process_exit" || event === "disconnected" || event === "leave_city";
   if (!open && !inCity && closing) {
     return json({ ok: true, skipped: true, reason: "no open shift" });
@@ -335,7 +268,7 @@ export async function onRequest({ request, env }) {
 
   try {
     if (!open && inCity) {
-      const stats = mergeStats(null, fields, takenAt, event, { tz, badge, backfill, startedAt: takenAt, endedAt: closing ? takenAt : null });
+      const stats = mergeStats(null, fields, takenAt, event, { tz, backfill, startedAt: takenAt, endedAt: closing ? takenAt : null, lastSeenAt: takenAt });
       const self = { deaths: stats.seen_deaths || 0, arrests: stats.seen_arrests || 0 };
       const outcome = closing ? finalizeOutcome(event, fields, stats) : "in_progress";
       const ended = closing ? takenAt : null;
@@ -355,8 +288,12 @@ export async function onRequest({ request, env }) {
 
     const startedAt = Number.isFinite(takenMs) && takenMs < Date.parse(open.started_at)
       ? takenAt : open.started_at;
+    let prevLast = null;
+    try { prevLast = JSON.parse(open.stats || "{}").last_seen_at || null; } catch { prevLast = null; }
+    const inCityNow = fields.layout === "world_hud" || fields.layout === "city_map" || fields.layout === "summary";
+    const lastSeenAt = inCityNow && (!prevLast || Date.parse(takenAt) > Date.parse(prevLast)) ? takenAt : prevLast;
     const stats = mergeStats(open.stats, fields, takenAt, event, {
-      tz, badge, backfill, startedAt, endedAt: closing ? takenAt : open.ended_at,
+      tz, backfill, startedAt, endedAt: closing ? takenAt : open.ended_at, lastSeenAt,
     });
     const deaths = Number(stats.seen_deaths) || 0;
     const arrests = Number(stats.seen_arrests) || 0;
@@ -388,7 +325,7 @@ export async function onRequest({ request, env }) {
       startedAt, ended, role, notoriety, party, player_name, outcome, duration_s, deaths, arrests,
       aarKey, backfill ? open.ocr_json : ocr, JSON.stringify(stats), open.id, owner
     ).run();
-    return json({ ok: true, id: open.id, started_at: startedAt, ended_at: ended, outcome, notoriety, role, arrests, deaths, badge, fields });
+    return json({ ok: true, id: open.id, started_at: startedAt, ended_at: ended, outcome, arrests, deaths, takedowns: stats.seen_takedowns ?? null, fields });
   } catch (e) {
     console.error("robrun shift write failed", e);
     return json({ ok: false, error: "Couldn't save that shift just now." }, 500);
