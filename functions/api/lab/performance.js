@@ -29,17 +29,8 @@ const MATCH_COLUMNS = "playlist,playlist_type,ranked,build_mode,team_size,region
    recognises it. */
 const KIND_COLUMNS = "kind,title";
 
-/* Whether lab_matches has a column. Same statement the sync handler probes with:
-   the fake D1 knows the shape, and a database without 0008 answers no. */
-async function hasColumn(env, table, column) {
-  try {
-    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM pragma_table_info(?) WHERE name = ?")
-      .bind(table, column).first();
-    return Boolean(row && Number(row.n) > 0);
-  } catch {
-    return false;
-  }
-}
+/* hasColumn is imported from _lib/lab-cod.js. Same pragma as before, so
+   the fake D1 in the suite still recognises it. */
 
 /* setting id -> the watch text from the catalog. Built once per request. */
 const watchLookup = () => {
