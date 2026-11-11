@@ -4,7 +4,8 @@
    Cash is not on the in-world HUD we have seen, so it stays null until a
    labeled amount is actually read. */
 
-const LVL = /\blvl\s*(\d+)\b/i;
+/* Windows OCR often reads the "lvl" label as IvI, Ivl or |v|. */
+const LVL = /(?:^|[^A-Za-z0-9])[lI1|][vV][lI1|]\s*\.?\s*(\d{1,2})\b/;
 const PARTY = /\b(SOLO|DUO|TRIO|SQUAD)\b/i;
 const ALARM = /ALARM\s+GOES\s+OFF\s+IN/i;
 const LEAVE_FEDS = /LEAVE THE CITY BEFORE THE FEDS/i;
@@ -136,4 +137,92 @@ export function selfEvents(fields) {
     if (ev.kind === "arrested") arrests += 1;
   }
   return { deaths, arrests, events };
+}
+
+
+/* The tight level-badge crop: only a "lvl N" label counts. */
+export function parseBadgeText(text) {
+  const m = String(text || "").replace(/\s+/g, " ").match(LVL);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isInteger(n) && n >= 1 && n <= 20 ? n : null;
+}
+
+export const BADGE_PROMPT = [
+  "This is a crop of the bottom-left HUD in the game ROB RUN.",
+  "There may be a row of round icons with labels under them, such as SOLO, a ski-mask icon labeled like 'lvl 4', and green percentage boxes.",
+  "Report only what is clearly visible. level is the integer after 'lvl' under the ski-mask icon, or null if there is no such label or you cannot read it.",
+  "mask_badge is true only if the ski-mask icon with a lvl label is visible, false if the row is visible without it, null if the row is not visible.",
+  "Reply with JSON only: {\"level\": integer|null, \"mask_badge\": true|false|null}.",
+].join(" ");
+
+export const BADGE_GUIDED_JSON = {
+  type: "object",
+  properties: {
+    level: { type: ["integer", "null"] },
+    mask_badge: { type: ["boolean", "null"] },
+  },
+  required: ["level", "mask_badge"],
+};
+
+export function parseVisionBadge(raw) {
+  let obj = null;
+  if (raw && typeof raw === "object") obj = raw;
+  else {
+    const s = String(raw || "");
+    const i = s.indexOf("{"), j = s.lastIndexOf("}");
+    if (i !== -1 && j > i) { try { obj = JSON.parse(s.slice(i, j + 1)); } catch { obj = null; } }
+  }
+  if (!obj || typeof obj !== "object") return { level: null, mask_badge: null };
+  const lv = Number(obj.level);
+  const level = obj.level != null && Number.isInteger(lv) && lv >= 1 && lv <= 20 ? lv : null;
+  const mb = obj.mask_badge === true ? true : obj.mask_badge === false ? false : null;
+  return { level, mask_badge: level != null ? true : mb };
+}
+
+/* Two readers: the vision model and a tight, zoomed Windows OCR crop.
+   They must not disagree. One alone is accepted only when the other
+   abstained. Nothing read means null. */
+export function reconcileNotoriety(local, vision) {
+  const a = Number.isInteger(local) ? local : null;
+  const b = Number.isInteger(vision) ? vision : null;
+  if (a != null && b != null) {
+    return a === b ? { value: a, source: "both" } : { value: null, source: "conflict" };
+  }
+  if (b != null) return { value: b, source: "vision" };
+  if (a != null) return { value: a, source: "local" };
+  return { value: null, source: null };
+}
+
+/* Chat lines carry the game's local HH:MM. Pin each one to an absolute
+   time using the PC's UTC offset, placing it at or before the sample. */
+export function chatTimeIso(at, takenAt, tzOffsetMin) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(at || ""));
+  const taken = Date.parse(takenAt);
+  if (!m || !Number.isFinite(taken) || !Number.isFinite(tzOffsetMin)) return null;
+  const hh = Number(m[1]), mm = Number(m[2]);
+  if (hh > 23 || mm > 59) return null;
+  const localTaken = new Date(taken + tzOffsetMin * 60000);
+  let local = Date.UTC(localTaken.getUTCFullYear(), localTaken.getUTCMonth(), localTaken.getUTCDate(), hh, mm);
+  // A chat line can't be from the future; allow a minute of clock skew.
+  if (local - (taken + tzOffsetMin * 60000) > 60000) local -= 24 * 3600000;
+  return new Date(local - tzOffsetMin * 60000).toISOString();
+}
+
+export function tzOffsetOf(body) {
+  const v = body && Number(body.tz_offset_min);
+  return Number.isInteger(v) && v >= -720 && v <= 840 ? v : null;
+}
+
+/* Keep an event only if it happened while this shift was open. Chat time
+   is to the minute, so the start gets one minute of slack, never more. */
+export function eventsInShift(events, startIso, endIso) {
+  const start = Date.parse(startIso);
+  const end = endIso ? Date.parse(endIso) : Infinity;
+  if (!Number.isFinite(start)) return [];
+  return (events || []).filter((e) => {
+    const t = Date.parse(e && e.at_iso);
+    if (!Number.isFinite(t)) return false;
+    return t >= start - 60000 && t <= end + 60000;
+  });
 }

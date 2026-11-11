@@ -97,3 +97,40 @@ test("a name only in chat is not the player name", () => {
   const f = parseRobRunHud("FPS: 89 PING: 43MS LOSS: 0%\n22:20 Drubie was arrested!\nLooty Bay Chat\nSOLO");
   assert.equal(f.player_name, null);
 });
+
+import { parseBadgeText, reconcileNotoriety, chatTimeIso, eventsInShift, parseVisionBadge } from "./lab-robrun-aar.js";
+
+test("badge OCR variants read the level", () => {
+  assert.equal(parseBadgeText("SOLO IvI 4 +15% +35%"), 4);
+  assert.equal(parseBadgeText("SOLO |v| 12"), 12);
+  assert.equal(parseBadgeText("SOLO +15% +35%"), null);
+  assert.equal(parseBadgeText("level 0 district"), null);
+});
+
+test("readers must agree; one abstaining is fine; none is null", () => {
+  assert.deepEqual(reconcileNotoriety(4, 4), { value: 4, source: "both" });
+  assert.deepEqual(reconcileNotoriety(null, 4), { value: 4, source: "vision" });
+  assert.deepEqual(reconcileNotoriety(4, 5), { value: null, source: "conflict" });
+  assert.deepEqual(reconcileNotoriety(null, null), { value: null, source: null });
+});
+
+test("vision badge parse rejects junk", () => {
+  assert.deepEqual(parseVisionBadge('{"level": 4, "mask_badge": true}'), { level: 4, mask_badge: true });
+  assert.deepEqual(parseVisionBadge('{"level": 99}'), { level: null, mask_badge: null });
+  assert.deepEqual(parseVisionBadge("nope"), { level: null, mask_badge: null });
+});
+
+test("an arrest before the shift started is not counted in it", () => {
+  const taken = "2026-11-11T05:27:37.794Z"; // 10:27 PM MT
+  const at = chatTimeIso("22:18", taken, -420);
+  assert.equal(at, "2026-11-11T05:18:00.000Z");
+  const evs = [{ at: "22:18", kind: "arrested", at_iso: at }, { at: "22:28", kind: "died", at_iso: chatTimeIso("22:28", "2026-11-11T05:29:00.000Z", -420) }];
+  const kept = eventsInShift(evs, taken, null);
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].kind, "died");
+});
+
+test("a chat time later than the sample belongs to the day before", () => {
+  assert.equal(chatTimeIso("23:59", "2026-11-11T07:05:00.000Z", -420), "2026-11-11T06:59:00.000Z");
+  assert.equal(chatTimeIso("23:59", "2026-11-11T06:30:00.000Z", -420), "2026-11-10T06:59:00.000Z");
+});
