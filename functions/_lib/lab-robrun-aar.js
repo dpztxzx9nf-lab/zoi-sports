@@ -80,14 +80,6 @@ export function parseRobRunHud(input) {
   let player_name = null;
   const nearSolo = raw.match(/([A-Za-z][A-Za-z0-9_]{2,20})\s*(?:\n+|\s+)(SOLO|DUO|TRIO|SQUAD)\b/i);
   if (nearSolo) player_name = allowedName(nearSolo[1]);
-  if (!player_name) {
-    const afterChat = raw.split(/Looty Bay Chat/i).pop() || raw;
-    const nm = afterChat.match(/\b([A-Za-z][A-Za-z0-9_]{2,20})\b/g) || [];
-    for (const cand of nm) {
-      const ok = allowedName(cand);
-      if (ok) { player_name = ok; break; }
-    }
-  }
 
   const chat = parseChatEvents(raw);
   let banner = null;

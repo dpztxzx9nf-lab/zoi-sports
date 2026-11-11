@@ -112,17 +112,18 @@ function mergeStats(prev, fields, takenAt, event) {
     stats.notoriety_peak = Math.max(Number(stats.notoriety_peak) || 0, fields.notoriety);
   }
   const self = selfEvents(fields);
-  stats.seen_deaths = Math.max(Number(stats.seen_deaths) || 0, self.deaths);
-  stats.seen_arrests = Math.max(Number(stats.seen_arrests) || 0, self.arrests);
-  if (self.events && self.events.length) {
-    const have = new Set((stats.self_events || []).map((e) => e.at + ":" + e.kind));
-    const evs = Array.isArray(stats.self_events) ? stats.self_events.slice() : [];
-    for (const e of self.events) {
-      const k = e.at + ":" + e.kind;
-      if (!have.has(k)) evs.push(e);
-    }
-    stats.self_events = evs;
+  const evs = [];
+  const have = new Set();
+  for (const e of (stats.self_events || []).concat(self.events || [])) {
+    if (!e) continue;
+    const k = String(e.at || "") + ":" + String(e.kind || "") + ":" + String(e.name || "").toLowerCase();
+    if (have.has(k)) continue;
+    have.add(k);
+    evs.push(e);
   }
+  stats.self_events = evs;
+  stats.seen_deaths = evs.filter((e) => e.kind === "died").length;
+  stats.seen_arrests = evs.filter((e) => e.kind === "arrested").length;
   return stats;
 }
 
@@ -267,14 +268,14 @@ export async function onRequest({ request, env }) {
 
     const stats = mergeStats(open.stats, fields, takenAt, event);
     const self = selfEvents(fields);
-    const deaths = Math.max(Number(open.deaths) || 0, self.deaths, Number(stats.seen_deaths) || 0);
-    const arrests = Math.max(Number(open.arrests) || 0, self.arrests, Number(stats.seen_arrests) || 0);
+    const deaths = Number(stats.seen_deaths) || 0;
+    const arrests = Number(stats.seen_arrests) || 0;
     const role = pickRole(open.role, fields.role);
     const notoriety = fields.notoriety != null
       ? Math.max(Number(open.notoriety) || 0, fields.notoriety)
       : (open.notoriety ?? null);
     const party = fields.party || open.party || null;
-    const player_name = fields.player_name || open.player_name || null;
+    const player_name = open.player_name || fields.player_name || null;
     const aarKey = key || open.aar_key || null;
     let ended = open.ended_at;
     let outcome = open.outcome || "in_progress";
