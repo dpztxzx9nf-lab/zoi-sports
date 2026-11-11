@@ -15,7 +15,7 @@ import { performance } from "../../_lib/lab-perf.js";
 import { COD_CATALOG, COD_GAME, COD_MODES, currentCodOf, fortniteGameSql, gamesPresent, hasColumn, isCodMode, modeOf } from "../../_lib/lab-cod.js";
 import { modesWithMatches, performanceCod, pickCodMode } from "../../_lib/lab-cod-perf.js";
 import { ROBRUN_CATALOG, ROBRUN_GAME, currentRobRunOf } from "../../_lib/lab-robrun.js";
-import { recentRobRunShifts, robrunChart } from "../../_lib/lab-robrun-perf.js";
+import { recentRobRunShifts, robrunChart, logSessionRows, logSessionChart, publicSessionRows } from "../../_lib/lab-robrun-perf.js";
 
 const READING_COLUMNS = "taken_at,created_at,matches,wins,kills,deaths,kd,win_rate";
 /* Everything a session label or the page's mode line needs, and nothing else. The
@@ -241,7 +241,18 @@ async function performanceForRobRun(env, who) {
       console.error("lab robrun snapshots read failed", e);
     }
   }
-  const scored = robrunChart(shifts, snapshots);
+  let events = [];
+  try {
+    const rows = await env.DB.prepare(
+      "SELECT at,kind,detail FROM lab_robrun_events WHERE owner = ? ORDER BY at ASC LIMIT 20000"
+    ).bind(who.id).all();
+    events = rows.results || [];
+  } catch (e) {
+    events = []; // table not migrated yet
+  }
+  const sessions = events.length ? logSessionRows(events, shifts, snapshots) : [];
+  const fromLog = sessions.length > 0;
+  const scored = fromLog ? logSessionChart(sessions) : robrunChart(shifts, snapshots);
 
   return json({
     ok: true,
@@ -253,8 +264,8 @@ async function performanceForRobRun(env, who) {
     catalog: ROBRUN_CATALOG,
     mode: "shift",
     mode_label: "City shift",
-    outcome: "downed",
-    outcome_label: "Taken down per 10 min",
+    outcome: "knockdowns",
+    outcome_label: "Knocked down per 10 min",
     min_games: 25,
     chart_min_games: scored.chart_min_games,
     changes,
@@ -263,7 +274,8 @@ async function performanceForRobRun(env, who) {
     lastMatch: null,
     replays_available: false,
     current: currentRobRunOf(snapshot),
-    recent_matches: recentRobRunShifts(shifts, snapshots),
+    recent_matches: fromLog ? publicSessionRows(sessions) : recentRobRunShifts(shifts, snapshots),
+    robrun_source: fromLog ? "game_log" : "hud",
   });
 }
 

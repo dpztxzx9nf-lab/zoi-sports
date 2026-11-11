@@ -223,7 +223,7 @@ function renderCodMatches() {
   if (nodes.matchesTitle) nodes.matchesTitle.textContent = state.game === 'robrun' ? 'Shifts' : 'Matches';
   if (nodes.matchesNote) {
     nodes.matchesNote.textContent = state.game === 'robrun'
-      ? 'While ROB RUN is running, the lab reads the chat on screen and counts each time you are taken down, per 10 minutes in the city, against the settings you had then.'
+      ? 'While ROB RUN is running, the lab reads the game\'s own log for each Looty Bay visit and counts knockdowns, deaths and arrests per 10 minutes, against the settings you had then.'
       : 'While Call of Duty is running, the lab watches for the after-action report on this PC and files every readable stat automatically. F9 captures the screen as a backup.';
   }
   if (nodes.codMatchesEmpty) {
@@ -309,9 +309,28 @@ function codMatchRow(m) {
   return li;
 }
 
+function robrunSessionBits(m) {
+  const bits = [];
+  if (m.minutes != null) bits.push(Math.round(m.minutes) + 'm in Looty Bay');
+  bits.push(m.knockdowns === 1 ? 'knocked down once' : 'knocked down ' + (m.knockdowns || 0) + '\u00d7');
+  if (m.knockdowns_per10 != null) bits.push(m.knockdowns_per10 + ' per 10 min');
+  if (m.deaths) bits.push(m.deaths === 1 ? '1 death' : m.deaths + ' deaths');
+  if (m.arrests) bits.push(m.arrests === 1 ? '1 arrest' : m.arrests + ' arrests');
+  if (m.in_progress) bits.push('in progress');
+  return bits;
+}
+
 function robrunShiftRow(m) {
   const li = el('li', 'lab-match');
   const title = el('p', 'lab-match-line');
+  if (m.source === 'game_log') {
+    title.textContent = robrunSessionBits(m).join(' \u00b7 ');
+    li.append(title);
+    const meta = el('p', 'lab-match-meta');
+    meta.textContent = [fmtWhen(m.started_at), m.settings_at ? 'settings from ' + fmtWhen(m.settings_at) : null, 'from the game log'].filter(Boolean).join(' \u00b7 ');
+    li.append(meta);
+    return li;
+  }
   const bits = [];
   if (m.minutes != null) bits.push(Math.round(m.minutes) + 'm in the city');
   const downed = (m.deaths || 0) + (m.arrests || 0);
@@ -714,7 +733,9 @@ function fmtMins(s) {
 
 function renderRobRunCharts(chart, p) {
   const minGames = p.chart_min_games || 5;
-  const rated = chart.filter(s => s.downed_per10 != null);
+  const fromLog = p.robrun_source === 'game_log';
+  const rateOf = s => (fromLog ? s.knockdowns_per10 : s.downed_per10);
+  const rated = chart.filter(s => rateOf(s) != null);
   if (!rated.length) {
     hide(nodes.chartKpm);
     if (nodes.chartDmg) hide(nodes.chartDmg);
@@ -734,11 +755,11 @@ function renderRobRunCharts(chart, p) {
     lo: null, hi: null,
   }));
   const kTitle = document.querySelector('#chart-kpm .lab-chart-k');
-  if (kTitle) kTitle.textContent = 'Taken down per 10 min';
+  if (kTitle) kTitle.textContent = fromLog ? 'Knocked down per 10 min' : 'Taken down per 10 min';
   show(nodes.chartKpm);
-  const maxDown = Math.max(1, ...rated.map(s => s.downed_per10));
-  nodes.chartKpmBox.append(lineChart(series(s => s.downed_per10), {
-    min: 0, max: maxDown, label: 'Deaths and arrests per 10 minutes, lower is better',
+  const maxDown = Math.max(1, ...rated.map(rateOf));
+  nodes.chartKpmBox.append(lineChart(series(rateOf), {
+    min: 0, max: maxDown, label: fromLog ? 'Knockdowns per 10 minutes in Looty Bay, lower is better' : 'Deaths and arrests per 10 minutes, lower is better',
     axis: v => (Math.round(v * 10) / 10).toString(),
     firstLabel, lastLabel,
     empty: 'Needs a finished shift of 5 minutes or more.',

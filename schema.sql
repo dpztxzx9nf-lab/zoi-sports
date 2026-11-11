@@ -197,3 +197,15 @@ CREATE TABLE IF NOT EXISTS lab_robrun_shifts (
   updated_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_lab_robrun_shifts_owner ON lab_robrun_shifts(owner, started_at);
+
+CREATE TABLE IF NOT EXISTS lab_robrun_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner TEXT NOT NULL,
+  at TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  detail TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT 'log',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (owner, at, kind, detail)
+);
+CREATE INDEX IF NOT EXISTS idx_lab_robrun_events_owner ON lab_robrun_events(owner, at);

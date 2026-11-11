@@ -1,4 +1,5 @@
 import { currentRobRunOf } from "./lab-robrun.js";
+import { robrunSessions } from "./lab-robrun-log.js";
 
 /* Rob Run in the aim lab: the only combat outcomes the game shows are chat
    lines. "Kneczi died!" / "Kneczi was arrested!" are times he was taken
@@ -127,4 +128,80 @@ export function robrunChart(rows, snapshots = []) {
     return point;
   });
   return { chart, match_count: done.length, chart_min_games: ROBRUN_CHART_MIN };
+}
+
+
+/* ---- Sessions from the game's own log (preferred when present) ----
+   Knockdowns and arrests come straight from the game's state changes
+   ("Idle -> KnockedOut", "Idle -> ArrestFinished"); time in the city from
+   its role and scene changes. Deaths come from the log if it ever names
+   them, otherwise from the on-screen chat ("Kneczi died!") inside the
+   same window. */
+
+function chatDeathsFrom(shifts) {
+  const seen = new Set();
+  const out = [];
+  for (const s of shifts || []) {
+    const st = statsOf(s);
+    for (const e of [].concat(st.self_events || [], st.outside_events || [])) {
+      if (!e || e.kind !== "died" || !e.at_iso) continue;
+      if (seen.has(e.at_iso)) continue;
+      seen.add(e.at_iso);
+      out.push(Date.parse(e.at_iso));
+    }
+  }
+  return out;
+}
+
+export function logSessionRows(events, shifts, snapshots = []) {
+  const sigs = snapshotSigs(snapshots);
+  const chatDeaths = chatDeathsFrom(shifts);
+  return robrunSessions(events).map((s) => {
+    const start = Date.parse(s.started_at);
+    const endIso = s.ended_at || s.last_at;
+    const end = Date.parse(endIso);
+    const minutes = Number.isFinite(start) && Number.isFinite(end) && end > start ? (end - start) / 60000 : null;
+    const chat = chatDeaths.filter((t) => t >= start - 60000 && t <= end + 60000).length;
+    const deaths = s.deaths > 0 ? s.deaths : chat;
+    const per10 = (v) => (v == null || minutes == null || minutes < MIN_MINUTES ? null : Math.round((v / minutes) * 100) / 10);
+    const snap = snapshotFor(sigs, s.started_at);
+    return {
+      id: null,
+      started_at: s.started_at,
+      ended_at: s.ended_at,
+      in_progress: !s.ended_at,
+      minutes: minutes == null ? null : Math.round(minutes * 10) / 10,
+      knockdowns: s.knockdowns,
+      arrests: s.arrests,
+      deaths,
+      knockdowns_per10: per10(s.knockdowns),
+      deaths_per10: per10(deaths),
+      weapons: s.items,
+      settings_at: snap ? snap.taken_at : null,
+      source: "game_log",
+      _sig: snap ? snap.sig : null,
+      _snap: snap,
+    };
+  });
+}
+
+export function logSessionChart(rows) {
+  const done = rows.filter((r) => r.ended_at);
+  let prev = null;
+  const chart = done.map((r) => {
+    const change = prev !== null && r._sig !== null && prev._sig !== null && r._sig !== prev._sig;
+    const point = {
+      at: r.started_at, to: r.ended_at, minutes: r.minutes,
+      knockdowns_per10: r.knockdowns_per10, deaths_per10: r.deaths_per10,
+      settings_at: r.settings_at, change,
+      changed: change ? changedSettings(prev._snap, r._snap) : [],
+    };
+    prev = r;
+    return point;
+  });
+  return { chart, match_count: done.length, chart_min_games: ROBRUN_CHART_MIN };
+}
+
+export function publicSessionRows(rows) {
+  return rows.slice().reverse().slice(0, 40).map(({ _sig, _snap, ...r }) => r);
 }

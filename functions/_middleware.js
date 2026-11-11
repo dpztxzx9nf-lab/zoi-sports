@@ -23,7 +23,7 @@ import { gate } from "./_lib/lab.js";
    sibling segments, /api/lab-sync, /api/lab-cod-aar and /api/lab-robrun-aar, which its /api/lab and
    /api/lab/* entries do not match, and the token is the only thing standing in
    front of them. Access's list is a dashboard setting; this file cannot change it. */
-const OPEN_PATHS = new Set(["/api/lab-sync", "/api/lab-cod-aar", "/api/lab-robrun-aar"]);
+const OPEN_PATHS = new Set(["/api/lab-sync", "/api/lab-cod-aar", "/api/lab-robrun-aar", "/api/lab-robrun-log"]);
 
 const isLabPage = (p) => p === "/lab" || p.startsWith("/lab/") || p === "/lab.html";
 const isLabApi = (p) => p === "/api/lab" || p.startsWith("/api/lab/");

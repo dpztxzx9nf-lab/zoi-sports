@@ -1,0 +1,185 @@
+[2026-11-10 18:51:29.451] [0]
+[Network] NetworkStep - Changed on "WaitUserData".
+
+[2026-11-10 18:51:52.726] [0]
+[Network] NetworkStep - Changed on "NotInRegion".
+
+[2026-11-10 18:51:52.727] [0]
+[Network] NetworkStep - Changed on "WaitFirstStartGameInput".
+
+[2026-11-10 18:51:52.746] [0]
+[Network] NetworkStep - Changed on "NotInRegion".
+
+[2026-11-10 18:52:41.241] [0]
+[Network] NetworkStep - Changed on "FindRegion".
+
+[2026-11-10 18:52:41.470] [0]
+[Network] NetworkStep - Changed on "ChangeRegionProcessing".
+
+[2026-11-10 18:52:42.066] [0]
+[Network] NetworkStep - Changed on "ConnectToRegion".
+
+[2026-11-10 18:52:42.067] [0]
+[Network] NetworkStep - Changed on "SendingConnectRegionMessage".
+
+[2026-11-10 18:52:42.670] [0]
+[Network] NetworkStep - Changed on "ConnectToRegion".
+
+[2026-11-10 18:52:42.779] [0]
+[Network] NetworkStep - Changed on "WaitRegionUserData".
+
+[2026-11-10 18:52:43.095] [0]
+[Network] NetworkStep - Changed on "InPrisonNotInBattle".
+
+[2026-11-10 18:52:43.095] [0]
+[Network] NetworkStep - Changed on "SendingUserJoinPrisonBattleMessage".
+
+[2026-11-10 18:52:43.775] [0]
+[Network] NetworkStep - Changed on "InPrisonNotInBattle".
+
+[2026-11-10 18:55:33.223] [0]
+[Info] Init role: prisoner
+
+[2026-11-10 18:58:22.777] [0]
+[Network] NetworkStep - Changed on "InRealmNotInBattle".
+
+[2026-11-10 18:58:22.777] [0]
+[Network] NetworkStep - Changed on "JoinHub".
+
+[2026-11-10 18:58:23.589] [0]
+[Network] NetworkStep - Changed on "InRealmNotInBattle".
+
+[2026-11-10 18:58:24.193] [0]
+[Network] NetworkStep - Changed on "InBattle".
+
+[2026-11-10 18:58:28.051] [0]
+[Info] Init role: hubber
+
+[2026-11-10 19:00:12.516] [0]
+[Info] Change state: Idle -> InVehicle
+
+[2026-11-10 19:00:47.186] [0]
+[Network] NetworkStep - Changed on "InRealmNotInBattle".
+
+[2026-11-10 19:01:13.580] [0]
+[Network] NetworkStep - Changed on "InBattle".
+
+[2026-11-10 19:01:18.143] [0]
+[Info] Init role: citizen
+
+[2026-11-10 19:02:00.370] [0]
+[Info] Change state: InVehicle -> Idle
+
+[2026-11-10 19:02:10.666] [0]
+[Info] Change state: Idle -> InVehicle
+
+[2026-11-10 19:03:06.660] [0]
+[Info] Change state: InVehicle -> Idle
+
+[2026-11-10 19:04:49.808] [0]
+[Info] Change state: Idle -> InVehicle
+
+[2026-11-10 19:05:08.340] [0]
+[Network] BecomeRobberMessage has "validation" response. Seems like it has incorrect client conditions.
+
+[2026-11-10 19:05:49.469] [0]
+[Info] Change state: InVehicle -> Idle
+
+[2026-11-10 19:06:08.207] [0]
+[Info] Change state: Idle -> Hidden
+
+[2026-11-10 19:06:09.454] [0]
+[Info] Change state: Hidden -> Idle
+
+[2026-11-10 19:06:32.761] [0]
+[Info] Change state: Idle -> InVehicle
+
+[2026-11-10 19:07:54.219] [0]
+[Info] Change state: InVehicle -> Idle
+
+[2026-11-10 19:08:24.614] [0]
+[Info] Change state: Idle -> InVehicle
+
+[2026-11-10 19:08:34.616] [0]
+[Info] Change state: InVehicle -> Idle
+
+[2026-11-10 19:10:07.054] [0]
+[Info] Item taken in hands: dp9_m1
+
+[2026-11-10 19:11:52.855] [0]
+[Info] Item removed from hands: dp9_m1
+
+[2026-11-10 19:12:10.611] [0]
+[Info] Item taken in hands: dp9_m1
+
+[2026-11-10 19:12:16.228] [0]
+[Info] Change state: Idle -> InVehicle
+
+[2026-11-10 19:12:18.778] [0]
+[Info] Change state: InVehicle -> Idle
+
+[2026-11-10 19:12:26.602] [0]
+[Info] Item removed from hands: dp9_m1
+
+[2026-11-10 19:12:30.061] [0]
+[Info] Item taken in hands: dp9_m1
+
+[2026-11-10 19:12:34.471] [0]
+[Info] Change state: Idle -> InVehicle
+
+[2026-11-10 19:13:05.221] [0]
+[Info] Change state: InVehicle -> Idle
+
+[2026-11-10 19:13:05.920] [0]
+[Info] Change state: Idle -> KnockedOut
+
+[2026-11-10 19:13:05.965] [0]
+[Info] Item removed from hands: dp9_m1
+
+[2026-11-10 19:13:13.723] [0]
+[Info] Change state: KnockedOut -> Idle
+
+[2026-11-10 19:13:21.222] [0]
+[Info] Change state: Idle -> ArrestFinished
+
+[2026-11-10 19:13:36.288] [0]
+[Network] NetworkStep - Changed on "InRealmNotInBattle".
+
+[2026-11-10 19:13:36.289] [0]
+[Network] NetworkStep - Changed on "JoinHub".
+
+[2026-11-10 19:13:37.288] [0]
+[Network] NetworkStep - Changed on "InRealmNotInBattle".
+
+[2026-11-10 19:13:37.892] [0]
+[Network] NetworkStep - Changed on "InBattle".
+
+[2026-11-10 19:13:41.559] [0]
+[Info] Init role: hubber
+
+[2026-11-10 19:13:41.565] [0]
+[Info] Item taken in hands: dp9_m1
+
+[2026-11-10 19:14:43.282] [0]
+[Info] Change state: Idle -> InVehicle
+
+[2026-11-10 19:15:11.405] [0]
+[Network] NetworkStep - Changed on "InRealmNotInBattle".
+
+[2026-11-10 19:15:22.390] [0]
+[Network] NetworkStep - Changed on "InBattle".
+
+[2026-11-10 19:15:26.501] [0]
+[Info] Init role: citizen
+
+[2026-11-10 19:18:19.633] [0]
+[Info] Change state: InVehicle -> Idle
+
+[2026-11-10 19:18:25.581] [0]
+[Info] Change state: Idle -> InVehicle
+
+[2026-11-10 19:28:21.214] [0]
+[Network] NetworkStep - Changed on "InRealmNotInBattle".
+
+[2026-11-10 19:28:21.215] [0]
+[Network] NetworkStep - Changed on "WaitStartMainMenuInput".
