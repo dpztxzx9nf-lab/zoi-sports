@@ -4,18 +4,15 @@
    Cash is not on the in-world HUD we have seen, so it stays null until a
    labeled amount is actually read. */
 
-const SELF_ARREST = /^(.+?)\s+was arrested!$/i;
-const SELF_DIED = /^(.+?)\s+died!$/i;
-const CHAT_LINE = /(?:^|\n)\s*(\d{1,2}:\d{2})\s+(?:\[.*?\]\s+)?(.+?)\s+((?:was arrested|died)!)(?:\n|$)/gi;
 const LVL = /\blvl\s*(\d+)\b/i;
 const PARTY = /\b(SOLO|DUO|TRIO|SQUAD)\b/i;
-const PCT = /\+(\d+)%/g;
 const ALARM = /ALARM\s+GOES\s+OFF\s+IN/i;
 const LEAVE_FEDS = /LEAVE THE CITY BEFORE THE FEDS/i;
 const BECOME_CRIMINAL = /BECOME A CRIMINAL|put on a mask to become a criminal/i;
 const CITY_MAP = /ADD MARKER/i;
 const LOOTY = /LOOTY\s*BAY/i;
 const FPS = /\bFPS[:\s]*\d+/i;
+const NAME_DENY = new Set(["FPS","PING","LOSS","TAB","SOLO","DUO","TRIO","SQUAD","CITY","LOOTY","BAY","ESC","BACK","SCALE","EXPAND","EARLY","ACCESS","CHAT","NAGS","LENNY","MOTEL","ALARM","GOES","OFF","QUALITY","GAME","MARKER","ADD"]);
 
 export function normalizeHudText(text) {
   return String(text || "").replace(/\s+/g, " ").trim();
@@ -27,14 +24,27 @@ function numOrNull(v, min, max) {
   return n;
 }
 
+function allowedName(s) {
+  if (!s) return null;
+  const n = String(s).trim();
+  if (!/^[A-Za-z][A-Za-z0-9_]{2,20}$/.test(n)) return null;
+  if (NAME_DENY.has(n.toUpperCase())) return null;
+  return n;
+}
+
 export function parseChatEvents(text) {
   const events = [];
+  const seen = new Set();
   const src = String(text || "");
   const re = /(\d{1,2}:\d{2})\s+(\[[^\]]+\]\s+)?([^\n]+?)\s+(was arrested|died)!/gi;
   let m;
   while ((m = re.exec(src))) {
     const kind = m[4].toLowerCase() === "died" ? "died" : "arrested";
-    events.push({ at: m[1], name: m[3].trim(), kind });
+    const ev = { at: m[1], name: m[3].trim(), kind };
+    const key = ev.at + "|" + ev.name.toLowerCase() + "|" + ev.kind;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    events.push(ev);
   }
   return events;
 }
@@ -47,10 +57,8 @@ export function parseRobRunHud(input) {
   let layout = "other";
   if (CITY_MAP.test(raw) && LOOTY.test(raw)) layout = "city_map";
   else if (FPS.test(raw) || /\bSOLO\b/i.test(raw) || LVL.test(n) || BECOME_CRIMINAL.test(raw)) layout = "world_hud";
-  if (LEAVE_FEDS.test(raw) || /\bSHIFT\s+(REPORT|SUMMARY|COMPLETE|ENDED)\b/i.test(raw) || /\bYOU\s+(DIED|WERE ARRESTED)\b/i.test(raw) || /\bCONFISCATED\b/i.test(raw) && !/chat/i.test(raw.slice(0, 40))) {
-    if (/\bYOU\s+(DIED|WERE ARRESTED)\b/i.test(raw) || /\bSHIFT\s+(REPORT|SUMMARY|COMPLETE|ENDED)\b/i.test(raw) || LEAVE_FEDS.test(raw)) {
-      layout = "summary";
-    }
+  if (LEAVE_FEDS.test(raw) || /\bSHIFT\s+(REPORT|SUMMARY|COMPLETE|ENDED)\b/i.test(raw) || /\bYOU\s+(DIED|WERE ARRESTED)\b/i.test(raw)) {
+    layout = "summary";
   }
 
   let role = null;
@@ -65,19 +73,20 @@ export function parseRobRunHud(input) {
   const party = partyM ? partyM[1].toUpperCase() : null;
 
   const bonuses = [];
-  let pm;
   const pctRe = /\+(\d+)%/g;
+  let pm;
   while ((pm = pctRe.exec(raw))) bonuses.push(Number(pm[1]));
 
   let player_name = null;
-  const nameM = raw.match(/\n\s*([A-Za-z][A-Za-z0-9_]{1,20})\s*(?:\n|$)/);
-  // Prefer a line that sits near the health bar labels we always see.
-  const kn = raw.match(/\b(Kneczi|[A-Za-z][A-Za-z0-9_]{2,20})\s+(SOLO|DUO|TRIO|SQUAD)\b/i);
-  if (kn) player_name = kn[1];
-  else {
+  const nearSolo = raw.match(/([A-Za-z][A-Za-z0-9_]{2,20})\s*(?:\n+|\s+)(SOLO|DUO|TRIO|SQUAD)\b/i);
+  if (nearSolo) player_name = allowedName(nearSolo[1]);
+  if (!player_name) {
     const afterChat = raw.split(/Looty Bay Chat/i).pop() || raw;
-    const nm = afterChat.match(/\b([A-Z][A-Za-z0-9_]{2,20})\b/);
-    if (nm && !/SOLO|TAB|BACK|SCALE|EXPAND|EARLY|ACCESS|LOOTY|LENNY/i.test(nm[1])) player_name = nm[1];
+    const nm = afterChat.match(/\b([A-Za-z][A-Za-z0-9_]{2,20})\b/g) || [];
+    for (const cand of nm) {
+      const ok = allowedName(cand);
+      if (ok) { player_name = ok; break; }
+    }
   }
 
   const chat = parseChatEvents(raw);

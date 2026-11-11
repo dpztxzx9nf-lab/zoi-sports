@@ -206,11 +206,20 @@ export async function onRequest({ request, env }) {
 
   let open = null;
   try {
-    open = await env.DB.prepare(
+    const opens = await env.DB.prepare(
       `SELECT * FROM lab_robrun_shifts
         WHERE owner = ? AND deleted_at IS NULL AND ended_at IS NULL
-        ORDER BY id DESC LIMIT 1`
-    ).bind(owner).first();
+        ORDER BY id ASC`
+    ).bind(owner).all();
+    const list = opens.results || [];
+    open = list[0] || null;
+    /* A race can open two in-progress rows. Keep the earliest and close the rest. */
+    for (const extra of list.slice(1)) {
+      await env.DB.prepare(
+        `UPDATE lab_robrun_shifts SET deleted_at = datetime('now'), updated_at = datetime('now')
+          WHERE id = ? AND owner = ? AND ended_at IS NULL AND deleted_at IS NULL`
+      ).bind(extra.id, owner).run();
+    }
   } catch (e) {
     console.error("robrun shift lookup failed", e);
     return json({ ok: false, error: "Couldn't read the shift log. Has the migration been applied?" }, 500);

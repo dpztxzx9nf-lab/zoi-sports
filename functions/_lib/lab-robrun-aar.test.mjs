@@ -82,3 +82,13 @@ test("does not invent cash from a random number on the compass", () => {
   assert.equal(f.cash, null);
   assert.equal(f.notoriety, null);
 });
+
+test("does not take FPS as the player name", () => {
+  const f = parseRobRunHud("FPS: 89 PING: 43MS LOSS: 0%\nSOLO\nKneczi\nSOLO");
+  assert.equal(f.player_name, "Kneczi");
+});
+
+test("duplicate chat lines from overlapping crops count once", () => {
+  const ev = parseChatEvents("22:18 Kneczi was arrested!\n22:18 Kneczi was arrested!\n22:18 Kneczi was arrested!");
+  assert.equal(ev.length, 1);
+});
