@@ -810,3 +810,13 @@ html,body{overflow-x:clip}img{max-width:100%}
 .lab-log-field label{display:flex;align-items:center;gap:.35rem;text-transform:none;letter-spacing:0;font-weight:400;color:var(--t);cursor:pointer}
 .lab-log-error{margin:0;color:#ff9aae;font:400 .85rem/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 .lab-log .btn{justify-self:start}
+
+.lab-matches{margin:1.4rem 0 0;padding:1rem 0 0;border-top:1px solid #e6d3a01f;display:grid;gap:.7rem;max-width:36rem}
+.lab-matches-note{margin:0;color:var(--m);font:400 .85rem/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.lab-match-list{list-style:none;margin:0;padding:0;display:grid;gap:.8rem}
+.lab-match{display:grid;gap:.3rem;margin:0;padding:0 0 .8rem;border-bottom:1px solid #e6d3a014}
+.lab-match-line{margin:0;color:var(--t);font:400 .95rem/1.35 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.lab-match-meta{margin:0;color:var(--m);font:400 .8rem/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.lab-match-actions{display:flex;flex-wrap:wrap;gap:.4rem}
+.lab-match-shot{display:block;max-width:100%;height:auto;border:1px solid #e6d3a033;border-radius:4px;background:#0b0b0d}
+.lab-match-flag{color:#e6d3a0}

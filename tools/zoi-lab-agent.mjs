@@ -47,6 +47,7 @@
 import { inflateSync } from "node:zlib";
 import { open, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { appendFileSync, existsSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { scanLog } from "./zoi-lab-mode.mjs";
@@ -984,6 +985,27 @@ async function saveReplayMark(commit) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+
+/* Hidden scoreboard watcher. Lives in its own WinExe so a global hotkey and
+   a 2.5s desktop blit do not sit on this Node event loop. It takes its own
+   mutex, so a restart of this file will not stack a second copy if the last
+   one is still up. */
+function startCodAar() {
+  if (process.platform !== "win32") return;
+  const exe = path.join(HERE, "zoi-cod-aar.exe");
+  if (!existsSync(exe)) {
+    log("Call of Duty scoreboard capture is not installed (zoi-cod-aar.exe is missing).");
+    return;
+  }
+  try {
+    const child = spawn(exe, [], { detached: true, windowsHide: true, stdio: "ignore", cwd: HERE });
+    child.unref();
+    log("Call of Duty scoreboard capture is on: it watches the screen while the game is running. F9 is a backup.");
+  } catch (e) {
+    log("Couldn't start scoreboard capture: " + (e && e.message ? e.message : e));
+  }
+}
+
 async function loadConfig() {
   if (!existsSync(CONFIG_PATH)) {
     log("No config file at " + CONFIG_PATH + " - create it with the endpoint and the token from the lab page.");
@@ -1245,6 +1267,7 @@ export async function watch(cfg, opts = {}) {
   const ticks = opts.ticks ?? Infinity;     // harness only: stop after N polls
 
   log("Watching Fortnite's config, log and replays, and Call of Duty's settings. Sending when a config changes and settles, when a Fortnite match or replay lands, and once an hour regardless.");
+  startCodAar();
   let last = await signature();
   /* What was last sent, in values rather than bytes. A file the game rewrote
      without changing any setting it sends must not produce a post. */

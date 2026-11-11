@@ -43,6 +43,8 @@ const nodes = {
   codLogDeaths: $('cod-log-deaths'), codLogExtractedWrap: $('cod-log-extracted-wrap'),
   codLogWonWrap: $('cod-log-won-wrap'), codLogError: $('cod-log-error'),
   codLogSubmit: $('cod-log-submit'),
+  codMatches: $('cod-matches'), codMatchList: $('cod-match-list'),
+  codMatchesEmpty: $('cod-matches-empty'),
   pcConnect: $('pc-connect'), pcLabel: $('pc-label'), pcAdd: $('pc-add'),
   pcErrors: $('pc-errors'), pcToken: $('pc-token'), pcTokenValue: $('pc-token-value'),
   pcCopy: $('pc-copy'), pcDone: $('pc-done'), pcCopied: $('pc-copied'),
@@ -92,6 +94,15 @@ const fmtDay = value => {
   const ms = timeOf(value);
   if (!Number.isFinite(ms)) return '';
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'America/Denver' }).format(new Date(ms));
+};
+
+const fmtWhen = value => {
+  const ms = timeOf(value);
+  if (!Number.isFinite(ms)) return '';
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit',
+    timeZone: 'America/Denver',
+  }).format(new Date(ms));
 };
 
 const group = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
@@ -194,6 +205,93 @@ function syncCodOutcomeFields() {
   const extraction = entry && entry.outcome === 'extraction';
   if (nodes.codLogExtractedWrap) nodes.codLogExtractedWrap.hidden = !extraction;
   if (nodes.codLogWonWrap) nodes.codLogWonWrap.hidden = extraction;
+}
+
+
+function renderCodMatches() {
+  if (!nodes.codMatches) return;
+  if (state.game !== 'cod') { hide(nodes.codMatches); return; }
+  show(nodes.codMatches);
+  const all = (state.perf && Array.isArray(state.perf.recent_matches)) ? state.perf.recent_matches : [];
+  const current = (state.perf && state.perf.mode) || state.mode || '';
+  const review = all.filter(m => m.needs_review);
+  const listed = all.filter(m => !m.needs_review && (!current || m.mode === current));
+  const rows = review.concat(listed.filter(m => !m.needs_review));
+  // Keep review rows first, then this mode's confirmed rows, without duplicating.
+  const seen = new Set();
+  const ordered = [];
+  for (const m of rows) {
+    const key = m.id || (m.played_at + ':' + m.mode);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    ordered.push(m);
+  }
+  if (nodes.codMatchList) nodes.codMatchList.replaceChildren();
+  if (!ordered.length) {
+    if (nodes.codMatchesEmpty) show(nodes.codMatchesEmpty);
+    return;
+  }
+  if (nodes.codMatchesEmpty) hide(nodes.codMatchesEmpty);
+  for (const m of ordered) {
+    nodes.codMatchList.append(codMatchRow(m));
+  }
+}
+
+function codMatchRow(m) {
+  const li = el('li', 'lab-match');
+  const title = el('p', 'lab-match-line');
+  const bits = [];
+  bits.push(m.mode_label || m.mode || 'Match');
+  if (m.kills != null) bits.push(m.kills + (m.kills === 1 ? ' kill' : ' kills'));
+  if (m.deaths != null) bits.push(m.deaths + (m.deaths === 1 ? ' death' : ' deaths'));
+  if (m.score != null) bits.push('score ' + group(m.score));
+  if (m.placement != null) bits.push('placed ' + m.placement);
+  if (m.extracted === 1) bits.push('extracted');
+  if (m.extracted === 0) bits.push('did not extract');
+  if (m.won === 1) bits.push('won');
+  if (m.won === 0) bits.push('lost');
+  title.textContent = bits.join(' · ');
+  li.append(title);
+  const meta = el('p', 'lab-match-meta');
+  const src = m.source === 'ocr' ? 'From the scoreboard' : 'Logged by hand';
+  const when = fmtWhen(m.played_at);
+  meta.textContent = [when, src, m.needs_review ? 'Needs review' : null].filter(Boolean).join(' · ');
+  if (m.needs_review) meta.classList.add('lab-match-flag');
+  li.append(meta);
+  if (m.image) {
+    const img = document.createElement('img');
+    img.className = 'lab-match-shot';
+    img.src = m.image;
+    img.alt = 'After-action report';
+    li.append(img);
+  }
+  if (m.id && (m.needs_review || m.source === 'ocr')) {
+    const actions = el('div', 'lab-match-actions');
+    if (m.needs_review) {
+      const ok = el('button', 'lab-mini', 'Looks right');
+      ok.type = 'button';
+      ok.addEventListener('click', () => patchCodMatch(m.id, { confirm: true }, ok));
+      actions.append(ok);
+    }
+    const rm = el('button', 'lab-mini', 'Remove');
+    rm.type = 'button';
+    rm.addEventListener('click', () => patchCodMatch(m.id, { deleted: true }, rm));
+    actions.append(rm);
+    li.append(actions);
+  }
+  return li;
+}
+
+async function patchCodMatch(id, body, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api('/api/lab/cod-matches', { method: 'PATCH', body: { id, ...body } });
+    if (!r.ok) throw new Error('fail');
+    await load();
+  } catch (e) {
+    if (e instanceof AuthError) { needSignIn(); return; }
+    if (btn) btn.disabled = false;
+  }
 }
 
 function renderCodLog() {
@@ -584,17 +682,20 @@ function render() {
   renderGameSwitch();
   renderModeSwitch();
   renderCodLog();
+  renderCodMatches();
   const list = (state.perf && Array.isArray(state.perf.changes)) ? state.perf.changes : [];
   const open = list.filter(isOpenChange);
   const past = list.filter(c => !isOpenChange(c));
   const lead = pickLead(open, past);
   const settled = isSettledLead(lead);
+  const hasCodMatches = state.game === 'cod' && state.perf && Array.isArray(state.perf.recent_matches) && state.perf.recent_matches.length;
 
   nodes.nowLead.replaceChildren();
   nodes.now.replaceChildren();
 
   if (!list.length) {
-    show(nodes.empty);
+    if (hasCodMatches) hide(nodes.empty);
+    else show(nodes.empty);
     hide(nodes.nowLead);
     hide(nodes.nowBlock);
     renderCharts();

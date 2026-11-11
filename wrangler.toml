@@ -13,6 +13,9 @@ database_id = "3c5d2cf7-5335-4468-bcd0-0ebbea094760"
 binding = "MEDIA"
 bucket_name = "zoi-media"
 
+[ai]
+binding = "AI"
+
 [[services]]
 binding = "NOTIFY"
 service = "zoi-tryout-notify"
@@ -33,6 +36,9 @@ database_id = "3c5d2cf7-5335-4468-bcd0-0ebbea094760"
 [[env.preview.r2_buckets]]
 binding = "MEDIA"
 bucket_name = "zoi-media"
+
+[env.preview.ai]
+binding = "AI"
 
 [[env.preview.services]]
 binding = "NOTIFY"

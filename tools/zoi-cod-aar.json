@@ -1,0 +1,25 @@
+{
+  "poll_ms": 2500,
+  "detect_width": 640,
+  "min_score": 3,
+  "near_miss": 1.5,
+  "keywords": [
+    { "text": "after action report", "score": 3 },
+    { "text": "after-action report", "score": 3 },
+    { "text": "after action", "score": 2.5 },
+    { "text": "failed to extract", "score": 2.5 },
+    { "text": "you extracted", "score": 2.5 },
+    { "text": "extraction failed", "score": 2.5 },
+    { "text": "mission results", "score": 2 },
+    { "text": "match results", "score": 2 },
+    { "text": "xp summary", "score": 1.5 },
+    { "text": "victory", "score": 1.5 },
+    { "text": "defeat", "score": 1.5 },
+    { "text": "extracted", "score": 1 },
+    { "text": "placement", "score": 1 },
+    { "text": "scoreboard", "score": 1 }
+  ],
+  "pair_bonus": [
+    { "all": ["kills", "deaths"], "score": 0.5 }
+  ]
+}

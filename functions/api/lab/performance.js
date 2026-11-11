@@ -12,7 +12,7 @@
    rows and the plain-language note about what to watch for. */
 import { CATALOG, SELECT_TEST, identity, json, currentOf } from "../../_lib/lab.js";
 import { performance } from "../../_lib/lab-perf.js";
-import { COD_CATALOG, COD_GAME, COD_MODES, currentCodOf, fortniteGameSql, gamesPresent, hasColumn } from "../../_lib/lab-cod.js";
+import { COD_CATALOG, COD_GAME, COD_MODES, currentCodOf, fortniteGameSql, gamesPresent, hasColumn, isCodMode, modeOf } from "../../_lib/lab-cod.js";
 import { modesWithMatches, performanceCod, pickCodMode } from "../../_lib/lab-cod-perf.js";
 
 const READING_COLUMNS = "taken_at,created_at,matches,wins,kills,deaths,kd,win_rate";
@@ -92,9 +92,15 @@ async function performanceForCod(env, who, request) {
 
   let matches = [];
   try {
+    const hasMeta = await hasColumn(env, "lab_cod_matches", "needs_review");
+    const cols = hasMeta
+      ? "id,played_at,mode,kills,extracted,won,deaths,score,placement,source,needs_review,confidence,aar_key"
+      : "id,played_at,mode,kills,extracted,won,deaths";
+    const where = hasMeta
+      ? "WHERE owner = ? AND deleted_at IS NULL"
+      : "WHERE owner = ?";
     const rows = await env.DB.prepare(
-      `SELECT played_at,mode,kills,extracted,won,deaths FROM lab_cod_matches
-        WHERE owner = ? ORDER BY datetime(played_at) ASC, id ASC`
+      `SELECT ${cols} FROM lab_cod_matches ${where} ORDER BY datetime(played_at) ASC, id ASC`
     ).bind(who.id).all();
     matches = rows.results || [];
   } catch (e) {
@@ -102,10 +108,11 @@ async function performanceForCod(env, who, request) {
     matches = [];
   }
 
-  const modes = modesWithMatches(matches);
-  const mode = pickCodMode(matches, requested);
+  const scored = matches.filter((m) => !Number(m.needs_review) && isCodMode(m.mode));
+  const modes = modesWithMatches(scored);
+  const mode = pickCodMode(scored, requested);
   const payload = mode
-    ? performanceCod({ tests, matches, mode })
+    ? performanceCod({ tests, matches: scored, mode })
     : { mode: null, mode_label: null, outcome: null, outcome_label: null, min_games: 25, chart_min_games: 5, changes: tests.map((t) => ({
         id: t.id, setting: t.setting, label: t.label, from_value: t.from_value, to_value: t.to_value,
         status: t.status, started_at: t.started_at, decided_at: t.decided_at, result_note: t.result_note,
@@ -124,6 +131,37 @@ async function performanceForCod(env, who, request) {
     lastMatch: null,
     replays_available: false,
     current: currentCodOf(snapshot),
+    recent_matches: recentCodMatches(matches),
+  });
+}
+
+
+function recentCodMatches(rows) {
+  const list = Array.isArray(rows) ? rows.slice() : [];
+  list.sort((a, b) => {
+    const tb = Date.parse(b.played_at || "") || 0;
+    const ta = Date.parse(a.played_at || "") || 0;
+    return tb - ta || (Number(b.id) || 0) - (Number(a.id) || 0);
+  });
+  return list.slice(0, 40).map((m) => {
+    const meta = modeOf(m.mode);
+    const id = Number(m.id);
+    return {
+      id: Number.isInteger(id) && id > 0 ? id : null,
+      played_at: m.played_at || null,
+      mode: m.mode || null,
+      mode_label: meta ? meta.label : (m.mode || "Needs review"),
+      kills: m.kills == null ? null : Number(m.kills),
+      deaths: m.deaths == null ? null : Number(m.deaths),
+      score: m.score == null ? null : Number(m.score),
+      placement: m.placement == null ? null : Number(m.placement),
+      extracted: m.extracted == null ? null : Number(m.extracted),
+      won: m.won == null ? null : Number(m.won),
+      source: m.source === "ocr" ? "ocr" : "manual",
+      needs_review: Boolean(Number(m.needs_review)),
+      confidence: m.confidence == null ? null : Number(m.confidence),
+      image: m.aar_key && Number.isInteger(id) && id > 0 ? "/api/lab/cod-aar-image?id=" + id : null,
+    };
   });
 }
 
