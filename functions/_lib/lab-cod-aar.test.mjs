@@ -258,3 +258,14 @@ test("screen fixtures name the expected Warzone and Resurgence results", () => {
   assert.equal(br.expected.won, 0);
   assert.equal(br.expected.extracted, null);
 });
+
+test("a stylized local 126th does not wipe a full-image 120th", () => {
+  const local = parseOcrPayload({ placement: 126, kills: 0, damage: 350, confidence: 1 });
+  local._source = "local";
+  const vision = parseOcrPayload({ placement: 120, kills: 0, damage: 350, contracts: 0, ed_ratio: 0, winstreaks: 0, won: false, confidence: 1 });
+  vision._source = "vision";
+  const merged = mergeMatchReads([local, vision], { text: "120th place" });
+  assert.equal(merged.placement, 120);
+  assert.equal(merged.mode, "warzone");
+  assert.equal(merged.won, 0);
+});

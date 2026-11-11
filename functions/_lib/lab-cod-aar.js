@@ -451,6 +451,10 @@ export function mergeMatchReads(reads, opts = {}) {
   const keys = [...STAT_INT_FIELDS, ...STAT_FLAG_FIELDS, ...STAT_TEXT_FIELDS, ...STAT_EXTRA_FIELDS, "mode_guess", "confidence"];
   for (const k of keys) {
     fields[k] = majorityField(list.map((r) => voteOf(r, k)));
+    if (fields[k] == null) {
+      const vision = list.find((r) => r._source === "vision" && r[k] != null && r[k] !== "");
+      if (vision) fields[k] = vision[k];
+    }
   }
   fields.mode = inferMode({
     reads: list,
