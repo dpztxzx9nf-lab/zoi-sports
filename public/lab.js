@@ -17,15 +17,32 @@ const el = (tag, cls, text) => {
 const show = n => { n.hidden = false; };
 const hide = n => { n.hidden = true; };
 
-const state = { perf: null, tokens: [] };
+const GAME_KEY = 'zoi-lab-game';
+const MODE_KEY = 'zoi-lab-cod-mode';
+const storedGame = () => {
+  try { return sessionStorage.getItem(GAME_KEY) || 'fortnite'; } catch { return 'fortnite'; }
+};
+const storedMode = () => {
+  try { return sessionStorage.getItem(MODE_KEY) || ''; } catch { return ''; }
+};
+const rememberGame = (g) => { try { sessionStorage.setItem(GAME_KEY, g); } catch {} };
+const rememberMode = (m) => { try { if (m) sessionStorage.setItem(MODE_KEY, m); } catch {} };
+
+const state = { perf: null, tokens: [], game: storedGame() === 'cod' ? 'cod' : 'fortnite', mode: storedMode() };
 const nodes = {
   loadError: $('load-error'), loadErrorText: $('load-error-text'), retry: $('retry'),
   app: $('app'), empty: $('empty'),
   nowLead: $('now-lead'), now: $('now'), nowBlock: $('now-block'),
+  gameSwitch: $('game-switch'), gameFortnite: $('game-fortnite'), gameCod: $('game-cod'),
+  modeSwitch: $('mode-switch'),
   chartsBlock: $('charts-block'),
   chartKpm: $('chart-kpm'), chartKpmBox: $('chart-kpm-box'),
-  chartWin: $('chart-win'), chartWinBox: $('chart-win-box'),
+  chartWin: $('chart-win'), chartWinBox: $('chart-win-box'), chartWinTitle: $('chart-win-title'),
   chartLegend: $('chart-legend'), chartEmpty: $('chart-empty'),
+  codLog: $('cod-log'), codLogMode: $('cod-log-mode'), codLogKills: $('cod-log-kills'),
+  codLogDeaths: $('cod-log-deaths'), codLogExtractedWrap: $('cod-log-extracted-wrap'),
+  codLogWonWrap: $('cod-log-won-wrap'), codLogError: $('cod-log-error'),
+  codLogSubmit: $('cod-log-submit'),
   pcConnect: $('pc-connect'), pcLabel: $('pc-label'), pcAdd: $('pc-add'),
   pcErrors: $('pc-errors'), pcToken: $('pc-token'), pcTokenValue: $('pc-token-value'),
   pcCopy: $('pc-copy'), pcDone: $('pc-done'), pcCopied: $('pc-copied'),
@@ -107,11 +124,95 @@ function needSignIn() {
   failLoad('Your sign-in expired. Reload the page to sign in again.');
 }
 
+function performancePath() {
+  if (state.game !== 'cod') return '/api/lab/performance';
+  let path = '/api/lab/performance?game=cod';
+  if (state.mode) path += '&mode=' + encodeURIComponent(state.mode);
+  return path;
+}
+
+function renderGameSwitch() {
+  const games = (state.perf && state.perf.games) || {};
+  if (!games.cod || !nodes.gameSwitch) { if (nodes.gameSwitch) hide(nodes.gameSwitch); return; }
+  nodes.gameFortnite.setAttribute('aria-pressed', state.game !== 'cod' ? 'true' : 'false');
+  nodes.gameCod.setAttribute('aria-pressed', state.game === 'cod' ? 'true' : 'false');
+  show(nodes.gameSwitch);
+}
+
+function renderModeSwitch() {
+  if (!nodes.modeSwitch) return;
+  nodes.modeSwitch.replaceChildren();
+  const modes = (state.perf && Array.isArray(state.perf.modes)) ? state.perf.modes : [];
+  if (state.game !== 'cod' || !modes.length) { hide(nodes.modeSwitch); return; }
+  const current = state.perf.mode || state.mode || modes[0].id;
+  for (const m of modes) {
+    const btn = el('button', 'lab-switch-btn');
+    btn.type = 'button';
+    btn.textContent = m.label;
+    btn.setAttribute('aria-pressed', m.id === current ? 'true' : 'false');
+    btn.addEventListener('click', () => {
+      if (state.mode === m.id) return;
+      state.mode = m.id;
+      rememberMode(m.id);
+      load();
+    });
+    nodes.modeSwitch.append(btn);
+  }
+  show(nodes.modeSwitch);
+}
+
+function fillCodModeSelect() {
+  if (!nodes.codLogMode) return;
+  const catalog = (state.perf && Array.isArray(state.perf.mode_catalog)) ? state.perf.mode_catalog : [];
+  const previous = nodes.codLogMode.value;
+  nodes.codLogMode.replaceChildren();
+  let group = null, groupEl = null;
+  for (const m of catalog) {
+    if (m.group !== group) {
+      group = m.group;
+      groupEl = document.createElement('optgroup');
+      groupEl.label = group;
+      nodes.codLogMode.append(groupEl);
+    }
+    const opt = document.createElement('option');
+    opt.value = m.id;
+    opt.textContent = m.label;
+    (groupEl || nodes.codLogMode).append(opt);
+  }
+  const prefer = previous || state.mode || 'dmz';
+  if ([...nodes.codLogMode.options].some(o => o.value === prefer)) nodes.codLogMode.value = prefer;
+  syncCodOutcomeFields();
+}
+
+function modeCatalogEntry(id) {
+  const catalog = (state.perf && Array.isArray(state.perf.mode_catalog)) ? state.perf.mode_catalog : [];
+  return catalog.find(m => m.id === id) || null;
+}
+
+function syncCodOutcomeFields() {
+  const entry = modeCatalogEntry(nodes.codLogMode && nodes.codLogMode.value);
+  const extraction = entry && entry.outcome === 'extraction';
+  if (nodes.codLogExtractedWrap) nodes.codLogExtractedWrap.hidden = !extraction;
+  if (nodes.codLogWonWrap) nodes.codLogWonWrap.hidden = extraction;
+}
+
+function renderCodLog() {
+  if (!nodes.codLog) return;
+  if (state.game !== 'cod') { hide(nodes.codLog); return; }
+  fillCodModeSelect();
+  show(nodes.codLog);
+}
+
+function radioValue(name) {
+  const picked = document.querySelector('input[name="' + name + '"]:checked');
+  return picked ? picked.value : '';
+}
+
 async function load() {
   hide(nodes.loadError);
   let r;
   try {
-    r = await api('/api/lab/performance');
+    r = await api(performancePath());
   } catch (e) {
     if (e instanceof AuthError) { needSignIn(); return false; }
     failLoad("Couldn't reach the lab. Check the connection and try again.");
@@ -122,6 +223,15 @@ async function load() {
     return false;
   }
   state.perf = r.data || {};
+  if (state.game === 'cod' && state.perf.mode) {
+    state.mode = state.perf.mode;
+    rememberMode(state.mode);
+  }
+  /* A remembered COD view with no snapshot yet falls back to Fortnite. */
+  if (state.game === 'cod' && state.perf.games && !state.perf.games.cod) {
+    state.game = 'fortnite';
+    rememberGame('fortnite');
+  }
   signInNeeded = false;
   hide(nodes.loadError);
   show(nodes.app);
@@ -444,14 +554,17 @@ function renderCharts() {
     empty: 'Kills a match needs a kill count in a session.',
   }));
 
-  nodes.chartWinBox.append(lineChart(series(s => s.win_rate), {
+  const outcome = p.outcome === 'extraction' ? 'extraction' : 'win';
+  const outcomeLabel = p.outcome_label || (outcome === 'extraction' ? 'Extraction rate' : 'Win rate');
+  if (nodes.chartWinTitle) nodes.chartWinTitle.textContent = outcomeLabel;
+  nodes.chartWinBox.append(lineChart(series(s => outcome === 'extraction' ? s.extract_rate : s.win_rate), {
     min: 0,
     max: 0.15,
     cap: 1,
-    label: 'Win rate by session',
+    label: outcomeLabel + ' by session',
     axis: v => Math.round(v * 100) + '%',
     firstLabel, lastLabel,
-    empty: 'Win rate needs a win recorded in a session.',
+    empty: outcomeLabel + ' needs a result recorded in a session.',
   }));
 
   /* A tiny legend, only for the marks that are actually on the chart. No prose. */
@@ -468,6 +581,9 @@ function renderCharts() {
 }
 
 function render() {
+  renderGameSwitch();
+  renderModeSwitch();
+  renderCodLog();
   const list = (state.perf && Array.isArray(state.perf.changes)) ? state.perf.changes : [];
   const open = list.filter(isOpenChange);
   const past = list.filter(c => !isOpenChange(c));
@@ -668,15 +784,84 @@ function bootPc() {
 }
 
 
+async function submitCodLog(e) {
+  e.preventDefault();
+  if (nodes.codLogError) { nodes.codLogError.textContent = ''; hide(nodes.codLogError); }
+  const mode = nodes.codLogMode.value;
+  const entry = modeCatalogEntry(mode);
+  const kills = Number(nodes.codLogKills.value);
+  const deathsRaw = nodes.codLogDeaths.value.trim();
+  const body = { mode, kills };
+  if (deathsRaw !== '') body.deaths = Number(deathsRaw);
+  if (entry && entry.outcome === 'extraction') {
+    const v = radioValue('cod-extracted');
+    if (v !== 'yes' && v !== 'no') {
+      nodes.codLogError.textContent = 'Say whether you extracted.';
+      show(nodes.codLogError);
+      return;
+    }
+    body.extracted = v === 'yes';
+  } else {
+    const v = radioValue('cod-won');
+    if (v !== 'yes' && v !== 'no') {
+      nodes.codLogError.textContent = 'Say whether you won.';
+      show(nodes.codLogError);
+      return;
+    }
+    body.won = v === 'yes';
+  }
+  nodes.codLogSubmit.disabled = true;
+  try {
+    const r = await api('/api/lab/cod-matches', { method: 'POST', body });
+    if (!r.ok) {
+      nodes.codLogError.textContent = errorsFrom(r.data, "Couldn't save that match.").join(' ');
+      show(nodes.codLogError);
+      return;
+    }
+    state.mode = mode;
+    rememberMode(mode);
+    nodes.codLogKills.value = '';
+    nodes.codLogDeaths.value = '';
+    for (const name of ['cod-extracted', 'cod-won']) {
+      document.querySelectorAll('input[name="' + name + '"]').forEach(i => { i.checked = false; });
+    }
+    await load();
+  } catch (err) {
+    if (err instanceof AuthError) { needSignIn(); return; }
+    nodes.codLogError.textContent = "Couldn't reach the lab. Nothing was saved.";
+    show(nodes.codLogError);
+  } finally {
+    nodes.codLogSubmit.disabled = false;
+  }
+}
+
 function boot() {
   nodes.retry.addEventListener('click', () => {
     if (signInNeeded) { location.reload(); return; }
     load();
   });
-  bootPc();
+  if (nodes.gameFortnite) {
+    nodes.gameFortnite.addEventListener('click', () => {
+      if (state.game === 'fortnite') return;
+      state.game = 'fortnite';
+      rememberGame('fortnite');
+      load();
+    });
+  }
+  if (nodes.gameCod) {
+    nodes.gameCod.addEventListener('click', () => {
+      if (state.game === 'cod') return;
+      state.game = 'cod';
+      rememberGame('cod');
+      load();
+    });
+  }
+  if (nodes.codLog) nodes.codLog.addEventListener('submit', submitCodLog);
+  if (nodes.codLogMode) nodes.codLogMode.addEventListener('change', syncCodOutcomeFields);
+  if (nodes.pcConnect) bootPc();
   load();
-  loadPc();
-  loadStats();
+  if (nodes.pcConnect) loadPc();
+  if (nodes.pcStats) loadStats();
 }
 
 boot();

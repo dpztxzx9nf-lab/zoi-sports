@@ -14,6 +14,8 @@ import {
   SNAPSHOT_MAX_SETTINGS, canonicalJson, json, sameValue, sha256Hex, str, valueText,
 } from "../_lib/lab.js";
 import { epicIdOf, fetchStats, recordStats, summarize, updateGamesPlayed } from "../_lib/lab-stats.js";
+import { FORTNITE_GAME, fortniteGameSql, hasColumn } from "../_lib/lab-cod.js";
+import { syncCodSnapshot } from "../_lib/lab-cod-sync.js";
 
 const TAKEN_AT_MAX = 40;
 const SOURCE_MAX = 40;
@@ -124,15 +126,41 @@ export async function onRequest({ request, env }) {
   if (!takenAt) return badRequest("takenAt is required.");
 
   const settings = body.settings;
-  if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+  const hasFortnite = Boolean(settings && typeof settings === "object" && !Array.isArray(settings)
+    && Object.keys(settings).length > 0);
+  const hasCod = Boolean(body.cod && typeof body.cod === "object" && !Array.isArray(body.cod)
+    && body.cod.settings && typeof body.cod.settings === "object");
+  if (!hasFortnite && !hasCod) {
     return badRequest("settings has to be an object of name to value.");
   }
-  const names = Object.keys(settings);
-  if (names.length < MIN_SETTINGS) {
+  const names = hasFortnite ? Object.keys(settings) : [];
+  if (hasFortnite && names.length < MIN_SETTINGS) {
     return badRequest(`settings needs at least ${MIN_SETTINGS} entries.`);
   }
-  if (names.length > SNAPSHOT_MAX_SETTINGS) {
+  if (hasFortnite && names.length > SNAPSHOT_MAX_SETTINGS) {
     return json({ ok: false, error: "That snapshot has too many settings." }, 413);
+  }
+
+  let created = [];
+  const skipped = [];
+  const closed = [];
+  let duplicate = false;
+  let matchResult = { stored: 0, seen: 0, dropped: [] };
+  let replayResult = { stored: 0, seen: 0, attached: 0, dropped: [] };
+  let stats = { skipped: "no fortnite snapshot" };
+
+  if (!hasFortnite) {
+    /* A COD-only send still carries takenAt, and may ride with no Fortnite
+       config at all. Matches and career stats stay Fortnite-only. */
+    let codResult = { created: [], closed: [], duplicate: false, skipped: true };
+    try {
+      codResult = await syncCodSnapshot(env, owner, body, takenAt);
+    } catch (e) {
+      console.error("lab sync cod failed", e);
+      return json({ ok: false, error: "Couldn't save that snapshot." }, 500);
+    }
+    if (codResult.error) return json({ ok: false, errors: [codResult.error] }, 422);
+    return json({ ok: true, created: [], skipped: [], closed: [], duplicate: false, stats, matches: matchResult, replayStats: replayResult, cod: codResult });
   }
 
   /* The PC agent finds the Epic id in its own Saved\Cloud\<id>\ folder and
@@ -211,36 +239,45 @@ export async function onRequest({ request, env }) {
   const payload = canonicalJson(stored);
   const payloadHash = await sha256Hex(payload);
 
-  let created = [];
   /* Kept in the reply for the agent's sake, but nothing goes in it any more:
      every tracked setting that moves now either opens a test or closes the stale
      one and opens its own. It stays in the shape so an older agent reading this
      response does not see a field vanish under it. */
-  const skipped = [];
-  const closed = [];
-  let duplicate = false;
-  let matchResult = { stored: 0, seen: 0, dropped: [] };
 
   try {
     /* The newest row decides both the duplicate check and the diff baseline.
        Nothing older is ever read, so one owner's history cannot see another's. */
-    const previous = await env.DB.prepare(
-      "SELECT payload,payload_hash FROM lab_snapshots WHERE owner = ? ORDER BY id DESC LIMIT 1"
-    ).bind(owner).first();
+    const gameCol = await hasColumn(env, "lab_snapshots", "game");
+    const previous = gameCol
+      ? await env.DB.prepare(
+          "SELECT payload,payload_hash FROM lab_snapshots WHERE owner = ? AND " + fortniteGameSql + " ORDER BY id DESC LIMIT 1"
+        ).bind(owner).first()
+      : await env.DB.prepare(
+          "SELECT payload,payload_hash FROM lab_snapshots WHERE owner = ? ORDER BY id DESC LIMIT 1"
+        ).bind(owner).first();
 
     duplicate = Boolean(previous && previous.payload_hash === payloadHash);
 
     if (!duplicate) {
-      await env.DB.prepare(
-        "INSERT INTO lab_snapshots (owner,taken_at,payload,payload_hash) VALUES (?,?,?,?)"
-      ).bind(owner, takenAt, payload, payloadHash).run();
-
-      /* Keep the newest SNAPSHOT_KEEP and drop the rest. */
-      await env.DB.prepare(
-        `DELETE FROM lab_snapshots WHERE owner = ? AND id NOT IN (
-           SELECT id FROM lab_snapshots WHERE owner = ? ORDER BY id DESC LIMIT ?
-         )`
-      ).bind(owner, owner, SNAPSHOT_KEEP).run();
+      if (gameCol) {
+        await env.DB.prepare(
+          "INSERT INTO lab_snapshots (owner,taken_at,payload,payload_hash,game) VALUES (?,?,?,?,?)"
+        ).bind(owner, takenAt, payload, payloadHash, FORTNITE_GAME).run();
+        await env.DB.prepare(
+          `DELETE FROM lab_snapshots WHERE owner = ? AND ` + fortniteGameSql + ` AND id NOT IN (
+             SELECT id FROM lab_snapshots WHERE owner = ? AND ` + fortniteGameSql + ` ORDER BY id DESC LIMIT ?
+           )`
+        ).bind(owner, owner, SNAPSHOT_KEEP).run();
+      } else {
+        await env.DB.prepare(
+          "INSERT INTO lab_snapshots (owner,taken_at,payload,payload_hash) VALUES (?,?,?,?)"
+        ).bind(owner, takenAt, payload, payloadHash).run();
+        await env.DB.prepare(
+          `DELETE FROM lab_snapshots WHERE owner = ? AND id NOT IN (
+             SELECT id FROM lab_snapshots WHERE owner = ? ORDER BY id DESC LIMIT ?
+           )`
+        ).bind(owner, owner, SNAPSHOT_KEEP).run();
+      }
 
       let before = {};
       if (previous && previous.payload) {
@@ -262,10 +299,16 @@ export async function onRequest({ request, env }) {
         if (!fromValue || !toValue || sameValue(fromValue, toValue)) continue;
 
         /* One open test per setting. */
-        const open = await env.DB.prepare(
-          `SELECT id,to_value FROM lab_tests WHERE owner = ? AND setting = ? AND status = 'testing'
-           ORDER BY id DESC LIMIT 1`
-        ).bind(owner, setting).first();
+        const testGameCol = await hasColumn(env, "lab_tests", "game");
+        const open = testGameCol
+          ? await env.DB.prepare(
+              `SELECT id,to_value FROM lab_tests WHERE owner = ? AND setting = ? AND status = 'testing' AND ` + fortniteGameSql + `
+               ORDER BY id DESC LIMIT 1`
+            ).bind(owner, setting).first()
+          : await env.DB.prepare(
+              `SELECT id,to_value FROM lab_tests WHERE owner = ? AND setting = ? AND status = 'testing'
+               ORDER BY id DESC LIMIT 1`
+            ).bind(owner, setting).first();
 
         /* Any open test here is stale, and it used to be possible to leave one
            open for ever. There was a branch above this that read "the open test
@@ -337,7 +380,14 @@ export async function onRequest({ request, env }) {
      straddle rule. Only a test opening warrants one - an ordinary heartbeat that
      did it too would fill lab_stats with rows that mark nothing. */
   const stats = await syncStats(env, owner, tokenId, epicAccountId, created.map((t) => t.id));
-  return json({ ok: true, created, skipped, closed, duplicate, stats, matches: matchResult, replayStats: replayResult });
+  let codResult = { created: [], closed: [], duplicate: false, skipped: true };
+  try {
+    codResult = await syncCodSnapshot(env, owner, body, takenAt);
+  } catch (e) {
+    console.error("lab sync cod failed", e);
+    codResult = { created: [], closed: [], duplicate: false, skipped: true, error: "Couldn't save the COD snapshot." };
+  }
+  return json({ ok: true, created, skipped, closed, duplicate, stats, matches: matchResult, replayStats: replayResult, cod: codResult });
 }
 
 /* ------------------------------------------------------------- the stats ---

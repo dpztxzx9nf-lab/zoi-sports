@@ -60,11 +60,13 @@ CREATE TABLE IF NOT EXISTS lab_tests (
   result_note TEXT,
   started_at TEXT NOT NULL DEFAULT (datetime('now')),
   decided_at TEXT,
-  owner TEXT
+  owner TEXT,
+  game TEXT NOT NULL DEFAULT 'fortnite'
 );
 CREATE INDEX IF NOT EXISTS idx_lab_setting ON lab_tests(setting, started_at);
 CREATE INDEX IF NOT EXISTS idx_lab_status ON lab_tests(status);
 CREATE INDEX IF NOT EXISTS idx_lab_owner ON lab_tests(owner, started_at);
+CREATE INDEX IF NOT EXISTS idx_lab_tests_owner_game ON lab_tests(owner, game, started_at);
 
 -- Tokens are stored hashed: a copy of this table cannot be turned back into a
 -- working token. last_seen_at is what the settings page shows as "last sync".
@@ -86,9 +88,11 @@ CREATE TABLE IF NOT EXISTS lab_snapshots (
   taken_at TEXT NOT NULL,
   payload TEXT NOT NULL,
   payload_hash TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  game TEXT NOT NULL DEFAULT 'fortnite'
 );
 CREATE INDEX IF NOT EXISTS idx_lab_snapshots_owner ON lab_snapshots(owner, created_at);
+CREATE INDEX IF NOT EXISTS idx_lab_snapshots_owner_game ON lab_snapshots(owner, game, id);
 
 CREATE TABLE IF NOT EXISTS lab_stats (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -132,3 +136,27 @@ CREATE TABLE IF NOT EXISTS lab_matches (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_lab_matches_owner_key ON lab_matches(owner, match_key);
 CREATE INDEX IF NOT EXISTS idx_lab_matches_owner_ended ON lab_matches(owner, ended_at);
+
+-- 0013: lab rows are tagged with the game they belong to. Fortnite is the
+-- default, so older inserts that do not name a game still land there.
+-- schema.sql is the end state, so the columns live on the CREATE TABLE
+-- definitions as well as this comment.
+
+-- lab_tests.game and lab_snapshots.game are added in 0013. Recreating this
+-- file's CREATE TABLE statements from scratch would drift from earlier
+-- migrations; the live database gets the columns from 0013. A brand-new
+-- database created from this file plus migrations applies 0013 once.
+
+CREATE TABLE IF NOT EXISTS lab_cod_matches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner TEXT NOT NULL,
+  played_at TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  kills INTEGER NOT NULL,
+  extracted INTEGER,
+  won INTEGER,
+  deaths INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_lab_cod_matches_owner ON lab_cod_matches(owner, played_at);
+CREATE INDEX IF NOT EXISTS idx_lab_cod_matches_owner_mode ON lab_cod_matches(owner, mode, played_at);

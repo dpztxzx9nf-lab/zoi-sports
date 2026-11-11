@@ -1,0 +1,28 @@
+1
+
+//
+// Gameplay
+
+// 1st Person Field of View
+Fov@1;65095;45350 = 90.000000 // 60.000000 to 120.000000
+
+// Scale view with Field of view when Aiming Down Sights
+ADSFovScaling@0;57752;20945 = true
+
+//
+// Mouse and Gamepad
+
+// Multiplies mouse sensitivity when aiming down sights with any scope
+ADSSensitivity@1;24622;21371 = 0.900000 // 0.100000 to 4.000000
+
+// Adjust timing for the ADS multipliers above to take effect when aiming down sight
+ADSTimingSensitivity@1;63094;11445 = interpolated // one of immediately, interpolated, delayed
+
+// Adjusts mouse acceleration
+MouseAcceleration@1;24278;7764 = 0.000000 // 0.000000 to 10.000000
+
+// Adjusts mouse sensitivity for both axes
+MouseHorizontalSensibility@0;12088;6692 = 8.000000 // 0.010000 to 100.000000
+
+// Multiplies mouse sensitivity on vertical axis only
+MouseVerticalSensibility@1;43387;21371 = 1.000000 // 0.010000 to 4.000000
