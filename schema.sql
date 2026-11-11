@@ -164,6 +164,8 @@ CREATE TABLE IF NOT EXISTS lab_cod_matches (
   aar_key TEXT,
   fingerprint TEXT,
   ocr_json TEXT,
+  damage INTEGER,
+  stats TEXT,
   deleted_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

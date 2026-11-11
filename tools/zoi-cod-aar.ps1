@@ -6,7 +6,9 @@
 
 param(
   [switch]$Bench,
-  [switch]$Once
+  [switch]$Once,
+  [string]$File,
+  [int]$RereadId = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -87,6 +89,7 @@ $script:PollMs = 2500
 $script:DetectWidth = 2560
 $script:MinScore = 3
 $script:NearMiss = 1
+$script:PlayerName = 'Kneczi'
 $script:Keywords = New-Object System.Collections.Generic.List[object]
 function Add-Kw([string]$Text, [double]$Score) {
   $script:Keywords.Add([pscustomobject]@{ Text = (Normalize-Text $Text).Trim(); Score = $Score })
@@ -123,7 +126,7 @@ if (Test-Path $DetectPath) {
   try {
     $cfg = Get-Content -LiteralPath $DetectPath -Raw | ConvertFrom-Json
     if ($cfg.poll_ms -ge 1000 -and $cfg.poll_ms -le 10000) { $script:PollMs = [int]$cfg.poll_ms }
-    if ($cfg.detect_width -ge 320 -and $cfg.detect_width -le 1280) { $script:DetectWidth = [int]$cfg.detect_width }
+    if ($cfg.detect_width -ge 320 -and $cfg.detect_width -le 3840) { $script:DetectWidth = [int]$cfg.detect_width }
     if ($cfg.min_score -gt 0) { $script:MinScore = [double]$cfg.min_score }
     if ($cfg.near_miss -gt 0) { $script:NearMiss = [double]$cfg.near_miss }
     if ($cfg.keywords) {
@@ -180,6 +183,271 @@ function Recognize-Bitmap([System.Drawing.Bitmap]$Bmp) {
   } catch { return '' } finally { $ms.Dispose() }
 }
 
+
+function Recognize-Words([System.Drawing.Bitmap]$Bmp) {
+  $words = New-Object System.Collections.Generic.List[object]
+  if (-not $script:OcrEngine -or -not $Bmp) { return @{ Text = ''; Words = $words } }
+  $ms = New-Object System.IO.MemoryStream
+  try {
+    $jpeg = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.FormatID -eq [System.Drawing.Imaging.ImageFormat]::Jpeg.Guid }
+    $enc = New-Object System.Drawing.Imaging.EncoderParameters 1
+    $enc.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality, [long]90)
+    $Bmp.Save($ms, $jpeg, $enc)
+    $ms.Position = 0
+    $ras = [System.IO.WindowsRuntimeStreamExtensions]::AsRandomAccessStream($ms)
+    $decoder = Wait-WinRt ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($ras)) ([Windows.Graphics.Imaging.BitmapDecoder])
+    $software = Wait-WinRt ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
+    if ($software.BitmapPixelFormat -ne [Windows.Graphics.Imaging.BitmapPixelFormat]::Bgra8 -and
+        $software.BitmapPixelFormat -ne [Windows.Graphics.Imaging.BitmapPixelFormat]::Gray8) {
+      $software = [Windows.Graphics.Imaging.SoftwareBitmap]::Convert($software, [Windows.Graphics.Imaging.BitmapPixelFormat]::Bgra8)
+    }
+    $result = Wait-WinRt ($script:OcrEngine.RecognizeAsync($software)) ([Windows.Media.Ocr.OcrResult])
+    $text = ''
+    if ($result -and $result.Text) { $text = [string]$result.Text }
+    if ($result -and $result.Lines) {
+      foreach ($line in $result.Lines) {
+        foreach ($word in $line.Words) {
+          $r = $word.BoundingRect
+          $words.Add([pscustomobject]@{
+            Text = [string]$word.Text
+            X = [double]$r.X; Y = [double]$r.Y
+            W = [double]$r.Width; H = [double]$r.Height
+            CX = [double]$r.X + [double]$r.Width / 2
+            CY = [double]$r.Y + [double]$r.Height / 2
+          })
+        }
+      }
+    }
+    return @{ Text = $text; Words = $words }
+  } catch {
+    return @{ Text = ''; Words = $words }
+  } finally { $ms.Dispose() }
+}
+
+function Offset-Words($Result, [double]$Ox, [double]$Oy, [double]$Scale) {
+  if (-not $Result) { return }
+  foreach ($w in $Result.Words) {
+    $w.X = $Ox + $w.X / $Scale
+    $w.Y = $Oy + $w.Y / $Scale
+    $w.W = $w.W / $Scale
+    $w.H = $w.H / $Scale
+    $w.CX = $w.X + $w.W / 2
+    $w.CY = $w.Y + $w.H / 2
+  }
+}
+
+function Scale-Bitmap([System.Drawing.Bitmap]$Src, [int]$Mult) {
+  $b = New-Object System.Drawing.Bitmap ($Src.Width * $Mult), ($Src.Height * $Mult)
+  $g = [System.Drawing.Graphics]::FromImage($b)
+  $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::NearestNeighbor
+  $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::Half
+  $g.DrawImage($Src, 0, 0, $b.Width, $b.Height)
+  $g.Dispose()
+  return $b
+}
+
+function Crop-Frac([System.Drawing.Bitmap]$Bmp, [double]$X, [double]$Y, [double]$W, [double]$H) {
+  $cx = [int]([Math]::Max(0, $X * $Bmp.Width))
+  $cy = [int]([Math]::Max(0, $Y * $Bmp.Height))
+  $cw = [int]([Math]::Min($Bmp.Width - $cx, [Math]::Ceiling($W * $Bmp.Width)))
+  $ch = [int]([Math]::Min($Bmp.Height - $cy, [Math]::Ceiling($H * $Bmp.Height)))
+  if ($cw -lt 8 -or $ch -lt 8) { return $null }
+  $r = New-Object System.Drawing.Rectangle $cx, $cy, $cw, $ch
+  return $Bmp.Clone($r, $Bmp.PixelFormat)
+}
+
+function Jpeg-DataUrl([System.Drawing.Bitmap]$Bmp, [long]$Quality) {
+  $ms = New-Object System.IO.MemoryStream
+  try {
+    Save-JpegToStream $Bmp $ms $Quality
+    return 'data:image/jpeg;base64,' + [Convert]::ToBase64String($ms.ToArray())
+  } finally { $ms.Dispose() }
+}
+
+function Save-JpegToStream([System.Drawing.Bitmap]$Bmp, [IO.Stream]$Stream, [long]$Quality) {
+  $jpeg = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.FormatID -eq [System.Drawing.Imaging.ImageFormat]::Jpeg.Guid }
+  $enc = New-Object System.Drawing.Imaging.EncoderParameters 1
+  $enc.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality, $Quality)
+  $Bmp.Save($Stream, $jpeg, $enc)
+}
+
+function Add-Words($Target, $Source) {
+  foreach ($w in $Source) { $Target.Add($w) }
+}
+
+function Find-Label($Words, [string[]]$Names) {
+  foreach ($w in $Words) {
+    $n = $w.Text.ToLowerInvariant()
+    foreach ($name in $Names) {
+      if ($n -eq $name) { return $w }
+    }
+  }
+  return $null
+}
+
+function Number-ForLabel($Words, $Label) {
+  if (-not $Label) { return $null }
+  $best = $null
+  $bestScore = [double]::PositiveInfinity
+  foreach ($w in $Words) {
+    if ($w.Text -notmatch '^\d{1,6}$') { continue }
+    $overlap = [Math]::Min($w.X + $w.W, $Label.X + $Label.W) - [Math]::Max($w.X, $Label.X)
+    $close = [Math]::Abs($w.CX - $Label.CX)
+    $above = $w.CY -lt ($Label.Y + 8)
+    if (-not $above) { continue }
+    if ($overlap -le 0 -and $close -gt [Math]::Max($Label.W, 48)) { continue }
+    $score = $close + [Math]::Max(0, $Label.Y - ($w.Y + $w.H))
+    if ($score -lt $bestScore) { $bestScore = $score; $best = $w }
+  }
+  if (-not $best) { return $null }
+  return [int]$best.Text
+}
+
+function Read-CellNumber([System.Drawing.Bitmap]$Bmp, $Label) {
+  if (-not $Bmp -or -not $Label) { return $null }
+  $pad = [Math]::Max(20, $Label.W * 0.35)
+  $x = [int][Math]::Max(0, $Label.X - $pad)
+  $y = [int][Math]::Max(0, $Label.Y - 130)
+  $w = [int][Math]::Min($Bmp.Width - $x, $Label.W + 2 * $pad)
+  $h = [int][Math]::Min($Bmp.Height - $y, ($Label.Y + $Label.H + 8) - $y)
+  if ($w -lt 8 -or $h -lt 8) { return $null }
+  $c = $null
+  try {
+    $c = $Bmp.Clone((New-Object System.Drawing.Rectangle $x, $y, $w, $h), $Bmp.PixelFormat)
+    $r = Recognize-Words $c
+    foreach ($word in $r.Words) {
+      if ($word.Text -match '^\d{1,6}$') { return [int]$word.Text }
+    }
+    if ($r.Text -match '(?<!\d)(\d{1,6})(?!\d)') { return [int]$Matches[1] }
+  } catch {} finally { if ($c) { $c.Dispose() } }
+  return $null
+}
+
+function Parse-WarzoneStats([System.Drawing.Bitmap]$Bmp, $FooterWords, [string]$HeaderText, [string]$FooterText) {
+  $fields = @{}
+  $allText = ((Normalize-Text ($HeaderText + ' ' + $FooterText)).Trim())
+  if ($allText -match 'resurgence' -or $allText -match 'rebirth') { $fields.mode = 'resurgence'; $fields.mode_label = 'RESURGENCE SOLOS' }
+  elseif ($allText -match 'warzone' -or $allText -match 'battle royale') { $fields.mode = 'warzone'; $fields.mode_label = 'WARZONE' }
+  $placeWord = $null
+  foreach ($w in $FooterWords) {
+    if ($w.Text -match '^(\d+)(ST|ND|RD|TH)$') {
+      $fields.placement = [int]$Matches[1]
+      $placeWord = $w
+    }
+  }
+  if (-not $fields.ContainsKey('placement') -and $FooterText -match '(\d+)\s*(ST|ND|RD|TH)\s*PLACE') {
+    $fields.placement = [int]$Matches[1]
+  }
+  $labelSets = @{
+    contracts = @('contracts','contract')
+    kills = @('kills','kill')
+    deaths = @('deaths','death')
+    assists = @('assists','assist')
+  }
+  foreach ($key in @('contracts','kills','deaths','assists')) {
+    $lab = Find-Label $FooterWords $labelSets[$key]
+    $n = Number-ForLabel $FooterWords $lab
+    if ($n -eq $null -and $lab) { $n = Read-CellNumber $Bmp $lab }
+    if ($n -ne $null) { $fields[$key] = $n }
+  }
+  $total = Find-Label $FooterWords @('total')
+  $dmgLab = Find-Label $FooterWords @('damage')
+  $use = $null
+  if ($total -and $dmgLab) {
+    $use = [pscustomobject]@{
+      Text = 'total damage'
+      X = [Math]::Min($total.X, $dmgLab.X)
+      Y = [Math]::Min($total.Y, $dmgLab.Y)
+      W = ([Math]::Max($total.X + $total.W, $dmgLab.X + $dmgLab.W) - [Math]::Min($total.X, $dmgLab.X))
+      H = [Math]::Max($total.H, $dmgLab.H)
+      CX = 0; CY = 0
+    }
+    $use.CX = $use.X + $use.W / 2
+    $use.CY = $use.Y + $use.H / 2
+  } elseif ($dmgLab) { $use = $dmgLab }
+  elseif ($total) { $use = $total }
+  $damage = Number-ForLabel $FooterWords $use
+  if ($damage -eq $null -and $use) { $damage = Read-CellNumber $Bmp $use }
+  if ($damage -ne $null) { $fields.damage = $damage }
+  if ($fields.ContainsKey('placement')) {
+    if ($fields.placement -eq 1) { $fields.won = 1 } else { $fields.won = 0 }
+  }
+  elseif ($allText -match 'victory') { $fields.won = 1 }
+  elseif ($allText -match 'defeat') { $fields.won = 0 }
+  if ($HeaderText -match 'REBIRTH\s+ISLAND') { $fields.map = 'Rebirth Island' }
+  return $fields
+}
+
+function Parse-GenericStats([string]$Text) {
+  $fields = @{}
+  $n = Normalize-Text $Text
+  if ($n -match 'resurgence') { $fields.mode = 'resurgence' }
+  elseif ($n -match ' dmz ' -or $n -match 'extracted' -or $n -match 'extraction') { $fields.mode = 'dmz' }
+  elseif ($n -match 'warzone' -or $n -match 'battle royale') { $fields.mode = 'warzone' }
+  if ($n -match 'you extracted' -or $n -match 'extracted successfully') { $fields.extracted = 1 }
+  if ($n -match 'failed to extract' -or $n -match 'extraction failed') { $fields.extracted = 0 }
+  if ($n -match 'victory') { $fields.won = 1 }
+  if ($n -match 'defeat') { $fields.won = 0 }
+  if ($n -match '(\d+)\s*(st|nd|rd|th)\s+place') { $fields.placement = [int]$Matches[1] }
+  if ($n -match '(\d+)\s+kills') { $fields.kills = [int]$Matches[1] }
+  if ($n -match '(\d+)\s+deaths') { $fields.deaths = [int]$Matches[1] }
+  if ($n -match '(\d+)\s+assists') { $fields.assists = [int]$Matches[1] }
+  return $fields
+}
+
+function Read-FrameStats([System.Drawing.Bitmap]$Bmp) {
+  $header = $null; $footer = $null; $footer2x = $null
+  try {
+    $header = Crop-Frac $Bmp 0 0 0.55 0.16
+    $footer = Crop-Frac $Bmp 0 0.80 1 0.20
+    $headerRead = if ($header) { Recognize-Words $header } else { @{ Text = ''; Words = @() } }
+    if ($header) { Offset-Words $headerRead 0 0 1 }
+    $footerRead = if ($footer) { Recognize-Words $footer } else { @{ Text = ''; Words = @() } }
+    if ($footer) { Offset-Words $footerRead 0 ($Bmp.Height * 0.80) 1 }
+    $allWords = New-Object System.Collections.Generic.List[object]
+    Add-Words $allWords $footerRead.Words
+    if ($footer) {
+      $footer2x = Scale-Bitmap $footer 2
+      $up = Recognize-Words $footer2x
+      Offset-Words $up 0 ($Bmp.Height * 0.80) 2
+      Add-Words $allWords $up.Words
+    }
+    $headerText = [string]$headerRead.Text
+    $footerText = ([string]$footerRead.Text)
+    $layoutText = Normalize-Text ($headerText + ' ' + $footerText)
+    $isWz = $layoutText.Contains('place') -or $layoutText.Contains('your stats') -or $layoutText.Contains('total damage') -or $layoutText.Contains('resurgence') -or $layoutText.Contains('match summary')
+    if ($isWz) {
+      $fields = Parse-WarzoneStats $Bmp $allWords $headerText $footerText
+    } else {
+      $full = Recognize-Bitmap $Bmp
+      $fields = Parse-GenericStats ($headerText + ' ' + $footerText + ' ' + $full)
+    }
+    $text = ($headerText + ' ' + $footerText).Trim()
+    return @{ Fields = $fields; Text = $text; Layout = $(if ($isWz) { 'warzone' } else { 'other' }) }
+  } finally {
+    if ($header) { $header.Dispose() }
+    if ($footer) { $footer.Dispose() }
+    if ($footer2x) { $footer2x.Dispose() }
+  }
+}
+
+function New-Crops([System.Drawing.Bitmap]$Bmp) {
+  $crops = @{}
+  $header = Crop-Frac $Bmp 0 0 0.62 0.18
+  $footer = Crop-Frac $Bmp 0 0.80 1 0.20
+  $place = Crop-Frac $Bmp 0 0.80 0.32 0.20
+  try {
+    if ($header) { $crops.header = Jpeg-DataUrl $header 80 }
+    if ($footer) { $crops.footer = Jpeg-DataUrl $footer 85 }
+    if ($place) { $crops.place = Jpeg-DataUrl $place 85 }
+  } finally {
+    if ($header) { $header.Dispose() }
+    if ($footer) { $footer.Dispose() }
+    if ($place) { $place.Dispose() }
+  }
+  return $crops
+}
+
 function Score-Text([string]$Text) {
   $n = Normalize-Text $Text
   $score = 0.0
@@ -222,11 +490,19 @@ function Save-Jpeg([System.Drawing.Bitmap]$Bmp, [string]$Path, [long]$Quality) {
   $Bmp.Save($Path, $jpeg, $enc)
 }
 
-function Send-Aar([string]$Path, [string]$Fingerprint) {
+function Send-Aar([string]$Path, [string]$Fingerprint, $LocalOcr, $Crops) {
   $bytes = [IO.File]::ReadAllBytes($Path)
   $b64 = [Convert]::ToBase64String($bytes)
   $taken = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
-  $body = '{"taken_at":"' + $taken + '","fingerprint":"' + $Fingerprint + '","image":"data:image/jpeg;base64,' + $b64 + '"}'
+  $payload = [ordered]@{
+    taken_at = $taken
+    fingerprint = $Fingerprint
+    image = 'data:image/jpeg;base64,' + $b64
+  }
+  if ($RereadId -gt 0) { $payload.reread_id = $RereadId }
+  if ($LocalOcr) { $payload.local_ocr = $LocalOcr }
+  if ($Crops) { $payload.crops = $Crops }
+  $body = $payload | ConvertTo-Json -Depth 8 -Compress
   try {
     $req = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Post, $script:Endpoint)
     $req.Headers.Authorization = [System.Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $script:Token)
@@ -246,30 +522,81 @@ function Send-Aar([string]$Path, [string]$Fingerprint) {
   }
 }
 
+function New-LocalOcr($FrameReads) {
+  $frames = @()
+  foreach ($r in $FrameReads) {
+    $frames += [pscustomobject]@{ text = $r.Text; fields = $r.Fields; layout = $r.Layout }
+  }
+  $fields = @{}
+  if ($FrameReads.Count -gt 0) { $fields = $FrameReads[0].Fields }
+  return [pscustomobject]@{
+    layout = $(if ($FrameReads.Count -gt 0) { $FrameReads[0].Layout } else { 'other' })
+    fields = $fields
+    frames = $frames
+  }
+}
+
 function Capture-AndSend([System.Drawing.Rectangle]$Mon, [bool]$Force, [string]$Reason, [string]$Fingerprint, [string]$DetectText, [double]$Score, [string]$Hits) {
   if ($Bench -and -not $Force) {
     Write-ZoiLog $DetectLog ("bench hit score=" + $Score.ToString('0.0') + " reason=$Reason (not uploaded)")
     return
   }
-  $full = [ZoiGrab]::Grab($Mon, 2560)
-  if (-not $full) { Log "Couldn't capture the screen."; return }
+  $bitmaps = New-Object System.Collections.Generic.List[System.Drawing.Bitmap]
+  $reads = New-Object System.Collections.Generic.List[object]
   try {
+    for ($i = 0; $i -lt 3; $i++) {
+      if ($i -gt 0) { Start-Sleep -Milliseconds 400 }
+      $bmp = [ZoiGrab]::Grab($Mon, 2560)
+      if (-not $bmp) { continue }
+      $bitmaps.Add($bmp)
+      $reads.Add((Read-FrameStats $bmp))
+    }
+    if ($bitmaps.Count -eq 0) { Log "Couldn't capture the screen."; return }
+    $best = $bitmaps[0]
     $name = (Get-Date).ToString('yyyyMMdd-HHmmss') + '-' + $Reason + '.jpg'
     $path = Join-Path $AarDir $name
-    Save-Jpeg $full $path 80
+    Save-Jpeg $best $path 80
     Write-ZoiLog $PositiveLog ("reason=$Reason score=" + $Score.ToString('0.0') + " hits=$Hits text=" + ((Normalize-Text $DetectText).Trim().Substring(0, [Math]::Min(400, ((Normalize-Text $DetectText).Trim().Length)))))
-    if (-not (Send-Aar $path $Fingerprint)) {
+    $crops = New-Crops $best
+    $local = New-LocalOcr $reads
+    if (-not (Send-Aar $path $Fingerprint $local $crops)) {
       Log "Saved $path but the lab did not take it."
       return
     }
     $script:LastFingerprint = $Fingerprint
     $script:InAar = $true
     Log "Logged a Call of Duty scoreboard ($Reason)."
-  } finally { $full.Dispose() }
+  } finally {
+    foreach ($b in $bitmaps) { $b.Dispose() }
+  }
+}
+
+function Invoke-FileCapture([string]$Path) {
+  if (-not (Test-Path -LiteralPath $Path)) { Log "No screenshot at $Path."; exit 1 }
+  $bmp = [System.Drawing.Bitmap]::FromFile($Path)
+  try {
+    $read = Read-FrameStats $bmp
+    $crops = New-Crops $bmp
+    $local = New-LocalOcr @($read)
+    $fp = Get-Fingerprint $read.Text
+    $tmp = Join-Path $AarDir ('reread-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '.jpg')
+    if ([IO.Path]::GetExtension($Path).ToLowerInvariant() -ne '.jpg' -and [IO.Path]::GetExtension($Path).ToLowerInvariant() -ne '.jpeg') {
+      Save-Jpeg $bmp $tmp 80
+      $sendPath = $tmp
+    } else {
+      $sendPath = $Path
+    }
+    Write-ZoiLog $PositiveLog ("reason=file hits=reread text=" + ((Normalize-Text $read.Text).Trim()))
+    if (-not (Send-Aar $sendPath $fp $local $crops)) {
+      Log "The lab did not take the reread."
+      exit 2
+    }
+    Log "Reread the saved scoreboard for the lab."
+  } finally { $bmp.Dispose() }
 }
 
 $script:Http = New-Object System.Net.Http.HttpClient
-$script:Http.Timeout = [TimeSpan]::FromSeconds(90)
+$script:Http.Timeout = [TimeSpan]::FromSeconds(180)
 $script:Busy = $false
 $script:InAar = $false
 $script:LastFingerprint = ''
@@ -367,6 +694,7 @@ function Invoke-ForceCapture([string]$Reason) {
   }
 }
 
+if ($File) { Invoke-FileCapture $File; exit 0 }
 if ($Once) { Invoke-ForceCapture 'once'; exit 0 }
 
 if ($Bench) {

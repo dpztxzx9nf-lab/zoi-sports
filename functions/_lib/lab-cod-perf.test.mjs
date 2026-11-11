@@ -84,3 +84,21 @@ test("pickCodMode prefers a requested mode that has data, else the most recent",
   assert.equal(pickCodMode(matches, "warzone"), "tdm");
   assert.equal(pickCodMode([], "dmz"), null);
 });
+
+test("Resurgence charts and verdicts include damage a match alongside kills", () => {
+  const tests = [{
+    id: 1, setting: "fov", label: "FOV", from_value: "90", to_value: "100",
+    status: "testing", started_at: "2026-11-10T02:00:00Z",
+  }];
+  const matches = [
+    ...Array.from({ length: 25 }, () => match("resurgence", "2026-11-09T12:00:00Z", 1, { won: 0, placement: 20, damage: 400 })),
+    ...Array.from({ length: 25 }, () => match("resurgence", "2026-11-10T12:00:00Z", 3, { won: 0, placement: 10, damage: 800 })),
+  ];
+  const p = performanceCod({ tests, matches, mode: "resurgence" });
+  assert.equal(p.has_damage, true);
+  assert.equal(p.changes[0].before.damage_per_match, 400);
+  assert.equal(p.changes[0].after.damage_per_match, 800);
+  assert.equal(p.changes[0].damage_verdict, "better");
+  assert.equal(p.changes[0].verdict, "better");
+  assert.ok(p.chart.some((s) => s.damage_per_match != null));
+});

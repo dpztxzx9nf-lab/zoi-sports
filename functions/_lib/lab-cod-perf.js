@@ -2,9 +2,9 @@
    score them are not. Each call is for one mode, and two modes are never
    averaged together.
 
-   The verdict is the same shape as the Fortnite lab: better / worse / even /
-   too-soon, judged on kills a match, with 25 games a side before a call.
-   The second chart is the mode's outcome: extraction rate in DMZ, win rate
+   Verdicts are judged on kills a match, and also on damage a match when
+   that mode records damage, with 25 games a side before a call.
+   Another chart is the mode's outcome: extraction rate in DMZ, win rate
    everywhere else. Charts stay hidden until a mode has CHART_MIN matches. */
 
 import { modeOf, modeOutcome } from "./lab-cod.js";
@@ -50,6 +50,8 @@ function sideOf(matches, outcome) {
   const n = matches.length;
   const kills = matches.map((m) => Number(m.kills)).filter(isNum);
   const killSum = kills.reduce((a, b) => a + b, 0);
+  const damage = matches.map((m) => Number(m.damage)).filter(isNum);
+  const damageSum = damage.reduce((a, b) => a + b, 0);
   let wins = 0;
   let scored = 0;
   for (const m of matches) {
@@ -68,32 +70,57 @@ function sideOf(matches, outcome) {
     kills: kills.length ? killSum : null,
     kills_per_match: mean(killSum, kills.length),
     kills_matches: kills.length,
+    damage: damage.length ? damageSum : null,
+    damage_per_match: mean(damageSum, damage.length),
+    damage_matches: damage.length,
     outcome_rate: rate(wins, scored),
     outcome_matches: scored,
     outcome_wins: scored ? wins : 0,
     kills_values: kills,
+    damage_values: damage,
   };
 }
 
-function verdictOf(before, after, minGames) {
-  if (!before || !after || before.matches < minGames || after.matches < minGames) {
-    return { verdict: "too-soon", kills_delta: null };
+function metricVerdict(beforeValues, afterValues, beforeMean, afterMean, minGames, beforeN, afterN) {
+  if (beforeN < minGames || afterN < minGames) {
+    return { verdict: "too-soon", delta: null, interval: null };
   }
-  const b = before.kills_per_match;
-  const a = after.kills_per_match;
-  const delta = isNum(b) && isNum(a) ? a - b : null;
-  const bInt = interval(before.kills_values);
-  const aInt = interval(after.kills_values);
+  const delta = isNum(beforeMean) && isNum(afterMean) ? afterMean - beforeMean : null;
+  const bInt = interval(beforeValues);
+  const aInt = interval(afterValues);
   if (!bInt || !aInt || !isNum(delta)) {
-    return { verdict: "too-soon", kills_delta: delta, kills_interval: { before: bInt, after: aInt } };
+    return { verdict: "too-soon", delta, interval: { before: bInt, after: aInt } };
   }
   let verdict = "even";
   if (aInt.lo > bInt.hi) verdict = "better";
   else if (aInt.hi < bInt.lo) verdict = "worse";
+  return { verdict, delta, interval: { before: bInt, after: aInt } };
+}
+
+function verdictOf(before, after, minGames) {
+  if (!before || !after || before.matches < minGames || after.matches < minGames) {
+    const damageEarly = metricVerdict(
+      before ? before.damage_values : [], after ? after.damage_values : [],
+      before && before.damage_per_match, after && after.damage_per_match,
+      minGames, before ? before.damage_matches : 0, after ? after.damage_matches : 0
+    );
+    return {
+      verdict: "too-soon",
+      kills_delta: null,
+      damage_delta: damageEarly.delta,
+      damage_verdict: damageEarly.verdict,
+      damage_interval: damageEarly.interval,
+    };
+  }
+  const kills = metricVerdict(before.kills_values, after.kills_values, before.kills_per_match, after.kills_per_match, minGames, before.kills_matches, after.kills_matches);
+  const damage = metricVerdict(before.damage_values, after.damage_values, before.damage_per_match, after.damage_per_match, minGames, before.damage_matches, after.damage_matches);
   return {
-    verdict,
-    kills_delta: delta,
-    kills_interval: { before: bInt, after: aInt },
+    verdict: kills.verdict,
+    kills_delta: kills.delta,
+    kills_interval: kills.interval,
+    damage_verdict: damage.verdict,
+    damage_delta: damage.delta,
+    damage_interval: damage.interval,
   };
 }
 
@@ -144,6 +171,7 @@ function sessionsOf(matches, changes, outcome) {
       to,
       matches: rows.length,
       kills_per_match: side.kills_per_match,
+      damage_per_match: side.damage_per_match,
       win_rate: outcome === "win" ? side.outcome_rate : null,
       extract_rate: outcome === "extraction" ? side.outcome_rate : null,
       thin: rows.length < COD_CHART_MIN_GAMES,
@@ -204,6 +232,9 @@ export function performanceCod({ tests, matches, mode, minGames } = {}) {
       verdict: judged.verdict,
       kills_delta: judged.kills_delta,
       kills_interval: judged.kills_interval || null,
+      damage_verdict: judged.damage_verdict || "too-soon",
+      damage_delta: judged.damage_delta,
+      damage_interval: judged.damage_interval || null,
       min_games: min,
     };
   });
@@ -222,5 +253,6 @@ export function performanceCod({ tests, matches, mode, minGames } = {}) {
     changes,
     chart,
     match_count: inMode.length,
+    has_damage: inMode.some((m) => m.damage != null && Number.isFinite(Number(m.damage))),
   };
 }
