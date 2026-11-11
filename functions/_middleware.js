@@ -7,8 +7,8 @@
 // has, and the JWT is verified rather than trusted.
 import { gate } from "./_lib/lab.js";
 
-/* One endpoint is deliberately outside that check: /api/lab-sync, the path the
-   PC agent posts to. A PC has no browser and cannot sit through a Google or
+/* Two endpoints are deliberately outside that check: /api/lab-sync and
+   /api/lab-cod-aar, the paths the PC agent posts to. A PC has no browser and cannot sit through a Google or
    email sign-in, so gating it would mean the agent could never send anything.
    What protects it instead is the bearer token in the request: lab-sync.js
    hashes it and looks the hash up in lab_tokens, and an unknown, revoked or
@@ -17,20 +17,20 @@ import { gate } from "./_lib/lab.js";
    one endpoint outside the gate; every other lab path, page and API alike,
    still needs a JWT.
 
-   It sits beside /api/lab/ rather than inside it on purpose. Cloudflare Access
+   They sit beside /api/lab/ rather than inside it on purpose. Cloudflare Access
    has no negated-path option: it matches protected paths one by one and cannot
-   carve an exception out of a prefix it protects. So the agent's path is a
-   sibling segment, /api/lab-sync, which its /api/lab and /api/lab/* entries do
-   not match, and the token is the only thing standing in front of it. Access's
-   list is a dashboard setting; this file cannot change it. */
-const SYNC_PATH = "/api/lab-sync";
+   carve an exception out of a prefix it protects. So the agent's paths are
+   sibling segments, /api/lab-sync and /api/lab-cod-aar, which its /api/lab and
+   /api/lab/* entries do not match, and the token is the only thing standing in
+   front of them. Access's list is a dashboard setting; this file cannot change it. */
+const OPEN_PATHS = new Set(["/api/lab-sync", "/api/lab-cod-aar"]);
 
 const isLabPage = (p) => p === "/lab" || p.startsWith("/lab/") || p === "/lab.html";
 const isLabApi = (p) => p === "/api/lab" || p.startsWith("/api/lab/");
 const isLabPath = (p) => isLabPage(p) || isLabApi(p);
 /* What the lab serves, gated or not: the sync endpoint is a sibling of the lab
    API, so isLabPath does not see it and it is named once more here. */
-const isLabServed = (p) => isLabPath(p) || p === SYNC_PATH;
+const isLabServed = (p) => isLabPath(p) || OPEN_PATHS.has(p);
 
 export async function onRequest({ request, env, next }) {
   const u = new URL(request.url);
@@ -39,12 +39,11 @@ export async function onRequest({ request, env, next }) {
     return Response.redirect(u.toString(), 301);
   }
 
-  /* The SYNC_PATH test is belt-and-braces, not load-bearing: isLabApi matches
-     only /api/lab and the /api/lab/ prefix, and /api/lab-sync is neither, so the
-     agent would pass through even without it. It stays because it names the one
-     endpoint that skips the gate right next to the gate, and because it keeps
-     the exclusion correct if the path ever moves back under /api/lab/. */
-  if (isLabPath(u.pathname) && u.pathname !== SYNC_PATH) {
+  /* The OPEN_PATHS test is belt-and-braces, not load-bearing: isLabApi matches
+     only /api/lab and the /api/lab/ prefix, and the agent paths are neither, so
+     they would pass through even without it. It stays because it names the
+     endpoints that skip the gate right next to the gate. */
+  if (isLabPath(u.pathname) && !OPEN_PATHS.has(u.pathname)) {
     // On the apex, Access has already signed the person in and attached the JWT,
     // so a signed-in visit falls straight through to the page. On a preview
     // hostname this is the only thing between a stranger and the page shell.
