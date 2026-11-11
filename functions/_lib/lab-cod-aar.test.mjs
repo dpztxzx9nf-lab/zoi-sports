@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeMode, parseOcrPayload, reviewOf, OCR_CONFIDENCE_MIN, UNRECOGNIZED_MODE } from "./lab-cod-aar.js";
+import { normalizeMode, parseOcrPayload, reviewOf, modelTextOf, OCR_CONFIDENCE_MIN, UNRECOGNIZED_MODE } from "./lab-cod-aar.js";
 
 test("mode aliases map onto the catalog and do not invent one", () => {
   assert.equal(normalizeMode("Team Deathmatch"), "tdm");
@@ -64,5 +64,18 @@ test("fenced JSON from a model is accepted", () => {
   assert.equal(parsed.mode, "hardpoint");
   assert.equal(parsed.kills, 12);
   assert.equal(parsed.won, 0);
+  assert.equal(reviewOf(parsed).needs_review, 0);
+});
+
+test("an OpenAI-style Workers AI wrapper still yields a match row", () => {
+  const wrapped = {
+    choices: [{
+      finish_reason: "stop",
+      message: { content: "{\"mode\":\"Team Deathmatch\",\"kills\":11,\"deaths\":4,\"won\":true,\"confidence\":0.9}" },
+    }],
+  };
+  const parsed = parseOcrPayload(modelTextOf(wrapped));
+  assert.equal(parsed.mode, "tdm");
+  assert.equal(parsed.kills, 11);
   assert.equal(reviewOf(parsed).needs_review, 0);
 });
