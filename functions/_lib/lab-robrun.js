@@ -30,13 +30,40 @@ export const ROBRUN_CATALOG = [
 
 export const ROBRUN_MIN_TRACKED = 8;
 
+/* ROB RUN leaves a setting out of its settings file when it is at the game's
+   default, instead of writing the value. Snapshots 137-144 show it: VSync,
+   HBAO, motion blur and depth of field only ever appear as "true", and each one
+   drops out of the file when it is switched off (VSync after snapshot 141).
+   Frame rate is saved as an index ("2") and drops out at the default, which the
+   file never names, so it reads as "Default" rather than a made-up number.
+   A full snapshot (enough tracked keys to be the whole file) without one of
+   these keys means that default. */
+export const ROBRUN_ABSENT_DEFAULTS = {
+  vsync_setting: "false",
+  hbao_setting: "false",
+  motion_blur_setting: "false",
+  depth_of_field: "false",
+  frame_rate_setting: "Default",
+};
+
+export function withRobRunDefaults(settings) {
+  if (!settings || typeof settings !== "object" || Array.isArray(settings)) return settings;
+  const present = Object.keys(settings).filter((k) => settings[k] != null && String(settings[k]).trim() !== "");
+  if (present.length < ROBRUN_MIN_TRACKED) return settings;
+  const out = { ...settings };
+  for (const [id, value] of Object.entries(ROBRUN_ABSENT_DEFAULTS)) {
+    if (out[id] == null || String(out[id]).trim() === "") out[id] = value;
+  }
+  return out;
+}
+
 export function currentRobRunOf(snapshot) {
   if (!snapshot || typeof snapshot.payload !== "string" || !snapshot.payload) return null;
   let parsed = null;
   try { parsed = JSON.parse(snapshot.payload); } catch { return null; }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-  const raw = parsed.settings;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  if (!parsed.settings || typeof parsed.settings !== "object" || Array.isArray(parsed.settings)) return null;
+  const raw = withRobRunDefaults(parsed.settings);
   const settings = [];
   for (const entry of ROBRUN_CATALOG) {
     const value = Object.prototype.hasOwnProperty.call(raw, entry.id) && raw[entry.id] != null
