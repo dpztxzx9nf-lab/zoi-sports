@@ -1,0 +1,19 @@
+1
+
+//
+// Display
+
+// Synchronizes framerate with refresh rate to prevent screen tearing issues
+VSync@0;55075;7764 = disabled // one of disabled, 100%, 50%, 33%, 25%
+
+// Enable Nvidia low latency mode. Boost mode request maximum GPU clock frequency regardless of workload
+NvidiaReflex@0;33761;11445 = Enabled // one of Disabled, Enabled, Enabled + boost
+
+// Apply custom framerate limit
+CapFps@0;57752;20945 = true
+
+// Max FPS in game
+MaxFpsInGame@0;13305;58861 = 250 // 30 to 300
+
+// Max FPS in menu
+MaxFpsInMenu@0;13305;27917 = 120 // 30 to 300

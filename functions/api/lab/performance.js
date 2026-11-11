@@ -12,6 +12,8 @@
    rows and the plain-language note about what to watch for. */
 import { CATALOG, SELECT_TEST, identity, json, currentOf } from "../../_lib/lab.js";
 import { performance } from "../../_lib/lab-perf.js";
+import { COD_CATALOG, COD_GAME, COD_MODES, currentCodOf, fortniteGameSql, gamesPresent, hasColumn } from "../../_lib/lab-cod.js";
+import { modesWithMatches, performanceCod, pickCodMode } from "../../_lib/lab-cod-perf.js";
 
 const READING_COLUMNS = "taken_at,created_at,matches,wins,kills,deaths,kd,win_rate";
 /* Everything a session label or the page's mode line needs, and nothing else. The
@@ -76,6 +78,64 @@ function lastMatchOf(matches) {
   return matches[matches.length - 1];
 }
 
+
+async function performanceForCod(env, who, request) {
+  const games = await gamesPresent(env, who.id);
+  const url = new URL(request.url);
+  const requested = (url.searchParams.get("mode") || "").trim();
+
+  let tests = [];
+  if (await hasColumn(env, "lab_tests", "game")) {
+    const rows = await env.DB.prepare(
+      `${SELECT_TEST} WHERE owner = ? AND game = ? ORDER BY started_at ASC, id ASC`
+    ).bind(who.id, COD_GAME).all();
+    tests = rows.results || [];
+  }
+
+  let snapshot = null;
+  if (await hasColumn(env, "lab_snapshots", "game")) {
+    snapshot = await env.DB.prepare(
+      "SELECT taken_at,payload FROM lab_snapshots WHERE owner = ? AND game = ? ORDER BY id DESC LIMIT 1"
+    ).bind(who.id, COD_GAME).first();
+  }
+
+  let matches = [];
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT played_at,mode,kills,extracted,won,deaths FROM lab_cod_matches
+        WHERE owner = ? ORDER BY datetime(played_at) ASC, id ASC`
+    ).bind(who.id).all();
+    matches = rows.results || [];
+  } catch (e) {
+    console.error("lab cod matches read failed", e);
+    matches = [];
+  }
+
+  const modes = modesWithMatches(matches);
+  const mode = pickCodMode(matches, requested);
+  const payload = mode
+    ? performanceCod({ tests, matches, mode })
+    : { mode: null, mode_label: null, outcome: null, outcome_label: null, min_games: 25, chart_min_games: 5, changes: tests.map((t) => ({
+        id: t.id, setting: t.setting, label: t.label, from_value: t.from_value, to_value: t.to_value,
+        status: t.status, started_at: t.started_at, decided_at: t.decided_at, result_note: t.result_note,
+        verdict: "too-soon", kills_delta: null, before: { matches: 0 }, after: { matches: 0 },
+      })), chart: [], match_count: 0 };
+
+  return json({
+    ok: true,
+    me: { email: who.email, name: who.name },
+    game: COD_GAME,
+    games,
+    modes,
+    mode_catalog: COD_MODES,
+    catalog: COD_CATALOG,
+    ...payload,
+    lastMatch: null,
+    replays_available: false,
+    current: currentCodOf(snapshot),
+  });
+}
+
 export async function onRequest({ request, env }) {
   if (request.method !== "GET") return json({ ok: false, error: "Method not allowed." }, 405);
 
@@ -83,6 +143,14 @@ export async function onRequest({ request, env }) {
   if (!who.ok) return who.response;
 
   try {
+    const url = new URL(request.url);
+    const game = (url.searchParams.get("game") || "fortnite").trim();
+    if (game === COD_GAME) return await performanceForCod(env, who, request);
+
+    const games = await gamesPresent(env, who.id);
+    const gameCol = await hasColumn(env, "lab_tests", "game");
+    const snapGameCol = await hasColumn(env, "lab_snapshots", "game");
+
     /* created_at is what the maths needs: it is the moment a count was first
        read, and a repeat read only moves taken_at. Newest 400 is plenty of
        history for a per-session chart and keeps the read cheap.
@@ -97,16 +165,24 @@ export async function onRequest({ request, env }) {
        ) ORDER BY id ASC`
     ).bind(who.id).all();
 
-    const tests = await env.DB.prepare(
-      `${SELECT_TEST} WHERE owner = ? ORDER BY started_at ASC, id ASC`
-    ).bind(who.id).all();
+    const tests = gameCol
+      ? await env.DB.prepare(
+          `${SELECT_TEST} WHERE owner = ? AND ` + fortniteGameSql + ` ORDER BY started_at ASC, id ASC`
+        ).bind(who.id).all()
+      : await env.DB.prepare(
+          `${SELECT_TEST} WHERE owner = ? ORDER BY started_at ASC, id ASC`
+        ).bind(who.id).all();
 
     /* The newest snapshot only. Everything older is history the page does not
        show: this section answers "what is it set to now", and the change cards
        are what say how it got there. */
-    const snapshot = await env.DB.prepare(
-      "SELECT taken_at,payload FROM lab_snapshots WHERE owner = ? ORDER BY id DESC LIMIT 1"
-    ).bind(who.id).first();
+    const snapshot = snapGameCol
+      ? await env.DB.prepare(
+          "SELECT taken_at,payload FROM lab_snapshots WHERE owner = ? AND " + fortniteGameSql + " ORDER BY id DESC LIMIT 1"
+        ).bind(who.id).first()
+      : await env.DB.prepare(
+          "SELECT taken_at,payload FROM lab_snapshots WHERE owner = ? ORDER BY id DESC LIMIT 1"
+        ).bind(who.id).first();
 
     /* The matches, oldest first, for two jobs: the session labels the comparison
        runs on, and the page's one line about the mode last seen playing. Bounded
@@ -193,6 +269,8 @@ export async function onRequest({ request, env }) {
     return json({
       ok: true,
       me: { email: who.email, name: who.name },
+      game: "fortnite",
+      games,
       ...payload,
       /* The single most recent match row, or null. The page renders one line from
          it and nothing else; the full history is not sent, because a page that

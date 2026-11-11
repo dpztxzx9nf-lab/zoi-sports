@@ -19,7 +19,7 @@
 <meta name="apple-mobile-web-app-title" content="Zoi Lab">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="styles.css?v=50">
+<link rel="stylesheet" href="styles.css?v=51">
 </head>
 <body class="lab-page">
 <header class="nav"><a href="/" class="brand"><img class="zw" src="/assets/zoi-wordmark-gold.png?v=10" alt="Zoi" width="600" height="320"></a>
@@ -33,6 +33,11 @@
 </div>
 
 <div id="app" hidden>
+ <div class="lab-switch" id="game-switch" hidden>
+  <button type="button" class="lab-switch-btn" id="game-fortnite" aria-pressed="true">Fortnite</button>
+  <button type="button" class="lab-switch-btn" id="game-cod" aria-pressed="false">Call of Duty</button>
+ </div>
+ <div class="lab-switch lab-switch-modes" id="mode-switch" hidden></div>
  <p class="lab-empty-line" id="empty" hidden>Nothing logged yet.</p>
  <div id="now-lead" hidden></div>
  <section class="lab-charts" id="charts-block" hidden>
@@ -42,7 +47,7 @@
     <div class="lab-chart-box" id="chart-kpm-box"></div>
    </div>
    <div class="lab-chart" id="chart-win">
-    <p class="lab-chart-k">Win rate</p>
+    <p class="lab-chart-k" id="chart-win-title">Win rate</p>
     <div class="lab-chart-box" id="chart-win-box"></div>
    </div>
    <p class="lab-chart-legend" id="chart-legend" hidden></p>
@@ -52,11 +57,35 @@
  <section id="now-block" hidden>
   <div id="now"></div>
  </section>
+ <form class="lab-log" id="cod-log" hidden>
+  <p class="lab-log-k">Log a match</p>
+  <label class="lab-log-field">Mode
+   <select id="cod-log-mode" required></select>
+  </label>
+  <label class="lab-log-field">Kills
+   <input id="cod-log-kills" type="number" min="0" max="200" step="1" required>
+  </label>
+  <fieldset class="lab-log-field" id="cod-log-extracted-wrap" hidden>
+   <legend>Extracted</legend>
+   <label><input type="radio" name="cod-extracted" value="yes"> Yes</label>
+   <label><input type="radio" name="cod-extracted" value="no"> No</label>
+  </fieldset>
+  <fieldset class="lab-log-field" id="cod-log-won-wrap">
+   <legend>Won</legend>
+   <label><input type="radio" name="cod-won" value="yes"> Yes</label>
+   <label><input type="radio" name="cod-won" value="no"> No</label>
+  </fieldset>
+  <label class="lab-log-field">Deaths
+   <input id="cod-log-deaths" type="number" min="0" max="200" step="1" placeholder="optional">
+  </label>
+  <p class="lab-log-error" id="cod-log-error" hidden></p>
+  <button class="btn" type="submit" id="cod-log-submit">Log match</button>
+ </form>
 </div>
 </main>
 
 <script src="main.js?v=23" defer></script>
 <script src="account.js?v=7" defer></script>
-<script src="lab.js?v=22" defer></script>
+<script src="lab.js?v=23" defer></script>
 </body>
 </html>
