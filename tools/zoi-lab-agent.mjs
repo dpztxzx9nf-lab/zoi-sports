@@ -54,6 +54,7 @@ import { scanLog } from "./zoi-lab-mode.mjs";
 import { readReplayStats, replayRow, HEADSHOTS_REASON } from "./zoi-replay.mjs";
 import { readHeadshots, cueReaderInstalled, CUE_MISSING_REASON } from "./zoi-cues.mjs";
 import { readCodSnapshot, codPayloadKey, codFileSignature } from "./zoi-cod-settings.mjs";
+import { readRobRunSnapshot, robrunPayloadKey, robrunFileSignature } from "./zoi-robrun-settings.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = path.join(HERE, "zoi-lab-agent.json");
@@ -1101,8 +1102,10 @@ export async function sendOnce(cfg, snap) {
   }
   const count = Object.keys(snap.settings || {}).length;
   const codCount = snap.cod && snap.cod.settings ? Object.keys(snap.cod.settings).length : 0;
+  const robrunCount = snap.robrun && snap.robrun.settings ? Object.keys(snap.robrun.settings).length : 0;
   const what = (count ? (count + " settings") : "no Fortnite settings")
-    + (codCount ? (", " + codCount + " COD settings") : "");
+    + (codCount ? (", " + codCount + " COD settings") : "")
+    + (robrunCount ? (", " + robrunCount + " ROB RUN settings") : "");
   log("Sent " + what + ", HTTP " + (status || "no reply") + note);
   return { ok: status >= 200 && status < 300, matches, retry };
 }
@@ -1125,13 +1128,20 @@ export async function send(cfg, prepared, deps = {}) {
   } catch (e) {
     log("Couldn't read the Call of Duty config: " + (e && e.message ? e.message : e));
   }
-  if (!snap && !cod) {
-    log("No Fortnite or Call of Duty config found for this user.");
+  let robrun = null;
+  try {
+    robrun = await readRobRunSnapshot();
+  } catch (e) {
+    log("Couldn't read the ROB RUN config: " + (e && e.message ? e.message : e));
+  }
+  if (!snap && !cod && !robrun) {
+    log("No Fortnite, Call of Duty, or ROB RUN config found for this user.");
     return false;
   }
   if (!snap) {
-    log("No Fortnite config found under " + savedDir + " - sending Call of Duty settings on their own.");
-    snap = { takenAt: (cod && cod.takenAt) || new Date().toISOString(), source: "zoi-lab-agent" };
+    const when = (cod && cod.takenAt) || (robrun && robrun.takenAt) || new Date().toISOString();
+    log("No Fortnite config found under " + savedDir + " - sending the other game settings on their own.");
+    snap = { takenAt: when, source: "zoi-lab-agent" };
   }
 
   /* The log read is not allowed to matter: if anything in it fails the snapshot
@@ -1174,6 +1184,7 @@ export async function send(cfg, prepared, deps = {}) {
     ...(read.matches.length ? { matches: read.matches } : {}),
     ...(replayed.replays.length ? { replayStats: replayed.replays } : {}),
     ...(cod ? { cod: { takenAt: cod.takenAt, settings: cod.settings, source: cod.source } } : {}),
+    ...(robrun ? { robrun: { takenAt: robrun.takenAt, settings: robrun.settings, source: robrun.source } } : {}),
   };
 
   for (let attempt = 0; attempt < SEND_TRIES; attempt++) {
@@ -1205,7 +1216,9 @@ async function signature() {
   const fn = list.map((f) => f.path + ":" + f.size + ":" + Math.round(f.mtimeMs)).sort().join("|");
   let codSig = "";
   try { codSig = await codFileSignature(); } catch { codSig = ""; }
-  return fn + (codSig ? "\u001e" + codSig : "");
+  let robrunSig = "";
+  try { robrunSig = await robrunFileSignature(); } catch { robrunSig = ""; }
+  return fn + (codSig ? "\u001e" + codSig : "") + (robrunSig ? "\u001e" + robrunSig : "");
 }
 
 /* What would actually go up, as one string: the settings and the bindings, with
@@ -1219,8 +1232,8 @@ async function signature() {
    churn to the lab - a post every 142 seconds against a heartbeat of an hour.
    The timestamp is deliberately not in the key: it comes from the newest file's
    mtime, so including it would put the churn straight back in. */
-function payloadKey(snap, codSnap) {
-  if (!snap && !codSnap) return null;
+function payloadKey(snap, codSnap, robrunSnap) {
+  if (!snap && !codSnap && !robrunSnap) return null;
   const flat = (map) => Object.keys(map || {}).sort()
     .map((k) => k + "=" + String(map[k])).join("\u001f");
   return [
@@ -1228,6 +1241,7 @@ function payloadKey(snap, codSnap) {
     "bindings\u001f" + flat(snap && snap.bindings),
     "account\u001f" + ((snap && snap.epicAccountId) || ""),
     "cod\u001f" + (codSnap ? codPayloadKey(codSnap) : ""),
+    "robrun\u001f" + (robrunSnap ? robrunPayloadKey(robrunSnap) : ""),
   ].join("\u001e");
 }
 
@@ -1237,9 +1251,11 @@ function payloadKey(snap, codSnap) {
 export async function currentPayloadKey() {
   let snap = null;
   let codSnap = null;
+  let robrunSnap = null;
   try { snap = await snapshot(); } catch { snap = null; }
   try { codSnap = await readCodSnapshot(); } catch { codSnap = null; }
-  return payloadKey(snap, codSnap);
+  try { robrunSnap = await readRobRunSnapshot(); } catch { robrunSnap = null; }
+  return payloadKey(snap, codSnap, robrunSnap);
 }
 
 /* Wait until no candidate file has changed size or mtime for QUIET_MS. The game
@@ -1272,7 +1288,7 @@ export async function watch(cfg, opts = {}) {
   const readReplays = opts.readReplays ?? readNewReplays;
   const ticks = opts.ticks ?? Infinity;     // harness only: stop after N polls
 
-  log("Watching Fortnite's config, log and replays, and Call of Duty's settings. Sending when a config changes and settles, when a Fortnite match or replay lands, and once an hour regardless.");
+  log("Watching Fortnite's config, log and replays, Call of Duty's settings, and ROB RUN settings. Sending when a config changes and settles, when a Fortnite match or replay lands, and once an hour regardless.");
   startCodAar();
   let last = await signature();
   /* What was last sent, in values rather than bytes. A file the game rewrote

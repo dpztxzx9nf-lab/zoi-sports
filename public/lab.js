@@ -20,7 +20,11 @@ const hide = n => { n.hidden = true; };
 const GAME_KEY = 'zoi-lab-game';
 const MODE_KEY = 'zoi-lab-cod-mode';
 const storedGame = () => {
-  try { return sessionStorage.getItem(GAME_KEY) || 'fortnite'; } catch { return 'fortnite'; }
+  try {
+    const g = sessionStorage.getItem(GAME_KEY);
+    if (g === 'cod' || g === 'robrun' || g === 'fortnite') return g;
+    return 'fortnite';
+  } catch { return 'fortnite'; }
 };
 const storedMode = () => {
   try { return sessionStorage.getItem(MODE_KEY) || ''; } catch { return ''; }
@@ -28,12 +32,12 @@ const storedMode = () => {
 const rememberGame = (g) => { try { sessionStorage.setItem(GAME_KEY, g); } catch {} };
 const rememberMode = (m) => { try { if (m) sessionStorage.setItem(MODE_KEY, m); } catch {} };
 
-const state = { perf: null, tokens: [], game: storedGame() === 'cod' ? 'cod' : 'fortnite', mode: storedMode() };
+const state = { perf: null, tokens: [], game: storedGame(), mode: storedMode() };
 const nodes = {
   loadError: $('load-error'), loadErrorText: $('load-error-text'), retry: $('retry'),
   app: $('app'), empty: $('empty'),
   nowLead: $('now-lead'), now: $('now'), nowBlock: $('now-block'),
-  gameSwitch: $('game-switch'), gameFortnite: $('game-fortnite'), gameCod: $('game-cod'),
+  gameSwitch: $('game-switch'), gameFortnite: $('game-fortnite'), gameCod: $('game-cod'), gameRobRun: $('game-robrun'), currentSettings: $('current-settings'), currentSettingsList: $('current-settings-list'),
   modeSwitch: $('mode-switch'),
   chartsBlock: $('charts-block'),
   chartKpm: $('chart-kpm'), chartKpmBox: $('chart-kpm-box'),
@@ -137,6 +141,7 @@ function needSignIn() {
 }
 
 function performancePath() {
+  if (state.game === 'robrun') return '/api/lab/performance?game=robrun';
   if (state.game !== 'cod') return '/api/lab/performance';
   let path = '/api/lab/performance?game=cod';
   if (state.mode) path += '&mode=' + encodeURIComponent(state.mode);
@@ -145,9 +150,14 @@ function performancePath() {
 
 function renderGameSwitch() {
   const games = (state.perf && state.perf.games) || {};
-  if (!games.cod || !nodes.gameSwitch) { if (nodes.gameSwitch) hide(nodes.gameSwitch); return; }
-  nodes.gameFortnite.setAttribute('aria-pressed', state.game !== 'cod' ? 'true' : 'false');
-  nodes.gameCod.setAttribute('aria-pressed', state.game === 'cod' ? 'true' : 'false');
+  const count = ['fortnite', 'cod', 'robrun'].filter((k) => games[k]).length;
+  if (count < 2 || !nodes.gameSwitch) { if (nodes.gameSwitch) hide(nodes.gameSwitch); return; }
+  if (nodes.gameFortnite) nodes.gameFortnite.setAttribute('aria-pressed', state.game === 'fortnite' ? 'true' : 'false');
+  if (nodes.gameCod) nodes.gameCod.setAttribute('aria-pressed', state.game === 'cod' ? 'true' : 'false');
+  if (nodes.gameRobRun) nodes.gameRobRun.setAttribute('aria-pressed', state.game === 'robrun' ? 'true' : 'false');
+  if (nodes.gameFortnite) nodes.gameFortnite.hidden = !games.fortnite && state.game !== 'fortnite';
+  if (nodes.gameCod) nodes.gameCod.hidden = !games.cod && state.game !== 'cod';
+  if (nodes.gameRobRun) nodes.gameRobRun.hidden = !games.robrun && state.game !== 'robrun';
   show(nodes.gameSwitch);
 }
 
@@ -334,9 +344,14 @@ async function load() {
     rememberMode(state.mode);
   }
   /* A remembered COD view with no snapshot yet falls back to Fortnite. */
-  if (state.game === 'cod' && state.perf.games && !state.perf.games.cod) {
-    state.game = 'fortnite';
-    rememberGame('fortnite');
+  const games = state.perf.games || {};
+  if (state.game === 'cod' && games && !games.cod) {
+    state.game = games.robrun ? 'robrun' : 'fortnite';
+    rememberGame(state.game);
+  }
+  if (state.game === 'robrun' && games && !games.robrun) {
+    state.game = games.cod ? 'cod' : 'fortnite';
+    rememberGame(state.game);
   }
   signInNeeded = false;
   hide(nodes.loadError);
@@ -722,6 +737,29 @@ function renderCharts() {
   }
 }
 
+function renderCurrentSettings() {
+  if (!nodes.currentSettings || !nodes.currentSettingsList) return false;
+  const cur = state.perf && state.perf.current;
+  const rows = cur && Array.isArray(cur.settings) ? cur.settings.filter((s) => s && s.value != null && s.value !== '') : [];
+  nodes.currentSettingsList.replaceChildren();
+  if (!rows.length) { hide(nodes.currentSettings); return false; }
+  for (const s of rows) {
+    const dt = document.createElement('dt');
+    dt.textContent = s.label || s.id;
+    const dd = document.createElement('dd');
+    dd.textContent = prettySetting(s.value);
+    nodes.currentSettingsList.append(dt, dd);
+  }
+  show(nodes.currentSettings);
+  return true;
+}
+
+function prettySetting(v) {
+  if (v === 'true') return 'On';
+  if (v === 'false') return 'Off';
+  return String(v);
+}
+
 function render() {
   renderGameSwitch();
   renderModeSwitch();
@@ -733,12 +771,13 @@ function render() {
   const lead = pickLead(open, past);
   const settled = isSettledLead(lead);
   const hasCodMatches = state.game === 'cod' && state.perf && Array.isArray(state.perf.recent_matches) && state.perf.recent_matches.length;
+  const hasCurrent = renderCurrentSettings();
 
   nodes.nowLead.replaceChildren();
   nodes.now.replaceChildren();
 
   if (!list.length) {
-    if (hasCodMatches) hide(nodes.empty);
+    if (hasCodMatches || hasCurrent) hide(nodes.empty);
     else show(nodes.empty);
     hide(nodes.nowLead);
     hide(nodes.nowBlock);
@@ -998,6 +1037,14 @@ function boot() {
       if (state.game === 'cod') return;
       state.game = 'cod';
       rememberGame('cod');
+      load();
+    });
+  }
+  if (nodes.gameRobRun) {
+    nodes.gameRobRun.addEventListener('click', () => {
+      if (state.game === 'robrun') return;
+      state.game = 'robrun';
+      rememberGame('robrun');
       load();
     });
   }

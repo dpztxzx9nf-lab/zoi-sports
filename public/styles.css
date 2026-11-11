@@ -820,3 +820,8 @@ html,body{overflow-x:clip}img{max-width:100%}
 .lab-match-actions{display:flex;flex-wrap:wrap;gap:.4rem}
 .lab-match-shot{display:block;max-width:100%;height:auto;border:1px solid #e6d3a033;border-radius:4px;background:#0b0b0d}
 .lab-match-flag{color:#e6d3a0}
+
+.lab-current { margin: 1.25rem 0 0; }
+.lab-current-list { display: grid; grid-template-columns: minmax(8rem,16rem) 1fr; gap: .35rem 1.25rem; margin: .5rem 0 0; }
+.lab-current-list dt { color: var(--muted, #9a9a9a); font-weight: 500; }
+.lab-current-list dd { margin: 0; }

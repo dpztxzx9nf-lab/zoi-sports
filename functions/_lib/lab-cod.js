@@ -73,7 +73,7 @@ export async function hasColumn(env, table, column) {
 }
 
 export async function gamesPresent(env, owner) {
-  const out = { fortnite: false, cod: false };
+  const out = { fortnite: false, cod: false, robrun: false };
   try {
     if (await hasColumn(env, "lab_snapshots", "game")) {
       const rows = await env.DB.prepare(
@@ -81,7 +81,8 @@ export async function gamesPresent(env, owner) {
       ).bind(owner).all();
       for (const r of rows.results || []) {
         if (r.game === "cod") out.cod = true;
-        else out.fortnite = true;
+        else if (r.game === "robrun") out.robrun = true;
+        else if (!r.game || r.game === "fortnite") out.fortnite = true;
       }
     } else {
       const row = await env.DB.prepare(
