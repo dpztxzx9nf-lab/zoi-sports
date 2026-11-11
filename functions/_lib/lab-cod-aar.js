@@ -192,9 +192,10 @@ export const OCR_GUIDED_JSON = {
 export const OCR_PROMPT = [
   "This is a screenshot of a Call of Duty: Modern Warfare 4 after-action report or end-of-match scoreboard, or it is not.",
   "Read only the local player's own line if a full scoreboard is shown.",
-  "Return JSON with: mode (the playlist name), mode_label (exact text on screen), kills, deaths, score, placement (finishing place, or null if the mode has none), extracted (true/false only for DMZ, otherwise null), won (true/false for multiplayer, Warzone, or Resurgence, otherwise null), confidence (0 to 1), and a short notes field.",
+  "On a Warzone or Resurgence Match Summary, the important numbers are on the bottom bar, labeled KILLS, DEATHS, ASSISTS, CONTRACTS, and TOTAL DAMAGE, next to a large placement like 31ST PLACE. Read those labels even if a character pose fills most of the screen. RESURGENCE SOLOS or similar in the corner is the mode.",
+  "Return JSON with: mode (the playlist name), mode_label (exact text on screen), kills, deaths, score (use the match score if shown; do not use total damage as score), placement (finishing place, or null if the mode has none), extracted (true/false only for DMZ, otherwise null), won (true/false for multiplayer, Warzone, or Resurgence, otherwise null), confidence (0 to 1), and a short notes field.",
   "If this is not a scoreboard or after-action report, set confidence to 0 and the other fields to null.",
-  "Do not invent numbers you cannot see. Preferred mode ids: "
+  "Do not invent numbers you cannot see. If kills or deaths are visible on the bar, you must include them and must not set confidence to 1 if you skipped them. Preferred mode ids: "
     + COD_MODES.map((m) => m.id + " (" + m.label + ")").join(", ") + ".",
 ].join(" ");
 
