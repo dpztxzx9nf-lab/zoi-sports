@@ -92,3 +92,8 @@ test("duplicate chat lines from overlapping crops count once", () => {
   const ev = parseChatEvents("22:18 Kneczi was arrested!\n22:18 Kneczi was arrested!\n22:18 Kneczi was arrested!");
   assert.equal(ev.length, 1);
 });
+
+test("a name only in chat is not the player name", () => {
+  const f = parseRobRunHud("FPS: 89 PING: 43MS LOSS: 0%\n22:20 Drubie was arrested!\nLooty Bay Chat\nSOLO");
+  assert.equal(f.player_name, null);
+});
