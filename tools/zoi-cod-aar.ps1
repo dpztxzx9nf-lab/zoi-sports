@@ -323,6 +323,76 @@ function Read-CellNumber([System.Drawing.Bitmap]$Bmp, $Label) {
   return $null
 }
 
+
+function Remember-Mode([string]$Text, $Fields) {
+  if ($Fields -and $Fields.mode) {
+    $script:LastMode = [string]$Fields.mode
+    return
+  }
+  $n = Normalize-Text $Text
+  if ($n -match 'resurgence' -or $n -match 'rebirth') { $script:LastMode = 'resurgence'; return }
+  if ($n -match 'battle royale' -or $n -match ' warzone ' -or $n -match ' br solos') { $script:LastMode = 'warzone'; return }
+  if ($n -match ' dmz ' -or $n -match 'you extracted' -or $n -match 'failed to extract') { $script:LastMode = 'dmz'; return }
+}
+
+function Ratio-ForLabel($Words, $Label) {
+  if (-not $Label) { return $null }
+  $best = $null
+  $bestScore = [double]::PositiveInfinity
+  foreach ($w in $Words) {
+    if ($w.Text -notmatch '^\d+(\.\d+)?$') { continue }
+    $overlap = [Math]::Min($w.X + $w.W, $Label.X + $Label.W) - [Math]::Max($w.X, $Label.X)
+    $close = [Math]::Abs($w.CX - $Label.CX)
+    $above = $w.CY -lt ($Label.Y + 8)
+    if (-not $above) { continue }
+    if ($overlap -le 0 -and $close -gt [Math]::Max($Label.W, 48)) { continue }
+    $score = $close + [Math]::Max(0, $Label.Y - ($w.Y + $w.H))
+    if ($score -lt $bestScore) { $bestScore = $score; $best = $w }
+  }
+  if (-not $best) { return $null }
+  return [double]$best.Text
+}
+
+function Parse-BrTiles([System.Drawing.Bitmap]$Bmp, $Words, [string]$Text) {
+  $fields = @{}
+  $n = Normalize-Text $Text
+  if ($n -match '(\d+)\s*(st|nd|rd|th)\s+place') { $fields.placement = [int]$Matches[1] }
+  $killsLab = Find-Label $Words @('kills','kill')
+  $ratioLab = Find-Label $Words @('ratio','e/d','ed')
+  if (-not $ratioLab) {
+    foreach ($w in $Words) {
+      if ($w.Text -match 'ratio' -or $w.Text -match '^e/?d$' -or $w.Text -match 'e/d') { $ratioLab = $w; break }
+    }
+  }
+  $dmgLab = Find-Label $Words @('damage')
+  $conLab = Find-Label $Words @('contracts','contract')
+  $wsLab = $null
+  foreach ($w in $Words) {
+    $tl = $w.Text.ToLowerInvariant()
+    if ($tl -match 'winstrea' -or $tl -match 'winstreak') { $wsLab = $w; break }
+  }
+  $k = Number-ForLabel $Words $killsLab
+  if ($k -eq $null -and $killsLab) { $k = Read-CellNumber $Bmp $killsLab }
+  if ($k -ne $null) { $fields.kills = $k }
+  $ed = Ratio-ForLabel $Words $ratioLab
+  if ($ed -eq $null -and $Text -match '(\d+\.\d+)') { $ed = [double]$Matches[1] }
+  if ($ed -ne $null) { $fields.ed_ratio = $ed }
+  $d = Number-ForLabel $Words $dmgLab
+  if ($d -eq $null -and $dmgLab) { $d = Read-CellNumber $Bmp $dmgLab }
+  if ($d -ne $null) { $fields.damage = $d }
+  $c = Number-ForLabel $Words $conLab
+  if ($c -eq $null -and $conLab) { $c = Read-CellNumber $Bmp $conLab }
+  if ($c -ne $null) { $fields.contracts = $c }
+  $w = Number-ForLabel $Words $wsLab
+  if ($w -eq $null -and $wsLab) { $w = Read-CellNumber $Bmp $wsLab }
+  if ($w -ne $null) { $fields.winstreaks = $w }
+  if ($fields.ContainsKey('placement')) {
+    if ($fields.placement -eq 1) { $fields.won = 1 } else { $fields.won = 0 }
+  }
+  if ($fields.ContainsKey('placement') -and $fields.placement -ge 50) { $fields.mode = 'warzone'; $fields.mode_label = 'WARZONE' }
+  return $fields
+}
+
 function Parse-WarzoneStats([System.Drawing.Bitmap]$Bmp, $FooterWords, [string]$HeaderText, [string]$FooterText) {
   $fields = @{}
   $allText = ((Normalize-Text ($HeaderText + ' ' + $FooterText)).Trim())
@@ -398,15 +468,26 @@ function Parse-GenericStats([string]$Text) {
   return $fields
 }
 
-function Read-FrameStats([System.Drawing.Bitmap]$Bmp) {
-  $header = $null; $footer = $null; $footer2x = $null
+function Read-FrameStats([System.Drawing.Bitmap]$Bmp, [string]$HintText) {
+  $header = $null; $footer = $null; $footer2x = $null; $tiles = $null; $tiles2x = $null
   try {
     $header = Crop-Frac $Bmp 0 0 0.55 0.16
     $footer = Crop-Frac $Bmp 0 0.80 1 0.20
+    $tiles = Crop-Frac $Bmp 0 0.55 1 0.35
     $headerRead = if ($header) { Recognize-Words $header } else { @{ Text = ''; Words = @() } }
     if ($header) { Offset-Words $headerRead 0 0 1 }
     $footerRead = if ($footer) { Recognize-Words $footer } else { @{ Text = ''; Words = @() } }
     if ($footer) { Offset-Words $footerRead 0 ($Bmp.Height * 0.80) 1 }
+    $tilesRead = if ($tiles) { Recognize-Words $tiles } else { @{ Text = ''; Words = @() } }
+    if ($tiles) { Offset-Words $tilesRead 0 ($Bmp.Height * 0.55) 1 }
+    $tileWords = New-Object System.Collections.Generic.List[object]
+    Add-Words $tileWords $tilesRead.Words
+    if ($tiles) {
+      $tiles2x = Scale-Bitmap $tiles 2
+      $upTiles = Recognize-Words $tiles2x
+      Offset-Words $upTiles 0 ($Bmp.Height * 0.55) 2
+      Add-Words $tileWords $upTiles.Words
+    }
     $allWords = New-Object System.Collections.Generic.List[object]
     Add-Words $allWords $footerRead.Words
     if ($footer) {
@@ -416,21 +497,35 @@ function Read-FrameStats([System.Drawing.Bitmap]$Bmp) {
       Add-Words $allWords $up.Words
     }
     $headerText = [string]$headerRead.Text
-    $footerText = ([string]$footerRead.Text)
-    $layoutText = Normalize-Text ($headerText + ' ' + $footerText)
+    $footerText = [string]$footerRead.Text
+    $tilesText = [string]$tilesRead.Text
+    $layoutText = Normalize-Text ($headerText + ' ' + $footerText + ' ' + $tilesText + ' ' + $HintText)
+    $isSting = $layoutText.Contains('winstrea') -or $layoutText.Contains('winstreak') -or $layoutText.Contains('e d ratio') -or $layoutText.Contains('e/d') -or ($layoutText.Contains(' ratio') -and $layoutText.Contains('kills'))
     $isWz = $layoutText.Contains('place') -or $layoutText.Contains('your stats') -or $layoutText.Contains('total damage') -or $layoutText.Contains('resurgence') -or $layoutText.Contains('match summary')
-    if ($isWz) {
+    if ($isSting) {
+      $fields = Parse-BrTiles $Bmp $tileWords ($tilesText + ' ' + $HintText)
+      $layout = 'br-sting'
+    } elseif ($isWz) {
       $fields = Parse-WarzoneStats $Bmp $allWords $headerText $footerText
+      $layout = 'warzone'
     } else {
       $full = Recognize-Bitmap $Bmp
-      $fields = Parse-GenericStats ($headerText + ' ' + $footerText + ' ' + $full)
+      $fields = Parse-GenericStats ($headerText + ' ' + $footerText + ' ' + $tilesText + ' ' + $full + ' ' + $HintText)
+      $layout = 'other'
     }
-    $text = ($headerText + ' ' + $footerText).Trim()
-    return @{ Fields = $fields; Text = $text; Layout = $(if ($isWz) { 'warzone' } else { 'other' }) }
+    if ($fields -and -not $fields.ContainsKey('placement') -and $HintText -match '(\d+)\s*(st|nd|rd|th)\s+place') {
+      $fields.placement = [int]$Matches[1]
+      if ($fields.placement -eq 1) { $fields.won = 1 } else { $fields.won = 0 }
+    }
+    Remember-Mode ($headerText + ' ' + $footerText + ' ' + $tilesText + ' ' + $HintText) $fields
+    $text = ($headerText + ' ' + $footerText + ' ' + $tilesText).Trim()
+    return @{ Fields = $fields; Text = $text; Layout = $layout }
   } finally {
     if ($header) { $header.Dispose() }
     if ($footer) { $footer.Dispose() }
     if ($footer2x) { $footer2x.Dispose() }
+    if ($tiles) { $tiles.Dispose() }
+    if ($tiles2x) { $tiles2x.Dispose() }
   }
 }
 
@@ -438,15 +533,21 @@ function New-Crops([System.Drawing.Bitmap]$Bmp) {
   $crops = @{}
   $header = Crop-Frac $Bmp 0 0 0.62 0.18
   $footer = Crop-Frac $Bmp 0 0.80 1 0.20
-  $place = Crop-Frac $Bmp 0 0.80 0.32 0.20
+  $tiles = Crop-Frac $Bmp 0 0.55 1 0.35
+  $place = Crop-Frac $Bmp 0 0.78 0.32 0.22
+  $banner = Crop-Frac $Bmp 0.15 0.20 0.70 0.45
   try {
     if ($header) { $crops.header = Jpeg-DataUrl $header 80 }
     if ($footer) { $crops.footer = Jpeg-DataUrl $footer 85 }
+    if ($tiles) { $crops.tiles = Jpeg-DataUrl $tiles 85 }
     if ($place) { $crops.place = Jpeg-DataUrl $place 85 }
+    if ($banner) { $crops.banner = Jpeg-DataUrl $banner 85 }
   } finally {
     if ($header) { $header.Dispose() }
     if ($footer) { $footer.Dispose() }
+    if ($tiles) { $tiles.Dispose() }
     if ($place) { $place.Dispose() }
+    if ($banner) { $banner.Dispose() }
   }
   return $crops
 }
@@ -510,6 +611,7 @@ function Send-Aar([string]$Path, [string]$Fingerprint, $LocalOcr, $Crops) {
   if ($RereadId -gt 0) { $payload.reread_id = $RereadId }
   if ($LocalOcr) { $payload.local_ocr = $LocalOcr }
   if ($Crops) { $payload.crops = $Crops }
+  if ($script:LastMode) { $payload.last_mode = $script:LastMode }
   $body = $payload | ConvertTo-Json -Depth 8 -Compress
   try {
     $req = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Post, $script:Endpoint)
@@ -557,7 +659,7 @@ function Capture-AndSend([System.Drawing.Rectangle]$Mon, [bool]$Force, [string]$
       $bmp = [ZoiGrab]::Grab($Mon, 2560)
       if (-not $bmp) { continue }
       $bitmaps.Add($bmp)
-      $reads.Add((Read-FrameStats $bmp))
+      $reads.Add((Read-FrameStats $bmp $DetectText))
     }
     if ($bitmaps.Count -eq 0) { Log "Couldn't capture the screen."; return }
     $best = $bitmaps[0]
@@ -583,7 +685,7 @@ function Invoke-FileCapture([string]$Path) {
   if (-not (Test-Path -LiteralPath $Path)) { Log "No screenshot at $Path."; exit 1 }
   $bmp = [System.Drawing.Bitmap]::FromFile($Path)
   try {
-    $read = Read-FrameStats $bmp
+    $read = Read-FrameStats $bmp ''
     $crops = New-Crops $bmp
     $local = New-LocalOcr @($read)
     $fp = Get-Fingerprint $read.Text
@@ -607,6 +709,7 @@ $script:Http = New-Object System.Net.Http.HttpClient
 $script:Http.Timeout = [TimeSpan]::FromSeconds(180)
 $script:Busy = $false
 $script:InAar = $false
+$script:LastMode = ''
 $script:LastFingerprint = ''
 $script:SampleMs = New-Object System.Collections.Generic.List[int]
 $script:OcrMs = New-Object System.Collections.Generic.List[int]
@@ -642,7 +745,7 @@ function Invoke-Sample {
   $sw = [System.Diagnostics.Stopwatch]::StartNew()
   $small = $null
   try {
-    if (-not (Get-CodProcess)) { $script:InAar = $false; return }
+    if (-not (Get-CodProcess)) { $script:InAar = $false; $script:LastMode = ''; return }
     $mon = Get-CodMonitor
     if (-not $mon) { return }
     $small = [ZoiGrab]::Grab($mon, $script:DetectWidth)
@@ -651,6 +754,7 @@ function Invoke-Sample {
     $text = Recognize-Bitmap $small
     $ocrMs = [int]$ocrWatch.ElapsedMilliseconds
     $scored = Score-Text $text
+    if (-not $script:InAar) { Remember-Mode $text $null }
     $isAar = $scored.Score -ge $script:MinScore
     $near = (-not $isAar) -and ($scored.Score -ge $script:NearMiss)
     if ($near -or ($scored.Score -gt 0 -and -not $isAar)) {
@@ -669,6 +773,7 @@ function Invoke-Sample {
       }
     } elseif ((-not $isAar) -and $script:InAar -and ($scored.Score -lt $script:NearMiss)) {
       $script:InAar = $false
+$script:LastMode = ''
     }
     $script:Samples++
     $script:SampleMs.Add([int]$sw.ElapsedMilliseconds)

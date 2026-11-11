@@ -10,6 +10,7 @@ import { sniffImage } from "../_lib/media.js";
 import {
   AAR_MAX_BYTES, OCR_GUIDED_JSON, OCR_MODEL, OCR_PROMPT, OCR_CROP_PROMPT,
   modelTextOf, parseOcrPayload, mergeMatchReads, fieldsNeedingCrop, statsJson,
+  maskCropRead,
 } from "../_lib/lab-cod-aar.js";
 
 const unauthorized = () => json({ ok: false, error: "Unauthorized." }, 401);
@@ -128,7 +129,7 @@ function localReadsOf(body) {
 function cropImagesOf(body) {
   const src = body && body.crops && typeof body.crops === "object" ? body.crops : {};
   const out = [];
-  for (const name of ["footer", "bar", "place", "header"]) {
+  for (const name of ["tiles", "footer", "bar", "place", "banner", "header"]) {
     if (typeof src[name] !== "string" || !src[name]) continue;
     const pic = imageFromBody({ image: src[name] });
     if (!pic.error) out.push({ name, ...pic });
@@ -137,11 +138,28 @@ function cropImagesOf(body) {
 }
 
 async function readAllSources(env, pic, body) {
-  const locals = localReadsOf(body);
+  const locals = localReadsOf(body).map((r) => ({ ...r, _weak: false, _source: "local" }));
   const vision = await runModel(env, pic.bytes, pic.mime, OCR_PROMPT);
   const visionParsed = vision.raw ? parseOcrPayload(vision.raw) : { ok: false };
-  const localSummary = locals.length ? mergeMatchReads(locals) : null;
+  if (visionParsed.ok) {
+    visionParsed._weak = false;
+    visionParsed._source = "vision";
+  }
+  const lastMode = typeof body.last_mode === "string" ? body.last_mode.trim() : "";
+  const textHints = [
+    body && body.local_ocr && body.local_ocr.frames && Array.isArray(body.local_ocr.frames)
+      ? body.local_ocr.frames.map((f) => f && f.text).filter(Boolean).join(" ")
+      : "",
+    vision.raw || "",
+  ].join(" ");
+  const localSummary = locals.length ? mergeMatchReads(locals, { lastMode, text: textHints }) : null;
   const needed = fieldsNeedingCrop(localSummary, visionParsed.ok ? visionParsed : null);
+  // Always re-read tiles or placement when the mode is still unknown or damage is missing.
+  if (visionParsed.ok && (visionParsed.damage == null || !localSummary || localSummary.mode === "unrecognized")) {
+    for (const k of ["damage", "placement", "mode", "ed_ratio", "winstreaks"]) {
+      if (!needed.includes(k)) needed.push(k);
+    }
+  }
   const cropParses = [];
   const cropRaws = [];
   if (needed.length) {
@@ -150,14 +168,16 @@ async function readAllSources(env, pic, body) {
       cropRaws.push({ name: crop.name, raw: r.raw, error: r.error || null });
       if (r.raw) {
         const parsed = parseOcrPayload(r.raw);
-        if (parsed.ok) cropParses.push(parsed);
+        if (parsed.ok) cropParses.push(maskCropRead(parsed, crop.name));
       }
     }
   }
   const reads = [...locals];
   if (visionParsed.ok) reads.push(visionParsed);
   reads.push(...cropParses);
-  const merged = reads.length ? mergeMatchReads(reads) : { ok: false, mode: "unrecognized" };
+  const merged = reads.length
+    ? mergeMatchReads(reads, { lastMode, text: textHints })
+    : { ok: false, mode: "unrecognized" };
   return {
     merged,
     vision,
@@ -318,6 +338,8 @@ export async function onRequest({ request, env }) {
     damage: fields.damage,
     assists: read.merged && read.merged.ok ? read.merged.assists : null,
     contracts: read.merged && read.merged.ok ? read.merged.contracts : null,
+    ed_ratio: read.merged && read.merged.ok ? read.merged.ed_ratio : null,
+    winstreaks: read.merged && read.merged.ok ? read.merged.winstreaks : null,
     stats: read.merged && read.merged.ok ? statsJson(read.merged) : null,
     confidence: fields.confidence,
   };

@@ -249,12 +249,16 @@ function codMatchRow(m) {
   if (assists != null && assists !== '') bits.push(assists + (Number(assists) === 1 ? ' assist' : ' assists'));
   if (contracts != null && contracts !== '') bits.push(contracts + (Number(contracts) === 1 ? ' contract' : ' contracts'));
   if (damage != null && damage !== '') bits.push(group(damage) + ' damage');
+  const ed = m.ed_ratio != null ? m.ed_ratio : (m.stats && m.stats.ed_ratio);
+  const streaks = m.winstreaks != null ? m.winstreaks : (m.stats && m.stats.winstreaks);
+  if (ed != null && ed !== '') bits.push('E/D ' + Number(ed).toFixed(2));
+  if (streaks != null && streaks !== '') bits.push(streaks + (Number(streaks) === 1 ? ' winstreak' : ' winstreaks'));
   if (m.score != null) bits.push('score ' + group(m.score));
   if (m.extracted === 1) bits.push('extracted');
   if (m.extracted === 0) bits.push('did not extract');
   if (m.won === 1) bits.push('won');
   if (m.won === 0) bits.push('lost');
-  const skip = new Set(['mode','mode_label','kills','deaths','assists','contracts','damage','score','placement','extracted','won','map']);
+  const skip = new Set(['mode','mode_label','kills','deaths','assists','contracts','damage','score','placement','extracted','won','map','ed_ratio','winstreaks','total_damage','player_id']);
   if (m.stats && typeof m.stats === 'object') {
     for (const [k, v] of Object.entries(m.stats)) {
       if (skip.has(k) || v == null || v === '') continue;
