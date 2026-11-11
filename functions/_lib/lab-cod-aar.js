@@ -89,7 +89,7 @@ function confidenceOf(v) {
 }
 
 export function parseJsonObject(text) {
-  if (text && typeof text === "object" && !Array.isArray(text)) return text;
+  if (text && typeof text === "object" && !Array.isArray(text)) return sanitizeKeys(text);
   const raw = String(text || "").trim();
   if (!raw) return null;
   const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -97,7 +97,27 @@ export function parseJsonObject(text) {
   const start = body.indexOf("{");
   const end = body.lastIndexOf("}");
   if (start === -1 || end <= start) return null;
-  try { return JSON.parse(body.slice(start, end + 1)); } catch { return null; }
+  try { return sanitizeKeys(JSON.parse(body.slice(start, end + 1))); } catch { return null; }
+}
+
+function sanitizeKeys(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const out = {};
+  for (const [raw, v] of Object.entries(value)) {
+    const key = String(raw).replace(/[:\s]+$/g, "").trim();
+    if (!key) continue;
+    out[key] = sanitizeKeys(v);
+  }
+  return out;
+}
+
+function parsePlacement(v) {
+  if (v === undefined || v === null || v === "") return { empty: true };
+  if (typeof v === "number") return whole(v, 1, PLACEMENT_MAX);
+  const s = String(v).trim();
+  const m = s.match(/(\d+)\s*(?:st|nd|rd|th)?/i);
+  if (m) return whole(Number(m[1]), 1, PLACEMENT_MAX);
+  return whole(v, 1, PLACEMENT_MAX);
 }
 
 export function parseOcrPayload(input) {
@@ -112,7 +132,7 @@ export function parseOcrPayload(input) {
   const kills = whole(obj.kills, 0, KILLS_MAX);
   const deaths = whole(obj.deaths, 0, DEATHS_MAX);
   const score = whole(obj.score, 0, SCORE_MAX);
-  const placement = whole(obj.placement, 1, PLACEMENT_MAX);
+  const placement = parsePlacement(firstVal(obj, ["placement"]));
   const confidence = confidenceOf(obj.confidence);
 
   let extracted = null;
@@ -208,6 +228,7 @@ function statsBag(obj, core) {
   for (const src of [extra, top]) {
     for (const [k, v] of Object.entries(src)) {
       if (META_KEYS.has(k) || k in bag) continue;
+      if (k.includes(":") || k.includes(" ")) continue;
       if (v === undefined || v === null || v === "") continue;
       if (typeof v === "number" && Number.isFinite(v)) bag[k] = Number.isInteger(v) ? v : Math.round(v);
       else if (typeof v === "boolean") bag[k] = v ? 1 : 0;
@@ -246,14 +267,26 @@ export function applyPlacementWon(fields) {
   return row;
 }
 
+export function pickMode(reads) {
+  const votes = (reads || []).map((r) => r && r.mode).filter((m) => isCodMode(m));
+  const unique = [...new Set(votes)];
+  if (!unique.length) return UNRECOGNIZED_MODE;
+  if (unique.length === 1) return unique[0];
+  if (unique.includes("resurgence") && unique.every((m) => m === "resurgence" || m === "warzone")) {
+    return "resurgence";
+  }
+  return majorityValue(votes) || UNRECOGNIZED_MODE;
+}
+
 export function mergeMatchReads(reads) {
   const list = (reads || []).filter((r) => r && r.ok);
   const fields = { ok: true };
   const keys = [...STAT_INT_FIELDS, ...STAT_FLAG_FIELDS, ...STAT_TEXT_FIELDS, "mode", "mode_guess", "confidence"];
   for (const k of keys) {
+    if (k === "mode") continue;
     fields[k] = majorityValue(list.map((r) => r[k]));
   }
-  if (!fields.mode) fields.mode = majorityValue(list.map((r) => r.mode)) || UNRECOGNIZED_MODE;
+  fields.mode = pickMode(list);
   const merged = applyPlacementWon(parseOcrPayload({
     ...fields,
     mode: fields.mode,
