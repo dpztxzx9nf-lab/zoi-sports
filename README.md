@@ -5,7 +5,7 @@
 **Live site:** https://zoisports.com
 
 
-Website for **Zoi**, a new competitive Fortnite Zero Build esports org founded by Kneczi.
+Website for **Zoi**, a new competitive Fortnite Zero Build, Call of Duty and Rob Run esports org founded by Kneczi.
 
 Plain static HTML/CSS/JS — no build step.
 

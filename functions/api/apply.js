@@ -1,6 +1,6 @@
 const REGIONS = ["NA-East","NA-Central","NA-West","EU","Other"];
 const PLATFORMS = ["PC","Console","Mobile"];
-const GAMES = ["Fortnite Zero Build","Call of Duty"];
+const GAMES = ["Fortnite Zero Build","Call of Duty","Rob Run"];
 const ROLES = ["ZB player","Content creator","Staff"];
 const json = (b, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { "content-type": "application/json" } });
 const str = (v, max) => (typeof v === "string" ? v.trim() : "").slice(0, max);

@@ -18,7 +18,7 @@ import path from 'node:path';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FILE = path.resolve(HERE, '..', 'public', 'results.json');
 
-const GAMES = ['Fortnite Zero Build', 'Call of Duty'];
+const GAMES = ['Fortnite Zero Build', 'Call of Duty', 'Rob Run'];
 
 class InputError extends Error {}
 
@@ -100,7 +100,7 @@ function applyMatch(data, m) {
 }
 
 function slug(game, date, name) {
- const g = game === 'Fortnite Zero Build' ? 'zb' : game === 'Call of Duty' ? 'cod' : 'match';
+ const g = game === 'Fortnite Zero Build' ? 'zb' : game === 'Call of Duty' ? 'cod' : game === 'Rob Run' ? 'robrun' : 'match';
  let s = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40).replace(/-$/, '');
  if (s.startsWith(`${g}-`)) s = s.slice(g.length + 1);
  return `${g}-${s || 'event'}-${date}`;
