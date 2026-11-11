@@ -364,7 +364,7 @@ export async function onRequest({ request, env }) {
      their own failure. A replay the reader could not parse must never cost the
      settings send, and a database without the 0009 table must still take the
      settings. */
-  let replayResult = { stored: 0, seen: 0, attached: 0, dropped: [] };
+  replayResult = { stored: 0, seen: 0, attached: 0, dropped: [] };
   try {
     replayResult = await storeReplayStats(env, owner, body.replayStats);
   } catch (e) {
@@ -379,7 +379,7 @@ export async function onRequest({ request, env }) {
      they stand, so the first evening on the new value is not swallowed by the
      straddle rule. Only a test opening warrants one - an ordinary heartbeat that
      did it too would fill lab_stats with rows that mark nothing. */
-  const stats = await syncStats(env, owner, tokenId, epicAccountId, created.map((t) => t.id));
+  stats = await syncStats(env, owner, tokenId, epicAccountId, created.map((t) => t.id));
   let codResult = { created: [], closed: [], duplicate: false, skipped: true };
   try {
     codResult = await syncCodSnapshot(env, owner, body, takenAt);
@@ -521,22 +521,9 @@ function matchRecord(raw) {
   };
 }
 
-/* Whether lab_matches has a column. The table gains `kind` and `title` in
-   0008, and a database that has not had that migration applied - or a fake one
-   in a suite built from the older files - must still store matches. Asking the
-   table rather than assuming is cheaper than a failed insert, and it is the only
-   way the same code serves both.
-   The statement is spelled exactly as the lab spells every other introspection
-   so the fake D1's guard recognises it. */
-async function hasColumn(env, table, column) {
-  try {
-    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM pragma_table_info(?) WHERE name = ?")
-      .bind(table, column).first();
-    return Boolean(row && Number(row.n) > 0);
-  } catch {
-    return false;
-  }
-}
+/* hasColumn lives in _lib/lab-cod.js so this file and the performance
+   handler use the same pragma. The statement is unchanged, so the fake D1
+   in the suite still recognises it. */
 
 /* The instant a match ended, as a number, or null when the log never said. It
    is parsed rather than compared as text because the fraction of a second is
