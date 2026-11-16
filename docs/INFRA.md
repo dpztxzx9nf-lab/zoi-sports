@@ -83,6 +83,23 @@ Private settings log, filled from the player's own PC.
   `schtasks /Create /SC ONLOGON /TN "Zoi Lab Agent" /TR "powershell -NoProfile -WindowStyle Hidden -Command & '%LOCALAPPDATA%\Programs\zoi\zoi-lab-agent.cmd'" /F`
   It is not a `--once` task: it runs for the whole session, and `schtasks /End`
   plus `/Run` restarts it after a change to the agent.
+- **Game launches:** the agent also checks the process list (`tasklist`, names
+  only, every 15 s) for `FortniteClient-Win64-Shipping.exe`, `cod.exe` and
+  `ROB RUN.exe`, and sends a snapshot when one starts or closes (after the files
+  go quiet). Nothing attaches to or reads a game process; settings still come
+  from the files on disk: Fortnite `GameUserSettings.ini` + `ClientSettings.Sav`,
+  COD `%LOCALAPPDATA%\Activision\Call of Duty\players\s.1.0.cod26.txt` +
+  `<steamid>\g.cod26.1.0.l.txt`, ROB RUN
+  `%USERPROFILE%\AppData\LocalLow\Kefir\ROB RUN\settings\settings_steam_4262460_<id>.dat`.
+- **Updating the agent on a PC:** copy the new `zoi-lab-agent.mjs` and
+  `zoi-lab-agent-update.ps1` anywhere on it and run
+  `powershell -NoProfile -ExecutionPolicy Bypass -File zoi-lab-agent-update.ps1`.
+- **Settings changes, with the PC off:** `lab_settings_notices` (0018) holds the
+  last snapshot each person was told about, per game. `node
+  tools/zoi-settings-changes.mjs --text` (box, via wrangler) or `GET
+  /api/lab/changes` (Access) lists every setting that moved since then, old ->
+  new; `--mark` (or `POST /api/lab/changes {game, snapshotId}`) records the
+  newest snapshot as told. This replaces the weekly laptop snapshot routine.
 
 ## Operational notes
 

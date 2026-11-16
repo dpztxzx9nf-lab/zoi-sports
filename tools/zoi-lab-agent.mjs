@@ -12,7 +12,9 @@
    read out of it. If the folder name is not 32 lowercase hex characters it is
    left out and the settings still go up.
 
-   Watching sends when a config file changes and settles, and also once an hour
+   Watching sends when Fortnite, Call of Duty or ROB RUN starts or closes (a
+   process-name check every 15 s, nothing more), when a config file changes and
+   settles, and also once an hour
    when nothing changed at all. The hourly send is a duplicate snapshot, so the
    server opens no tests for it, but it still reads the account's match numbers:
    forty matches played without touching a setting would otherwise never reach
@@ -47,7 +49,7 @@
 import { inflateSync } from "node:zlib";
 import { open, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { appendFileSync, existsSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { scanLog } from "./zoi-lab-mode.mjs";
@@ -66,6 +68,47 @@ const QUIET_MAX_MS = 5 * 60_000;
 const SEND_TRIES = 4;          // one try and three retries
 const BACKOFF_MS = [5_000, 15_000, 45_000];
 const HEARTBEAT_MS = 60 * 60_000;  // send anyway this often, even with no change
+const GAME_POLL_MS = 15_000;   // how often the process list is looked at for a game start
+
+/* ------------------------------------------------------ game launches ----
+   A snapshot goes up when one of these starts or closes, so every session is
+   captured without a schedule that needs the PC on at a set hour. The check is
+   one `tasklist` every 15 s: it only lists process names. Nothing opens, reads
+   or attaches to a game process - the settings still come from the files on
+   disk, which is all Easy Anti-Cheat or Ricochet would ever see. */
+export const GAME_PROCESSES = [
+  { game: "fortnite", label: "Fortnite", image: "fortniteclient-win64-shipping.exe" },
+  { game: "cod", label: "Call of Duty", image: "cod.exe" },
+  { game: "robrun", label: "ROB RUN", image: "rob run.exe" },
+];
+
+/* tasklist /FO CSV /NH prints `"Image Name","PID",...` one per line. */
+export function runningGamesFrom(csv) {
+  const names = new Set();
+  for (const line of String(csv || "").split(/\r?\n/)) {
+    const m = /^"([^"]+)"/.exec(line.trim());
+    if (m) names.add(m[1].toLowerCase());
+  }
+  return new Set(GAME_PROCESSES.filter((g) => names.has(g.image)).map((g) => g.game));
+}
+
+/* The games running now, or null when that cannot be told (not Windows, or the
+   list failed) - null never counts as a game closing. */
+function runningGames() {
+  if (process.platform !== "win32") return Promise.resolve(null);
+  return new Promise((resolve) => {
+    execFile("tasklist.exe", ["/FO", "CSV", "/NH"], { windowsHide: true, timeout: 10_000, maxBuffer: 4 * 1024 * 1024 },
+      (err, stdout) => resolve(err ? null : runningGamesFrom(stdout)));
+  });
+}
+
+export function gameEvents(before, now) {
+  if (!before || !now) return { started: [], stopped: [] };
+  return {
+    started: GAME_PROCESSES.filter((g) => now.has(g.game) && !before.has(g.game)),
+    stopped: GAME_PROCESSES.filter((g) => before.has(g.game) && !now.has(g.game)),
+  };
+}
 
 /* ------------------------------------------------------------- the log ----
    The logon task runs with no window, so anything written to stdout goes
@@ -1288,7 +1331,7 @@ export async function watch(cfg, opts = {}) {
   const readReplays = opts.readReplays ?? readNewReplays;
   const ticks = opts.ticks ?? Infinity;     // harness only: stop after N polls
 
-  log("Watching Fortnite's config, log and replays, Call of Duty's settings, and ROB RUN settings. Sending when a config changes and settles, when a Fortnite match or replay lands, and once an hour regardless.");
+  log("Watching Fortnite's config, log and replays, Call of Duty's settings, and ROB RUN settings. Sending when one of those games starts or closes, when a config changes and settles, when a Fortnite match or replay lands, and once an hour regardless.");
   startCodAar();
   let last = await signature();
   /* What was last sent, in values rather than bytes. A file the game rewrote
@@ -1301,8 +1344,40 @@ export async function watch(cfg, opts = {}) {
      due until a full heartbeat has gone by. */
   let lastSentAt = clock();
 
+  /* Game starts and stops are looked for every gamePollMs inside the usual
+     wait, so a launch is caught within seconds and the minute poll is
+     otherwise unchanged. Where the list cannot be read (a harness, not
+     Windows) the wait is the plain sleep it always was. */
+  const listGames = opts.games ?? runningGames;
+  const gamePollMs = opts.gamePollMs ?? GAME_POLL_MS;
+  let gamesRunning = await listGames();
+  const waitWatchingGames = async () => {
+    if (gamesRunning === null && !opts.games) { await sleepFor(pollMs); return { started: [], stopped: [] }; }
+    let waited = 0;
+    while (waited < pollMs) {
+      const step = Math.min(gamePollMs, pollMs - waited);
+      await sleepFor(step);
+      waited += step;
+      const now = await listGames();
+      if (now === null) continue;
+      const ev = gameEvents(gamesRunning, now);
+      gamesRunning = now;
+      if (ev.started.length || ev.stopped.length) return ev;
+    }
+    return { started: [], stopped: [] };
+  };
+
   for (let i = 0; i < ticks; i++) {
-    await sleepFor(pollMs);
+    const games = await waitWatchingGames();
+    const launched = games.started.length > 0 || games.stopped.length > 0;
+    if (launched) {
+      const said = [
+        ...games.started.map((g) => g.label + " started"),
+        ...games.stopped.map((g) => g.label + " closed"),
+      ].join(", ");
+      log(said + " - taking a settings snapshot once its files settle.");
+      await waitForQuiet();
+    }
     const sig = await signature();
 
     /* The stat says a file moved; that is not the same as a setting changing.
@@ -1353,10 +1428,18 @@ export async function watch(cfg, opts = {}) {
     }
     const replayed = Array.isArray(replayRead.replays) ? replayRead.replays.length : 0;
 
+    /* A launch or close always sends, even with nothing new: the lab dedupes
+       an identical snapshot, so the cost is one POST per session edge, and it
+       proves the session was seen. A real change in the same poll is still sent
+       as a change. */
+    if (launched && !changed && keyNow === null) {
+      keyNow = opts.key ? await opts.key() : await currentPayloadKey();
+      changed = keyNow !== lastKey;
+    }
     const due = clock() - lastSentAt >= heartbeatMs;
-    if (!changed && !due && !played && !replayed) continue;   // nothing happened: say nothing
+    if (!changed && !due && !played && !replayed && !launched) continue;   // nothing happened: say nothing
 
-    if (changed) {
+    if (changed || launched) {
       /* fall through to the send: a real value moved */
     } else if (replayed && !played) {
       /* A replay landed without a match beside it, which is the ordinary shape:
