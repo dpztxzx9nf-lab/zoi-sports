@@ -162,14 +162,38 @@
     "rrrHeists": {
       "name": "robrun.run: heists",
       "url": "https://robrun.run/guides/crime/heists/"
+    },
+    "rggCars": {
+      "name": "ROB RUN GG Wiki: vehicles",
+      "url": "https://robrungg.wiki/database/vehicles/"
+    },
+    "infoCars": {
+      "name": "ROB RUN Info: Royal E",
+      "url": "https://robrun.info/items/royal_e/"
+    },
+    "kefirDeath": {
+      "name": "Kefir: what do I lose when I die?",
+      "url": "https://kefirgames.helpshift.com/hc/en/14-rob-run/faq/1344-what-do-i-lose-when-i-die/"
+    },
+    "athDeath": {
+      "name": "AllThingsHow: death and arrest",
+      "url": "https://allthings.how/rob-run-what-happens-when-you-die-or-get-arrested/"
+    },
+    "rrwShootouts": {
+      "name": "rob-run.wiki: shootouts",
+      "url": "https://rob-run.wiki/heists/rob-run-shootouts"
+    },
+    "ytDomi": {
+      "name": "Domi (YouTube): first $700k",
+      "url": "https://www.youtube.com/watch?v=I1I0hR5K_zQ"
     }
   },
   "plan": [
     {
-      "do": "Starter kit for both: Harris 500 shotgun, Light Armor, Lockpick, Sports Bag, meds and plates, plus one Action Camera",
-      "why": "Store fights happen inside 10 m, where a $3,500 shotgun downs a player in two shells, as fast as a $115k SMG. Keep the junk you loot: it packs into collection crates later.",
+      "do": "Starter fight kit for both: Harris 500 shotgun, Light Armor, Pouch, Painkillers, Steel Plates, Lockpick, Sports Bag, plus one Action Camera",
+      "why": "Every early fight is inside 10 m, where a $3,500 shotgun downs a player in two shells, as fast as a $115k SMG. The camera fills as you rob and sells well when full.",
       "cost": 95700,
-      "pays": "first store fight",
+      "pays": "first fight you win",
       "label": "data",
       "src": [
         "funPlanner",
@@ -179,7 +203,7 @@
     },
     {
       "do": "Land Plot Title I: rent a level 1 plot next to a Reservoir",
-      "why": "Pick a hex next to a Reservoir: each harvest gets a 50% chance of extra bags. Your base, own car and laundering all need a plot.",
+      "why": "Opens tier I guns, armor and your own car. Pick a hex next to a Reservoir: each harvest gets a 50% chance of extra bags.",
       "cost": 150000,
       "need": 245700,
       "pays": "unlocks the base",
@@ -191,20 +215,8 @@
       ]
     },
     {
-      "do": "Grow Room + 1 Grow Table",
-      "why": "Bushes can't be bought. Plant every one you find; they regrow after each harvest.",
-      "cost": 320000,
-      "need": 565700,
-      "pays": "4 to 9 h",
-      "label": "player",
-      "src": [
-        "xpjMoney",
-        "proBushes"
-      ]
-    },
-    {
       "do": "Fight kit I: KL-545 rifle and Medium Armor for both, Pouch II, Flash Grenades, First Aid Cabinet",
-      "why": "The KL-545 is the best-value rifle for anything outside a store. Flashes break contact. The cabinet lets you heal and respawn at base when someone raids you.",
+      "why": "The KL-545 is the best-value rifle for street fights. Flashes break contact. The cabinet lets you heal and respawn at base.",
       "cost": 139400,
       "pays": "first fight you win",
       "label": "data",
@@ -213,116 +225,50 @@
         "rggWeapons",
         "rgTTD"
       ],
-      "need": 705100
+      "need": 385100
     },
     {
-      "do": "Grow Tables 2 to 6",
-      "why": "Add one each time you have 6 more bushes. Best payback in the game.",
-      "cost": 200000,
-      "need": 905100,
+      "do": "Fukurou Tensa + ECU",
+      "why": "Your first own car: the fastest tier I car, 4 seats, so you chase sellers instead of running from them. The ECU stays on the car when you die.",
+      "cost": 294000,
+      "pays": "first seller you catch",
+      "label": "data",
+      "src": [
+        "rggCars",
+        "funPlanner"
+      ],
+      "need": 679100
+    },
+    {
+      "do": "Grow Room + 1 Grow Table",
+      "why": "Bushes can't be bought. Plant every one you find; they regrow after each harvest.",
+      "cost": 320000,
+      "need": 999100,
+      "pays": "4 to 9 h",
+      "label": "player",
+      "src": [
+        "xpjMoney",
+        "proBushes"
+      ]
+    },
+    {
+      "do": "Grow Tables 2 to 6 + a Fan on each",
+      "why": "Add a table each time you have 6 more bushes; gun shops, gear stores and raided bases have them. This is the one passive earner, and it grows while you fight.",
+      "cost": 450000,
       "pays": "under 1.5 h each",
       "label": "player",
       "src": [
         "xpjMoney",
-        "wikilyGrow"
-      ]
-    },
-    {
-      "do": "Fan on all 6 tables",
-      "why": "Bushes grow 12% faster. Do this before anything that isn't the Grow Room.",
-      "cost": 250000,
-      "need": 1155100,
-      "pays": "4 to 9 h",
-      "label": "data",
-      "src": [
-        "wikilyGrow"
-      ]
-    },
-    {
-      "do": "Bank account, clan, and a claim on a small business",
-      "why": "Clan wars are the best-paying fight: a small business is a 3v3, the win pays $250k, and one Pharmacy panel showed +$83,333 an hour after that. You need a third player, fights run 8pm to 6am, and dying loses your items.",
-      "cost": 55000,
-      "pays": "one win",
-      "label": "data",
-      "src": [
-        "infoClans",
-        "athBusiness"
+        "wikilyGrow",
+        "proBushes"
       ],
-      "need": 1210100
-    },
-    {
-      "do": "Collection Table",
-      "why": "Packs a few cheap stolen items into a $50k crate. Sets are worth far more than the same items sold to the Fence.",
-      "cost": 20000,
-      "need": 1230100,
-      "pays": "first set",
-      "label": "data",
-      "src": [
-        "wikiCollections"
-      ]
-    },
-    {
-      "do": "Contraband Workbench in the Trailer",
-      "why": "Repack $10k crates into $35k ones. Players net $10k to $20k a crate.",
-      "cost": 40000,
-      "need": 1270100,
-      "pays": "1 to 2 h",
-      "label": "player",
-      "src": [
-        "rrmBench",
-        "xpjMoney"
-      ]
-    },
-    {
-      "do": "Longhorn Van + Trunk Bags",
-      "why": "6 cargo slots, 12 with racks. Every other early car has 1.",
-      "cost": 251000,
-      "need": 1521100,
-      "pays": "hauling",
-      "label": "data",
-      "src": [
-        "proCars"
-      ]
-    },
-    {
-      "do": "Car Lift + Workshop + 4 Contraband Workbenches",
-      "why": "The Workshop fits 4 benches. A Small House adds only 1 more, for $800k.",
-      "cost": 295000,
-      "need": 1816100,
-      "pays": "1.5 to 4 h",
-      "label": "player",
-      "src": [
-        "wikilyWorkshop",
-        "xpjMoney"
-      ]
-    },
-    {
-      "do": "Label Printer on all 5 benches",
-      "why": "Repacks run 15% faster.",
-      "cost": 165000,
-      "need": 1981100,
-      "pays": "4 to 11 h",
-      "label": "data",
-      "src": [
-        "rrmBench"
-      ]
-    },
-    {
-      "do": "Additional Collection",
-      "why": "7 more sets for the Collection Table.",
-      "cost": 59000,
-      "need": 2040100,
-      "pays": "first set",
-      "label": "data",
-      "src": [
-        "wikiCollections"
-      ]
+      "need": 1449100
     },
     {
       "do": "Land Plot Title II: move to a level 2 plot",
-      "why": "Opens the Mini Drill, Water Pump, rifles and armor that match tier II players, Special Collection and Titan.",
+      "why": "Opens Mini Drills, tier II rifles and armor, the Royal E and Water Pumps.",
       "cost": 1000000,
-      "need": 3040100,
+      "need": 2449100,
       "pays": "unlocks tier II",
       "label": "data",
       "src": [
@@ -332,7 +278,7 @@
     },
     {
       "do": "3 Mini Drills + Master Key",
-      "why": "Mini Drills open the big safes in locked rooms, which drop decoders. One player got 25 decoders in two runs, enough to open a gate and a Grow Room with green fuses. The Master Key opens safes on other bases.",
+      "why": "Mini Drills crack the big safes in locked rooms, which drop decoders and loot. One player got 25 decoders in two runs, enough to open a gate and a Grow Room with green fuses. The Master Key opens safes on other bases.",
       "cost": 259000,
       "pays": "first raided Grow Room",
       "label": "player",
@@ -340,11 +286,11 @@
         "ytLorrRaid",
         "funPlanner"
       ],
-      "need": 3299100
+      "need": 2708100
     },
     {
       "do": "Fight kit II: RC 5.56 and Assault Armor for both, Injectors",
-      "why": "By now other crews wear tier II armor. The RC 5.56 keeps its damage out to 60 m; Injectors heal fast mid-fight.",
+      "why": "Other crews wear tier II armor by now. The RC 5.56 keeps its damage out to 60 m, and Injectors heal fast mid-fight.",
       "cost": 699000,
       "pays": "fights vs tier II crews",
       "label": "data",
@@ -352,13 +298,26 @@
         "funPlanner",
         "rgTTD"
       ],
-      "need": 3998100
+      "need": 3407100
+    },
+    {
+      "do": "Royal E + Turbo Kit",
+      "why": "The fastest tier II car: 91 km/h, quickest off the line short of a $4M car, 4 seats. Faster than the Titan, which only wins if you haul crates. The Turbo stays on the car when you die.",
+      "cost": 1389500,
+      "pays": "catching anyone on the road",
+      "label": "data",
+      "src": [
+        "rggCars",
+        "infoCars",
+        "funPlanner"
+      ],
+      "need": 4796600
     },
     {
       "do": "Water Pump on all 6 tables",
       "why": "Another 14% off grow time. It's the main reason to go level 2.",
       "cost": 620000,
-      "need": 4618100,
+      "need": 5416600,
       "pays": "7 to 14 h",
       "label": "data",
       "src": [
@@ -366,32 +325,10 @@
       ]
     },
     {
-      "do": "Special Collection",
-      "why": "Sets that pack into $150k crates.",
-      "cost": 150000,
-      "need": 4768100,
-      "pays": "one crate",
-      "label": "data",
-      "src": [
-        "wikiCollections"
-      ]
-    },
-    {
-      "do": "Longhorn Titan (optional)",
-      "why": "Almost twice the Van's speed, same 6 cargo slots. Sells back for $360k.",
-      "cost": 1100000,
-      "need": 5868100,
-      "pays": "faster runs",
-      "label": "data",
-      "src": [
-        "proCars"
-      ]
-    },
-    {
       "do": "Land Plot Title III: move to a level 3 plot",
-      "why": "Go here if you'll run the bank or have 20+ hours of play left. Otherwise stop at step 19 and bank the rest. Opens the bank's ID Card, the SR Reaper, Heavy Armor and UV Lamps.",
+      "why": "Only if you'll run the bank or have 20+ hours of play left; otherwise stop here and bank the rest. Opens the bank's ID Card, the SR Reaper, Heavy Armor and UV Lamps.",
       "cost": 3000000,
-      "need": 8868100,
+      "need": 8416600,
       "pays": "unlocks tier III",
       "label": "data",
       "src": [
@@ -401,7 +338,7 @@
     },
     {
       "do": "Bank kit: Deposit Box Keys, Code Tablet, 2 USB Hacking Tools, purple Action Camera, $50k for the Drill barter",
-      "why": "Fill the keys at the bank's deposit boxes and trade them for the ID Card. The camera, USBs and cash trade for the Drill at Lenny's. Bring the 3 Mini Drills from step 15. The vault drill may need a minimum number of players online; that isn't confirmed.",
+      "why": "Fill the keys at the bank's deposit boxes and trade them for the ID Card. The camera, USBs and cash trade for the Drill at Lenny's. Bring the 3 Mini Drills from step 8. The vault drill may need a minimum number of players online; that isn't confirmed.",
       "cost": 510000,
       "pays": "one bank job: $1.5M to $5.9M",
       "label": "player",
@@ -410,29 +347,7 @@
         "rggBank",
         "xpjMoney"
       ],
-      "need": 9378100
-    },
-    {
-      "do": "UV Lamp on all 6 tables",
-      "why": "Bushes grow 24% faster. With all three upgrades a table grows twice as fast.",
-      "cost": 2000000,
-      "need": 11378100,
-      "pays": "7 to 15 h",
-      "label": "data",
-      "src": [
-        "wikilyGrow"
-      ]
-    },
-    {
-      "do": "Unique Collection",
-      "why": "Sets that pack into $500k crates.",
-      "cost": 350000,
-      "need": 11728100,
-      "pays": "one crate",
-      "label": "data",
-      "src": [
-        "wikiCollections"
-      ]
+      "need": 8926600
     },
     {
       "do": "Fight kit III: SR Reaper and Heavy Armor for both",
@@ -444,41 +359,38 @@
         "rgTTD",
         "rggWeapons"
       ],
-      "need": 13148100
+      "need": 10346600
     }
   ],
   "tips": [
     {
-      "text": "Keep every bench loaded. Reload them every 30 minutes.",
-      "label": "zoi",
-      "src": []
-    },
-    {
-      "text": "Buy Contraband Cargo from your settlement's seller. Residents get a discount.",
+      "text": "Launder after every sale. Banked money can't be stolen by players.",
       "label": "official",
       "src": [
-        "rrmBench"
+        "kefirBank"
       ]
     },
     {
-      "text": "Sell cargo in one trip with your crew. Police can seize it on the road.",
-      "label": "data",
-      "src": [
-        "wikiCargo"
-      ]
-    },
-    {
-      "text": "Never leave cash or cargo at the base or in the trunk.",
+      "text": "Never leave cash or loot at base or in the trunk.",
       "label": "player",
       "src": [
         "wikiPlot"
       ]
     },
     {
-      "text": "If you're close to the next Notoriety level, wait to sell big cargo. Level 5 pays 25% more than level 1.",
+      "text": "Optional side line: one Contraband Workbench in the Trailer ($40k), loaded by whoever reloads the Grow Room. Players net $10k to $20k a crate. Skip the Workshop and Label Printers.",
+      "label": "player",
+      "src": [
+        "rrmBench",
+        "xpjMoney"
+      ]
+    },
+    {
+      "text": "Optional, if you add a third player: clan wars. A small business is 3v3 for a $50k bet, pays $250k a win, and one Pharmacy panel showed +$83,333 an hour after that. Fights run 8pm to 6am.",
       "label": "data",
       "src": [
-        "wikiCargo"
+        "infoClans",
+        "athBusiness"
       ]
     }
   ],
@@ -498,7 +410,7 @@
       ]
     },
     {
-      "text": "Sell all cargo. Every $500,000 you hold at the wipe is one more year of jail time, up to 40 years.",
+      "text": "Sell everything. Every $500,000 you hold at the wipe is one more year of jail time, up to 40 years.",
       "label": "data",
       "src": [
         "wikiWipe"
@@ -520,27 +432,22 @@
     }
   ],
   "bestRuns": {
-    "lead": "Cash per hour, ranked. All of these are player reports, one player's or squad's result, not a promise.",
+    "lead": "What each fight pays. All of these are player reports, one player's or squad's result, not a promise.",
     "ranked": [
-      {
-        "name": "Full Grow Room",
-        "rate": "~$200k / hour",
-        "note": "6 tables, 36 bushes. Grows while you rob or are offline, and a death doesn't stop it. One table of 6 bushes is ~$34k / hour."
-      },
       {
         "name": "Store runs",
         "rate": "~$200k / hour",
-        "note": "One solo player made $600k in 3 hours."
+        "note": "One solo player made $600k in 3 hours. Gun shops and gear stores also have bushes."
       },
       {
-        "name": "Cop shift",
-        "rate": "up to ~$130k / hour",
-        "note": "Best report: $100k in 45 min. A normal shift is closer to $30k. Pay caps at $1M a shift. You keep your own gear."
+        "name": "Full Grow Room",
+        "rate": "~$200k / hour",
+        "note": "6 tables, 36 bushes. Grows while you fight or are offline."
       },
       {
-        "name": "Contraband bench",
+        "name": "Contraband bench (optional)",
         "rate": "~$20k / hour per bench",
-        "note": "$10k to $20k net per 30-minute crate. Passive, so stack it with everything above."
+        "note": "$10k to $20k net per 30-minute crate."
       }
     ],
     "rankedSrc": [
@@ -550,17 +457,22 @@
       {
         "name": "Bank heist",
         "rate": "$1.5M to $5.9M",
-        "note": "Squad job, tier III. Needs 3 Mini Drills, the Drill and the ID Card (step 21). A cop pulls the vault drill in 4 seconds, so one of you guards it."
+        "note": "Tier III. Needs 3 Mini Drills, the Drill and the ID Card. A cop pulls the vault drill in 4 seconds, so one of you guards it."
       },
       {
-        "name": "Small business (clan war)",
-        "rate": "$250k + ~$83k / hour",
-        "note": "3v3 for a $50k bet. The hourly figure is one Pharmacy panel."
+        "name": "Catching a seller",
+        "rate": "$100k to $500k",
+        "note": "What one seller says he brings to a Fence per trip. Plus his gear."
       },
       {
         "name": "ATM tip-off",
         "rate": "~$150k",
         "note": "How often it happens isn't known."
+      },
+      {
+        "name": "Base raid",
+        "rate": "a full Grow Room",
+        "note": "One player raided a full Grow Room and kept its bushes. Takes about 25 decoders against green fuses."
       }
     ],
     "tips": [
@@ -579,14 +491,6 @@
         ]
       },
       {
-        "text": "Plant bushes instead of selling them. A planted bush keeps paying every harvest. Late in the week, sell it.",
-        "label": "player",
-        "src": [
-          "xpjMoney",
-          "rggMoney"
-        ]
-      },
-      {
         "text": "Leave at about $100k in the bag. Smaller cash-outs lose less when a squad shows up.",
         "label": "player",
         "src": [
@@ -594,25 +498,36 @@
         ]
       }
     ],
-    "unknown": "Nobody has published reliable per-minute numbers for specific crates or routes, how often a repack comes out as Rarity Cargo, or what the Nov 4 patch did to production payouts."
+    "unknown": "Nobody has published car durability, how long a dead player's drop stays on the ground, or real per-hour numbers for hunting other players."
   },
   "duo": {
-    "lead": "Two players, one base. Fight together. Whoever is closer to base after a fight reloads the Grow Room.",
+    "lead": "Two players, one car, one base. You hunt together. Whoever is closer to base after a fight reloads the Grow Room.",
     "groups": [
       {
-        "h": "Who does what",
+        "h": "Positions",
         "items": [
           {
-            "text": "Both: stores, heists and fights, together. Kefir says solo players struggle against full parties.",
-            "label": "official",
+            "text": "Point: shotgun, goes in first and clears rooms. Overwatch: rifle, holds the car and the street out to 60 m.",
+            "label": "zoi",
             "src": [
-              "rrrSolo"
+              "rggWeapons",
+              "rgTTD"
             ]
           },
           {
-            "text": "Between fights, one of you harvests, replants, reloads the benches and launders. The Grow Room keeps growing while you fight.",
-            "label": "zoi",
-            "src": []
+            "text": "Park nose-out at the exit, with the car between you and the street. You can't shoot from inside it.",
+            "label": "player",
+            "src": [
+              "rrwShootouts"
+            ]
+          },
+          {
+            "text": "In stores: shoot the alarm box and cameras first, and hold the clerk at gunpoint instead of killing them.",
+            "label": "player",
+            "src": [
+              "xpjMoney",
+              "ytLorrRaid"
+            ]
           },
           {
             "text": "One of you does all the research and buying, so nothing is paid for twice. Hand gear over.",
@@ -622,25 +537,17 @@
         ]
       },
       {
-        "h": "In a fight",
+        "h": "Hunting other players",
         "items": [
           {
-            "text": "Shotgun inside stores, rifle outside. A shotgun is the best gun inside 10 m and a bad one across a street.",
-            "label": "data",
+            "text": "Wait near a Fence or Smuggler as Civilians, then mask up in the car when a loaded seller pulls in. Kefir says camping drop-offs is intended.",
+            "label": "official",
             "src": [
-              "rggWeapons"
+              "fyiSelling"
             ]
           },
           {
-            "text": "Shoot the alarm box and cameras first, and hold the clerk at gunpoint instead of killing them.",
-            "label": "player",
-            "src": [
-              "xpjMoney",
-              "ytLorrRaid"
-            ]
-          },
-          {
-            "text": "Whoever drives keeps the gun holstered. Drawing a weapon drops cargo you're carrying.",
+            "text": "Hit sellers while their hands are full: drawing a weapon drops the cargo they're carrying.",
             "label": "player",
             "src": [
               "tposeContraband",
@@ -648,7 +555,79 @@
             ]
           },
           {
-            "text": "Don't shoot civilians. 3 kills marks you as Most Wanted and shows your location to the whole city.",
+            "text": "A masked player who dies loses their bag and gear, and players report looting both off the body. Loot fast: cops and other crews take it too.",
+            "label": "official",
+            "src": [
+              "kefirDeath",
+              "athDeath",
+              "ytDomi"
+            ]
+          },
+          {
+            "text": "Grab the cash pile off the Fence counter right after any sale. Anyone, cops included, can take it.",
+            "label": "official",
+            "src": [
+              "fyiSelling"
+            ]
+          },
+          {
+            "text": "Outside the city anyone can be killed. Crews wait on the roads out for cars carrying bank loot.",
+            "label": "player",
+            "src": [
+              "spaceFaq",
+              "rggBank"
+            ]
+          },
+          {
+            "text": "Base raids: pick a Grow Room with green fuses outside your own district. Decoders come from Mini Drill safes.",
+            "label": "player",
+            "src": [
+              "ytLorrRaid"
+            ]
+          }
+        ]
+      },
+      {
+        "h": "When to push",
+        "items": [
+          {
+            "text": "Early in the wipe. Cops have no badges yet and crews wear tier I armor, so the first hours are the easiest fights.",
+            "label": "player",
+            "src": [
+              "ytDomi"
+            ]
+          },
+          {
+            "text": "When you outnumber them, their hands are full, or their armor is broken.",
+            "label": "zoi",
+            "src": []
+          },
+          {
+            "text": "ATM tip-off: the city alert marks one ATM with a big cash batch, and the first crew to open it wins. No tool needed.",
+            "label": "data",
+            "src": [
+              "wikiAtm"
+            ]
+          }
+        ]
+      },
+      {
+        "h": "When to pull out",
+        "items": [
+          {
+            "text": "A third crew or the cops show up, or you're out of plates.",
+            "label": "zoi",
+            "src": []
+          },
+          {
+            "text": "Your bag is full. A second robbery is where most players lose the first one.",
+            "label": "player",
+            "src": [
+              "rrrHeists"
+            ]
+          },
+          {
+            "text": "Don't shoot civilians: 3 kills marks you Most Wanted and shows your location to the whole city.",
             "label": "data",
             "src": [
               "infoPolice"
@@ -664,92 +643,40 @@
         ]
       },
       {
-        "h": "When to split",
+        "h": "Selling",
         "items": [
           {
-            "text": "Notoriety rises with each crime in one visit and resets when you leave. A duo starts at level 2 (×1.10), solo at level 4 (×1.35), and level 5 pays ×1.50.",
+            "text": "Notoriety rises with each crime in one visit and resets when you leave. A duo starts at level 2 (×1.10), solo at 4 (×1.35), and level 5 pays ×1.50.",
             "label": "data",
             "src": [
               "wikiNotoriety"
             ]
           },
           {
-            "text": "After a spree together, sell together before you leave. At level 4 or 5 you match or beat the solo bonus, with two guns at the Fence.",
+            "text": "After a spree, sell together before you leave: at level 4 or 5 you match or beat the solo bonus, with two guns at the Fence.",
             "label": "zoi",
             "src": [
               "wikiNotoriety"
             ]
           },
           {
-            "text": "Harvest bags and loot from earlier visits: one of you sells alone for +35% ($40k became $54k). Small batches. The other covers from a car nearby or reloads the base.",
+            "text": "Harvest bags: one of you sells alone for +35% ($40k became $54k), in small batches. The other covers from the car.",
             "label": "player",
             "src": [
-              "qcivvy",
-              "wikiNotoriety"
+              "qcivvy"
             ]
           }
         ]
       },
       {
-        "h": "Fights worth taking",
+        "h": "Skip",
         "items": [
           {
-            "text": "Clan wars for a business (step 7). Best pay of any fight, but a small business is 3v3, so bring a third player.",
-            "label": "data",
-            "src": [
-              "infoClans",
-              "athBusiness"
-            ]
-          },
-          {
-            "text": "ATM tip-off: the city alert marks one ATM with a big cash batch, and the first crew to open it wins. No tool needed. Drop what you're doing unless you're carrying cargo.",
-            "label": "data",
-            "src": [
-              "wikiAtm"
-            ]
-          },
-          {
-            "text": "Raiding bases: pick a Grow Room with green fuses, not in your own district. One player got his full Grow Room this way, and bushes can't be bought.",
-            "label": "player",
-            "src": [
-              "ytLorrRaid",
-              "proBushes"
-            ]
-          },
-          {
-            "text": "Sellers at a Fence or Smuggler: Kefir says camping there is intended. One seller says he brings $100k to $200k a trip, up to $500k when he risks it. Only hit a loaded car, and expect cops and other crews.",
-            "label": "player",
-            "src": [
-              "fyiSelling",
-              "ytLorrRaid"
-            ]
-          },
-          {
-            "text": "Outside the city anyone can be killed. Crews camp the roads out for cars carrying bank loot.",
-            "label": "player",
-            "src": [
-              "spaceFaq",
-              "rggBank"
-            ]
-          }
-        ]
-      },
-      {
-        "h": "Fights to skip",
-        "items": [
-          {
-            "text": "Cop shifts are fight-heavy but pay little: $9k to $15k an arrest, $2k a kill, and nothing for killing someone who surrendered. Max 4 cops per city. Worth it only when you're broke, because you use their gear, not yours.",
+            "text": "Cop shifts: lots of fights, little pay. $9k to $15k an arrest, $2k a kill, max 4 cops per city.",
             "label": "data",
             "src": [
               "infoPolice",
               "rggPolice"
-            ]
-          },
-          {
-            "text": "A second robbery with a full bag. That's where most players lose the first one.",
-            "label": "player",
-            "src": [
-              "rrrHeists"
             ]
           }
         ]
@@ -783,30 +710,6 @@
               "xpjDecoder",
               "wikiRaid"
             ]
-          }
-        ]
-      },
-      {
-        "h": "Banking",
-        "items": [
-          {
-            "text": "Both of you launder after every sale. Banked money can't be stolen by players.",
-            "label": "official",
-            "src": [
-              "kefirBank"
-            ]
-          },
-          {
-            "text": "Use your own Laundering Desk; Lenny takes a share.",
-            "label": "player",
-            "src": [
-              "wikiMoney"
-            ]
-          },
-          {
-            "text": "Withdraw only what the next buy needs. Cash on you can be taken.",
-            "label": "zoi",
-            "src": []
           }
         ]
       }
@@ -940,17 +843,40 @@
   "paysNote": "Pays back is in hours you're online. The short end is math from game prices, the long end is from player reports.",
   "cars": [
     {
-      "text": "Longhorn Van first, Titan later. Both carry 6 crates; the Titan is much faster.",
+      "text": "Fukurou Tensa first (84 km/h, 4 seats, $250k with research), then the Royal E at level 2 (91 km/h, 4 seats, $1.2M). The Titan (88 km/h) is a hauler; skip it.",
       "label": "data",
       "src": [
-        "proCars"
+        "rggCars",
+        "funPlanner"
       ]
     },
     {
-      "text": "Skip the Royal E and J, the Longhorn Wild and the Buletti. They cost $1M to $10M and carry 0 to 4 crates.",
+      "text": "Off the line, the Royal E (70) leaves the Titan (45) and Tensa (40) behind. The Royal J (85) needs level 3 and costs $4.5M with research.",
       "label": "data",
       "src": [
-        "proCars"
+        "infoCars"
+      ]
+    },
+    {
+      "text": "The Longhorn Wild (106 km/h) and Buletti (115 km/h) are fastest but seat only 2 and cost $5M and $12M+ with research. The Buletti can't carry shipments.",
+      "label": "data",
+      "src": [
+        "rggCars",
+        "funPlanner"
+      ]
+    },
+    {
+      "text": "You can't shoot from a car. Stop, get out and fight from behind it.",
+      "label": "player",
+      "src": [
+        "rrwShootouts"
+      ]
+    },
+    {
+      "text": "Car mods stay on the car when you die. No source publishes car durability.",
+      "label": "data",
+      "src": [
+        "funPlanner"
       ]
     }
   ],
@@ -985,16 +911,13 @@
     }
   ],
   "growCore": {
-    "text": "The Grow Room is the core of this plan. Fill all 6 tables and put a Fan, Water Pump and UV Lamp on each as soon as your plot level allows. One player reports over $500k from about 40 minutes of harvesting with upgraded tables.",
-    "label": "player",
-    "src": [
-      "qcivvy",
-      "xpjMoney"
-    ]
+    "text": "You're the hunters: buy fight power and a fast car first, and make money from fights, raids and heists. The Grow Room is the one passive earner. Whoever is at base reloads it. Add UV Lamps at level 3 when you have $2M spare.",
+    "label": "zoi",
+    "src": []
   },
   "plotSpace": [
     {
-      "text": "Fill the Grow Room's 6 tables first. If your plot only fits two buildings, take a Grow Room and a Workshop, not two Grow Rooms: bushes can't be bought, so a second room may sit empty.",
+      "text": "Your plot needs a Grow Room, nothing more. Don't build a second one: bushes can't be bought, so it would sit empty.",
       "label": "zoi",
       "src": [
         "proBushes"
