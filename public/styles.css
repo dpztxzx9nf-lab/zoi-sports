@@ -853,6 +853,11 @@ html,body{overflow-x:clip}img{max-width:100%}
 html{scroll-padding-top:4.5rem}
 .rr-lead{color:var(--m);text-align:center;margin:0 auto 1rem;max-width:34rem;font-size:.95rem}
 .rr-note{color:var(--m);font-size:.88rem;margin:.9rem 0 0}
+.rr-note.rr-pays{margin:0 0 .9rem}
+.rr-zero{background:var(--card);border:1px solid #e6d3a044;border-top:3px solid var(--gold);border-radius:8px;padding:1rem 1.1rem}
+.rr-zero h2{margin-top:0}
+.rr-zero ol{margin:0;padding-left:1.4rem;color:var(--t)}.rr-zero li{margin:.45rem 0;line-height:1.45}.rr-zero li::marker{color:var(--gold);font-weight:700}
+.rr-zero-always{margin:.9rem 0 0;color:var(--m);font-size:.9rem;line-height:1.5}
 .rr-gh{font:600 .95rem/1.3 system-ui,sans-serif;letter-spacing:0;color:var(--gold);margin:1.4rem 0 .3rem}
 .rr-rank{list-style:none;margin:0;padding:0;display:grid;gap:.55rem;counter-reset:r}
 .rr-rank li{background:var(--card);border:1px solid #e6d3a022;border-radius:6px;padding:.75rem 1rem}

@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const pub = join(root, "public");
 const D = JSON.parse(readFileSync(join(pub, "robrun/data.json"), "utf8"));
-const SITE = "https://zoisports.com", URL_ = SITE + "/robrun", CSS_V = 57;
+const SITE = "https://zoisports.com", URL_ = SITE + "/robrun", CSS_V = 58;
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const usd = (n) => "$" + Math.round(n).toLocaleString("en-US");
@@ -23,7 +23,7 @@ const updatedHuman = new Date(D.updated + "T12:00:00Z").toLocaleDateString("en-U
 
 const groupItems = (sec) => sec.groups.flatMap((g) => g.items);
 const BR = D.bestRuns;
-const all = [...D.plan, D.growCore, D.planNote, ...D.cars, ...D.rentOwn, ...D.tips, ...D.lastDay, ...BR.tips, { label: "player", src: BR.rankedSrc }, ...groupItems(D.duo), ...groupItems(D.raids)];
+const all = [...D.plan, D.growCore, D.planNote, ...D.cars, ...D.rentOwn, ...D.plotSpace, ...D.tips, ...D.lastDay, ...BR.tips, { label: "player", src: BR.rankedSrc }, ...groupItems(D.duo), ...groupItems(D.raids)];
 const usedSrc = [...new Set(all.flatMap((x) => x.src || []))];
 const usedLabels = [...new Set(all.map((x) => x.label))];
 const li = (x) => `<li>${esc(x.text)} ${chip(x.label)}</li>`;
@@ -68,15 +68,19 @@ const html = `<!doctype html>
 <section class="shop-hero rr-hero"><p class="page-chapter"><span class="gr">ΖΩΗ</span><span class="dot" aria-hidden="true">·</span>Rob Run</p><h1 class="page-h1">Best buy order after a wipe</h1><p class="tag">For a duo. The Grow Room is the core. Buy in this order and keep $100k cash on hand.</p></section>
 <div class="stripes" aria-hidden="true"></div>
 <nav class="rr-jump" aria-label="On this page"><a href="#plan">Plan</a><a href="#land">Land</a><a href="#runs">Best runs</a><a href="#duo">Duo</a><a href="#raids">Raids</a></nav>
+<section class="rr-sec rr-zero-wrap" aria-labelledby="zero-h"><div class="rr-zero"><h2 id="zero-h">${esc(D.zero.title)}</h2>
+<ol>${D.zero.steps.map((t) => `<li>${esc(t)}</li>`).join("")}</ol>
+<p class="rr-zero-always">${esc(D.zero.always)}</p></div></section>
 <section class="rr-sec" id="plan"><h2>The buy order</h2>
 <p class="rr-lead">${esc(D.growCore.text)} ${chip(D.growCore.label)}</p>
-<p class="rr-note">${esc(D.paysNote)}</p>
+<p class="rr-note rr-pays">${esc(D.paysNote)}</p>
 <ol class="rr-plan">
 ${steps}
 </ol>
 <p class="rr-note">${esc(D.planNote.text)} ${chip(D.planNote.label)}</p></section>
 <section class="rr-sec"><h2>Cars</h2><ul class="rr-steps">${D.cars.map(li).join("")}</ul></section>
-<section class="rr-sec" id="land"><h2>Rent or own</h2><ul class="rr-steps">${D.rentOwn.map(li).join("")}</ul></section>
+<section class="rr-sec" id="land"><h2>Rent or own</h2><ul class="rr-steps">${D.rentOwn.map(li).join("")}</ul>
+<h3 class="rr-gh">Grow Room or Workshop</h3><ul class="rr-steps">${D.plotSpace.map(li).join("")}</ul></section>
 <section class="rr-sec"><h2>Tips</h2><ul class="rr-steps">${D.tips.map(li).join("")}</ul></section>
 <section class="rr-sec"><h2>Last day</h2><ul class="rr-steps">${D.lastDay.map(li).join("")}</ul></section>
 <section class="rr-sec" id="runs"><h2>Best runs</h2>${bestRuns}</section>
