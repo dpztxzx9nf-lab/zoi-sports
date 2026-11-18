@@ -1,6 +1,6 @@
 {
   "_readme": "Everything on zoisports.com/robrun. Edit, bump `updated`, then run: node tools/build-robrun.mjs. Only put things here the game does not already show (no price lists). Labels: official = Kefir; data = game files via fan wikis; player = player reports; zoi = our advice.",
-  "updated": "2026-11-17",
+  "updated": "2026-11-18",
   "gameVersion": "0.7.0",
   "sources": {
     "kefirWipe": {
@@ -97,7 +97,7 @@
     },
     "qcivvy": {
       "name": "@qcivvy on TikTok (player)",
-      "url": "https://www.tiktok.com/@qcivvy"
+      "url": "https://www.tiktok.com/t/ZTParmw4Q/"
     },
     "igmWeed": {
       "name": "iGameMag: weed vs meth (Reservoir)",
@@ -719,6 +719,13 @@
       ]
     },
     {
+      "text": "Level 3: rent. Owning costs $8M and won't pay back within one wipe.",
+      "label": "data",
+      "src": [
+        "wikilyPlots"
+      ]
+    },
+    {
       "text": "Level 1: own if a free settlement is close in the first 3 days. It's $300k vs $150k. You skip the 5% tax and collect it from tenants, so it pays back in about 3 days if you launder $1M a day.",
       "label": "data",
       "src": [
@@ -740,5 +747,28 @@
       "qcivvy",
       "xpjMoney"
     ]
-  }
+  },
+  "zero": {
+    "title": "Zero to #1 in 8 steps",
+    "steps": [
+      "Run stores solo for starting cash, and stash junk for collection crates.",
+      "Rent a level 1 plot next to a Reservoir.",
+      "Get a Collection Table and a Contraband Workbench running.",
+      "Build the Grow Room and fill all 6 tables as you find bushes. This is your main money.",
+      "Buy a Fan for every table, then get the Longhorn Van.",
+      "Add a Workshop with 4 benches.",
+      "Rent level 2 and add Water Pumps. Start heists with the Mini Drill.",
+      "Once you have about $5.5M and 20+ hours left, rent level 3 and add UV Lamps."
+    ],
+    "always": "Always: one player buys and runs the base, and the other farms bushes and loot. Sell solo in small batches. Never buy land outright after day 3."
+  },
+  "plotSpace": [
+    {
+      "text": "Fill the Grow Room's 6 tables first. If your plot only fits two buildings, take a Grow Room and a Workshop, not two Grow Rooms: bushes can't be bought, so a second room may sit empty.",
+      "label": "zoi",
+      "src": [
+        "proBushes"
+      ]
+    }
+  ]
 }
