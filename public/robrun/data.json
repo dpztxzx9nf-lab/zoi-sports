@@ -107,7 +107,7 @@
   "plan": [
     {
       "do": "Lockpick, Backpack, Light Armor, Action Camera",
-      "why": "Cheap kit for the first store runs.",
+      "why": "Cheap kit for solo store runs. Keep the junk you loot: it packs into collection crates later.",
       "cost": 45000,
       "need": 45000,
       "pays": "first run",
@@ -287,6 +287,40 @@
       "src": [
         "proCars"
       ]
+    },
+    {
+      "do": "Land Plot Title III: move to a level 3 plot",
+      "why": "Only with 20+ hours of play left. Otherwise stop at step 16 and bank the rest. Opens UV Lamps and the Unique Collection.",
+      "cost": 3000000,
+      "need": 7928000,
+      "pays": "unlocks tier III",
+      "label": "data",
+      "src": [
+        "wikilyPlots",
+        "funPlanner"
+      ]
+    },
+    {
+      "do": "UV Lamp on all 6 tables",
+      "why": "Bushes grow 24% faster. With all three upgrades a table grows twice as fast.",
+      "cost": 2000000,
+      "need": 9928000,
+      "pays": "7 to 15 h",
+      "label": "data",
+      "src": [
+        "wikilyGrow"
+      ]
+    },
+    {
+      "do": "Unique Collection",
+      "why": "Sets that pack into $500k crates.",
+      "cost": 350000,
+      "need": 10278000,
+      "pays": "one crate",
+      "label": "data",
+      "src": [
+        "wikiCollections"
+      ]
     }
   ],
   "tips": [
@@ -368,14 +402,6 @@
       ]
     }
   ],
-  "planNote": {
-    "text": "UV Lamps (+24% growth) need a level 3 plot, so they can't come earlier. Go level 3 as soon as you can afford it with 20+ hours of play left: Land Plot Title III ($3M), a UV Lamp on all 6 tables ($2M), then the Unique Collection ($350k). That's about $10.3M in all. With less time left, the $5M won't pay back before the wipe.",
-    "label": "zoi",
-    "src": [
-      "wikilyGrow",
-      "funPlanner"
-    ]
-  },
   "bestRuns": {
     "lead": "Cash per hour, ranked. All of these are player reports, one player's or squad's result, not a promise.",
     "ranked": [
@@ -747,20 +773,6 @@
       "qcivvy",
       "xpjMoney"
     ]
-  },
-  "zero": {
-    "title": "Zero to #1 in 8 steps",
-    "steps": [
-      "Run stores solo for starting cash, and stash junk for collection crates.",
-      "Rent a level 1 plot next to a Reservoir.",
-      "Get a Collection Table and a Contraband Workbench running.",
-      "Build the Grow Room and fill all 6 tables as you find bushes. This is your main money.",
-      "Buy a Fan for every table, then get the Longhorn Van.",
-      "Add a Workshop with 4 benches.",
-      "Rent level 2 and add Water Pumps. Start heists with the Mini Drill.",
-      "Once you have about $5.5M and 20+ hours left, rent level 3 and add UV Lamps."
-    ],
-    "always": "Always: one player buys and runs the base, and the other farms bushes and loot. Sell solo in small batches. Never buy land outright after day 3."
   },
   "plotSpace": [
     {
