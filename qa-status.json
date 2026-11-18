@@ -14,7 +14,7 @@
     {
       "name": "links",
       "result": "fail",
-      "details": "exit 2;  \ud83d\udd0d Total 30 ; \u2705 Successful 28 ; \ud83d\udc7b Excluded 0 ; \ud83d\udeab Errors 2 ;## Errors per input;### Errors in https://zoisports.com/; [429] <https://www.instagram.com/zoi.sports.gg/ [404] <https://zoisports.com/cdn-cgi/l/email-protection#f39b969f9f9cb3899c9a80839c818780dd909c9e "
+      "details": "exit 2;  \ud83d\udd0d Total 30 ; \u2705 Successful 29 ; \ud83d\udc7b Excluded 0 ; \ud83d\udeab Errors 1 ;## Errors per input;### Errors in https://zoisports.com/; [404] <https://zoisports.com/cdn-cgi/l/email-protection#5c34393030331c2633352f2c332e282f723f3331 "
     },
     {
       "name": "denylist",
@@ -39,11 +39,11 @@
   ],
   "passing": 3,
   "total": 5,
-  "run_url": "https://github.com/dpztxzx9nf-lab/zoi-sports/actions/runs/44366967216",
-  "commit": "79cbbf790e80bc1bcbd2c5523bb375f601789b23",
+  "run_url": "https://github.com/dpztxzx9nf-lab/zoi-sports/actions/runs/44369573541",
+  "commit": "d2f0d114ff21f947f6ce093bdd4f3607b0aa125e",
   "event": "push",
   "ref": "main",
   "pr": null,
   "mode": "report-only",
-  "updated_at": "2026-11-18T18:12:02Z"
+  "updated_at": "2026-11-18T18:26:01Z"
 }
