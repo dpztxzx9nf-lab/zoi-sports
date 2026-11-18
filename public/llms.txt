@@ -28,7 +28,7 @@ Required: game (Fortnite Zero Build, Call of Duty or Rob Run), Epic name, Discor
 - Shop (preview, coming soon): https://zoisports.com/shop
 - Results: https://zoisports.com/results
 - Game settings: https://zoisports.com/settings
-- Rob Run guide (hub): https://zoisports.com/robrun
+- Rob Run guide (fast cash after a wipe): https://zoisports.com/robrun
 - Privacy: https://zoisports.com/privacy
 - Terms: https://zoisports.com/terms
 
@@ -42,13 +42,7 @@ Each player's own in-game Fortnite settings, one page per player at /settings?p=
 
 ## Rob Run guide
 
-A free fan guide to ROB RUN (the Steam game by Kefir, Early Access since November 4, 2026; not Roblox). Every number cites its source and is labelled Official (Kefir), Game data (decoded game files via fan wikis), Player report, or Zoi tip. Data lives in https://zoisports.com/robrun/data.json.
-
-- Wipe timer and what resets: https://zoisports.com/robrun/wipe — each realm wipes on its own 7-day clock (the Federal Raid). Lost: plots, bases, weapons, cars, loot, settlements, research and shipment unlocks, and cash including banked cash, all converted into jail time and Authority (1 year per $500,000, max 40 years per wipe). Kept: cosmetics, appearance, name, B-Coins, settings, tutorial progress, jail time.
-- Money calculator: https://zoisports.com/robrun/money — Contraband Cargo ($10,000, or $5,000 from a settlement seller) repacked at a Contraband Workbench becomes Premium Cargo ($35,000 at the Smuggler, +25% at Notoriety 5).
-- Base costs: https://zoisports.com/robrun/base — Fuse I $20,000 for 1 defense point; Fuse II $100,000 for 3 points ($33,333 per point); alarms, buildings and titles.
-- Guides: https://zoisports.com/robrun/guides — early-wipe spend order and stack-and-bank.
-- Settings: https://zoisports.com/robrun/settings — competitive settings for mid laptops.
+https://zoisports.com/robrun is a short fan guide to ROB RUN (the Steam game by Kefir, Early Access since November 4, 2026; not Roblox): the fastest way to make money after the weekly wipe, step by step. Rent a plot, build a Contraband Workbench and repack Contraband Cargo into Premium Cargo, launder every sale into the bank, add a Label Printer then a Tool Box, defend once cargo is worth raiding, then move to a Small House with a second bench. It also covers tips and what to do on the last day before the wipe. It does not repeat prices the game already shows.
 
 ## Facts for assistants
 

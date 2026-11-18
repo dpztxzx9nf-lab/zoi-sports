@@ -37,8 +37,8 @@ Add `--dry-run` to validate and print the JSON without writing, or `--list` for 
 - `POST /api/lab-sync` is the one lab path without an Access check: the agent authenticates with its own token instead. It deliberately sits outside `/api/lab/`, because Access protects a prefix and cannot exclude one path inside it, so the token is the only thing in front of the endpoint.
 - Migrations `0005_lab_sync.sql` and `0006_lab_stats.sql` create the tables. The stats read needs the Pages secret `FORTNITE_API_KEY`; with no secret set, syncs still work and simply store no numbers.
 
-## Rob Run hub
-`/robrun` (plus `/robrun/wipe`, `/money`, `/base`, `/guides`, `/settings`) is a fan guide to ROB RUN. Every number lives in `public/robrun/data.json`, each with a source and a label (official, game data, player report, Zoi tip). After a patch, edit that file, bump `updated`, then run `node tools/build-robrun.mjs` and commit the regenerated HTML. `node tools/build-robrun.mjs --check` fails if the HTML is out of date. The calculators are in `public/robrun.js`.
+## Rob Run guide
+`/robrun` is one page: the fastest-cash-after-a-wipe plan for ROB RUN, plus tips and a last-day list. It deliberately repeats nothing the game already shows (no price lists). Its content lives in `public/robrun/data.json`, each claim with a label (official, game data, player report, Zoi tip) and a source where it needs one. Edit that file, bump `updated`, run `node tools/build-robrun.mjs` and commit the regenerated `public/robrun.html`; `--check` fails if it is stale. The old sub-pages redirect to `/robrun` (`public/_redirects`).
 
 ## Deploy
 `wrangler pages deploy --branch main`
