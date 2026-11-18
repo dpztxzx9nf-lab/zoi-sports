@@ -66,75 +66,223 @@
     "tposeContraband": {
       "name": "T-Pose Gaming: contraband",
       "url": "https://tposegaming.com/rob-run-contraband/"
+    },
+    "funPlanner": {
+      "name": "robrun.fun: shipment planner (game data)",
+      "url": "https://robrun.fun/en/planner/"
+    },
+    "wikilyGrow": {
+      "name": "wikily: weed farm calculator",
+      "url": "https://wikily.gg/rob-run/weed-farm-calculator"
+    },
+    "wikilyPlots": {
+      "name": "wikily: plots and settlements",
+      "url": "https://wikily.gg/rob-run/plots-and-settlements"
+    },
+    "wikilyWorkshop": {
+      "name": "wikily: Workshop",
+      "url": "https://wikily.gg/rob-run/base-items/workshop"
+    },
+    "proCars": {
+      "name": "robrun.pro: vehicles",
+      "url": "https://robrun.pro/en/vehicles"
+    },
+    "wikiCollections": {
+      "name": "ROB RUN Wiki: collections",
+      "url": "https://robrunwiki.com/en/mechanics/collections/"
+    },
+    "proBushes": {
+      "name": "robrun.pro: where to get bushes",
+      "url": "https://robrun.pro/en/guides/ref-bushes"
     }
   },
   "plan": [
     {
-      "do": "Rent a plot",
-      "why": "The Contraband Workbench has to sit on your own base.",
-      "need": 150000,
+      "do": "Lockpick, Backpack, Light Armor, Action Camera",
+      "why": "Cheap kit for the first store runs.",
+      "cost": 45000,
+      "need": 45000,
+      "pays": "first run",
       "label": "data",
       "src": [
-        "wikiPlot"
+        "funPlanner"
       ]
     },
     {
-      "do": "Build the Contraband Workbench and start repacking",
-      "why": "Cheap to start, and it repacks while you do runs. Players net $10k to $20k a crate.",
-      "need": 190000,
+      "do": "Land Plot Title I: rent a level 1 plot",
+      "why": "Your base, own car, laundering and the bench slots all need it.",
+      "cost": 150000,
+      "need": 195000,
+      "pays": "unlocks the base",
+      "label": "data",
+      "src": [
+        "wikiPlot",
+        "funPlanner"
+      ]
+    },
+    {
+      "do": "Collection Table",
+      "why": "Packs a few cheap stolen items into a $50k crate. Sets are worth far more than the same items sold to the Fence.",
+      "cost": 20000,
+      "need": 215000,
+      "pays": "first set",
+      "label": "data",
+      "src": [
+        "wikiCollections"
+      ]
+    },
+    {
+      "do": "Contraband Workbench in the Trailer",
+      "why": "Repack $10k crates into $35k ones. Players net $10k to $20k a crate.",
+      "cost": 40000,
+      "need": 255000,
+      "pays": "1 to 2 h",
+      "label": "player",
+      "src": [
+        "rrmBench",
+        "xpjMoney"
+      ]
+    },
+    {
+      "do": "Grow Room + 1 Grow Table",
+      "why": "Bushes can't be bought. Plant every one you find; they regrow after each harvest.",
+      "cost": 320000,
+      "need": 575000,
+      "pays": "4 to 9 h",
       "label": "player",
       "src": [
         "xpjMoney",
-        "rrrContraband"
+        "proBushes"
       ]
     },
     {
-      "do": "Open a bank account and launder every sale",
-      "why": "Banked money can't be stolen by players. Do it after every run, not at the end of the night.",
-      "need": 190000,
-      "label": "official",
-      "src": [
-        "kefirBank"
-      ]
-    },
-    {
-      "do": "Add a Label Printer",
-      "why": "Faster repacks mean more batches per night.",
-      "need": 235000,
-      "label": "data",
-      "src": [
-        "rrmBench"
-      ]
-    },
-    {
-      "do": "Add a Tool Box",
-      "why": "A second crate per batch roughly doubles what one bench makes.",
-      "need": 585000,
-      "label": "data",
-      "src": [
-        "rrmBench"
-      ]
-    },
-    {
-      "do": "Fuse the building that holds your cargo, then a Personal Alarm",
-      "why": "Only once cargo sits there long enough to be worth raiding. Clans: Clan Alarm next.",
-      "need": 860000,
-      "label": "zoi",
-      "src": []
-    },
-    {
-      "do": "Upgrade to a Small House and add a second bench",
-      "why": "A Trailer fits one workbench; a Small House fits two.",
-      "need": 1700000,
+      "do": "Grow Tables 2 to 6",
+      "why": "Add one each time you have 6 more bushes. Best payback in the game.",
+      "cost": 200000,
+      "need": 775000,
+      "pays": "under 1.5 h each",
       "label": "player",
       "src": [
-        "rrrContraband"
+        "xpjMoney",
+        "wikilyGrow"
+      ]
+    },
+    {
+      "do": "Longhorn Van + Trunk Bags",
+      "why": "6 cargo slots, 12 with racks. Every other early car has 1.",
+      "cost": 251000,
+      "need": 1026000,
+      "pays": "hauling",
+      "label": "data",
+      "src": [
+        "proCars"
+      ]
+    },
+    {
+      "do": "Car Lift + Workshop + 4 Contraband Workbenches",
+      "why": "The Workshop fits 4 benches. A Small House adds only 1 more, for $800k.",
+      "cost": 295000,
+      "need": 1321000,
+      "pays": "1.5 to 4 h",
+      "label": "player",
+      "src": [
+        "wikilyWorkshop",
+        "xpjMoney"
+      ]
+    },
+    {
+      "do": "Fan on all 6 tables",
+      "why": "Bushes grow 12% faster.",
+      "cost": 250000,
+      "need": 1571000,
+      "pays": "4 to 9 h",
+      "label": "data",
+      "src": [
+        "wikilyGrow"
+      ]
+    },
+    {
+      "do": "Label Printer on all 5 benches",
+      "why": "Repacks run 15% faster.",
+      "cost": 165000,
+      "need": 1736000,
+      "pays": "4 to 11 h",
+      "label": "data",
+      "src": [
+        "rrmBench"
+      ]
+    },
+    {
+      "do": "Additional Collection",
+      "why": "7 more sets for the Collection Table.",
+      "cost": 59000,
+      "need": 1795000,
+      "pays": "first set",
+      "label": "data",
+      "src": [
+        "wikiCollections"
+      ]
+    },
+    {
+      "do": "Land Plot Title II: move to a level 2 plot",
+      "why": "Opens the Mini Drill, Water Pump, Special Collection and Titan.",
+      "cost": 1000000,
+      "need": 2795000,
+      "pays": "unlocks tier II",
+      "label": "data",
+      "src": [
+        "wikilyPlots",
+        "funPlanner"
+      ]
+    },
+    {
+      "do": "Mini Drill, Code Tablet, USB Hacking Tool",
+      "why": "Opens the big safes and starts the bank job chain.",
+      "cost": 263000,
+      "need": 3058000,
+      "pays": "safes, bank job",
+      "label": "data",
+      "src": [
+        "funPlanner"
+      ]
+    },
+    {
+      "do": "Special Collection",
+      "why": "Sets that pack into $150k crates.",
+      "cost": 150000,
+      "need": 3208000,
+      "pays": "one crate",
+      "label": "data",
+      "src": [
+        "wikiCollections"
+      ]
+    },
+    {
+      "do": "Water Pump on all 6 tables",
+      "why": "Another 14% off grow time.",
+      "cost": 620000,
+      "need": 3828000,
+      "pays": "7 to 14 h",
+      "label": "data",
+      "src": [
+        "wikilyGrow"
+      ]
+    },
+    {
+      "do": "Longhorn Titan (optional)",
+      "why": "Almost twice the Van's speed, same 6 cargo slots. Sells back for $360k.",
+      "cost": 1100000,
+      "need": 4928000,
+      "pays": "faster runs",
+      "label": "data",
+      "src": [
+        "proCars"
       ]
     }
   ],
   "tips": [
     {
-      "text": "Keep the bench busy. Load crates before every run so it never sits empty.",
+      "text": "Keep every bench loaded. Reload them every 30 minutes.",
       "label": "zoi",
       "src": []
     },
@@ -176,6 +324,13 @@
       ]
     },
     {
+      "text": "Last grow cycle: harvest, then sell each bush to the Smuggler. A bush is worth $20k or more.",
+      "label": "data",
+      "src": [
+        "wikilyGrow"
+      ]
+    },
+    {
       "text": "Sell all cargo. Every $500,000 you hold at the wipe is one more year of jail time, up to 40 years.",
       "label": "data",
       "src": [
@@ -198,11 +353,9 @@
     }
   ],
   "planNote": {
-    "text": "Already own a Grow Room? Filling its tables beats the bench. See Best runs.",
-    "label": "player",
-    "src": [
-      "xpjMoney"
-    ]
+    "text": "Stop here unless 20+ hours of play are left and a Grow Table cycle takes about 1 hour. Then go level 3: Land Plot Title III ($3M), a UV Lamp on all 6 tables ($2M) and the Unique Collection ($350k). That's $10.3M in all.",
+    "label": "zoi",
+    "src": []
   },
   "bestRuns": {
     "lead": "Cash per hour, ranked. All of these are player reports, one player's or squad's result, not a promise.",
@@ -277,8 +430,25 @@
     "unknown": "Nobody has published reliable per-minute numbers for specific crates or routes, how often a repack comes out as Rarity Cargo, or what the Nov 4 patch did to production payouts."
   },
   "duo": {
-    "lead": "Two players, one Clan Alarm. Split the jobs so one of you is always free.",
+    "lead": "Two players, one base. One builds, one runs.",
     "groups": [
+      {
+        "h": "Who does what",
+        "items": [
+          {
+            "text": "Base: does all the research and buying, so nothing is paid for twice. Harvests every cycle, reloads the benches and launders.",
+            "label": "zoi",
+            "src": []
+          },
+          {
+            "text": "Runner: store runs, every growing bush (gun shops and gear stores first), collection items, and crates in the Van.",
+            "label": "zoi",
+            "src": [
+              "proBushes"
+            ]
+          }
+        ]
+      },
       {
         "h": "On a run",
         "items": [
@@ -459,8 +629,8 @@
         "h": "Fuse and alarm order",
         "items": [
           {
-            "text": "Fuse the Grow Room and Chemical Laboratory first. They make the money and open the easiest.",
-            "label": "player",
+            "text": "Fuse the Grow Room first, then the Workshop. They hold your income, and the Grow Room opens easily.",
+            "label": "zoi",
             "src": [
               "xpjDecoder"
             ]
@@ -496,5 +666,45 @@
         ]
       }
     ]
-  }
+  },
+  "paysNote": "Pays back is in hours you're online. The short end is math from game prices, the long end is from player reports.",
+  "cars": [
+    {
+      "text": "Longhorn Van first, Titan later. Both carry 6 crates; the Titan is much faster.",
+      "label": "data",
+      "src": [
+        "proCars"
+      ]
+    },
+    {
+      "text": "Skip the Royal E and J, the Longhorn Wild and the Buletti. They cost $1M to $10M and carry 0 to 4 crates.",
+      "label": "data",
+      "src": [
+        "proCars"
+      ]
+    }
+  ],
+  "rentOwn": [
+    {
+      "text": "Level 2 and 3: rent. Owning a level 2 settlement costs about $1.55M more. At the 5% laundering tax you'd have to launder about $31M to win that back.",
+      "label": "data",
+      "src": [
+        "wikilyPlots"
+      ]
+    },
+    {
+      "text": "Level 1: own if a free settlement is close in the first 3 days. It's $300k vs $150k. You skip the 5% tax and collect it from tenants, so it pays back in about 3 days if you launder $1M a day.",
+      "label": "data",
+      "src": [
+        "wikilyPlots"
+      ]
+    },
+    {
+      "text": "On a brand-new server you may have to own: you can only rent where someone already owns the settlement.",
+      "label": "data",
+      "src": [
+        "wikiPlot"
+      ]
+    }
+  ]
 }

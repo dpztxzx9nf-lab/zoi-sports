@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* Builds zoisports.com/robrun: the fastest-cash-after-a-wipe plan for ROB RUN.
+/* Builds zoisports.com/robrun: the fresh-wipe buy order for ROB RUN.
 
    Everything on the page lives in public/robrun/data.json. Only put things there
    the game does not already show you (no price lists). After a patch, edit it,
@@ -23,15 +23,15 @@ const updatedHuman = new Date(D.updated + "T12:00:00Z").toLocaleDateString("en-U
 
 const groupItems = (sec) => sec.groups.flatMap((g) => g.items);
 const BR = D.bestRuns;
-const all = [...D.plan, D.planNote, ...D.tips, ...D.lastDay, ...BR.tips, { label: "player", src: BR.rankedSrc }, ...groupItems(D.duo), ...groupItems(D.raids)];
+const all = [...D.plan, D.planNote, ...D.cars, ...D.rentOwn, ...D.tips, ...D.lastDay, ...BR.tips, { label: "player", src: BR.rankedSrc }, ...groupItems(D.duo), ...groupItems(D.raids)];
 const usedSrc = [...new Set(all.flatMap((x) => x.src || []))];
 const usedLabels = [...new Set(all.map((x) => x.label))];
 const li = (x) => `<li>${esc(x.text)} ${chip(x.label)}</li>`;
 
-const title = "Rob Run Guide: Fastest Money After a Wipe, Best Runs, Raid Defense — Zoi";
-const desc = "Rob Run guide: the fastest money after a wipe, step by step, the best-paying runs per hour, a duo playbook, and how to stop base raids. Short and sourced.";
+const title = "Rob Run Guide: Best Buy Order After a Wipe, Best Runs, Raid Defense — Zoi";
+const desc = "Rob Run guide: the best buy order after a wipe with running costs and payback, cars, renting vs owning, the best-paying runs, a duo playbook, and raid defense.";
 const ld = { "@context": "https://schema.org", "@graph": [
-  { "@type": "HowTo", "@id": URL_, url: URL_, name: "Fastest money after a Rob Run wipe", description: desc, dateModified: D.updated, inLanguage: "en",
+  { "@type": "HowTo", "@id": URL_, url: URL_, name: "Best buy order after a Rob Run wipe", description: desc, dateModified: D.updated, inLanguage: "en",
     about: { "@type": "VideoGame", name: "Rob Run", publisher: { "@type": "Organization", name: "Kefir" }, gamePlatform: "PC (Steam)" },
     publisher: { "@type": "SportsOrganization", name: "Zoi", url: SITE + "/" },
     step: D.plan.map((s, i) => ({ "@type": "HowToStep", position: i + 1, name: s.do, text: s.why })) },
@@ -45,7 +45,7 @@ const bestRuns = `<p class="rr-lead">${esc(BR.lead)} ${chip("player")}</p>
 <h3 class="rr-gh">Per job, not per hour</h3><ul class="rr-rank rr-rank-plain">${rankRows(BR.perJob)}</ul>
 <h3 class="rr-gh">Make each run pay more</h3><ul class="rr-steps">${BR.tips.map(li).join("")}</ul>
 <p class="rr-unknown"><b>Unknown:</b> ${esc(BR.unknown)}</p>`;
-const steps = D.plan.map((s) => `<li><h3>${esc(s.do)}</h3><p>${esc(s.why)} ${chip(s.label)}</p><p class="rr-need">Spent so far: about ${usd(s.need)}</p></li>`).join("\n");
+const steps = D.plan.map((s) => `<li><h3>${esc(s.do)}</h3><p>${esc(s.why)} ${chip(s.label)}</p><p class="rr-need">Costs ${usd(s.cost)} · total ${usd(s.need)} · pays back: ${esc(s.pays)}</p></li>`).join("\n");
 
 const html = `<!doctype html>
 <html lang="en">
@@ -65,14 +65,17 @@ const html = `<!doctype html>
 <nav><a href="/#about">About</a><a href="/#roster">Roster</a><a href="/#tryouts">Rush</a><a href="/#events">Events</a><a href="/#socials">Socials</a><a href="/results">Results</a><a href="/robrun" class="nav-rr" aria-current="page">Rob Run</a><a href="/lab">Lab</a><a href="/shop">Shop</a></nav>
 <div class="nav-end"><button class="menu" aria-label="Menu" aria-expanded="false">☰</button><button class="acct-btn" type="button" id="acct-btn" aria-haspopup="dialog" aria-expanded="false" aria-label="Your account" hidden><span class="acct-initial" id="acct-initial">?</span></button></div></header>
 <main id="top">
-<section class="shop-hero rr-hero"><p class="page-chapter"><span class="gr">ΖΩΗ</span><span class="dot" aria-hidden="true">·</span>Rob Run</p><h1 class="page-h1">Fast cash after a wipe</h1><p class="tag">Do these in order. Each step pays for the next.</p></section>
+<section class="shop-hero rr-hero"><p class="page-chapter"><span class="gr">ΖΩΗ</span><span class="dot" aria-hidden="true">·</span>Rob Run</p><h1 class="page-h1">Best buy order after a wipe</h1><p class="tag">For a duo. Buy in this order and keep $100k cash on hand.</p></section>
 <div class="stripes" aria-hidden="true"></div>
-<nav class="rr-jump" aria-label="On this page"><a href="#plan">Plan</a><a href="#runs">Best runs</a><a href="#duo">Duo</a><a href="#raids">Raids</a></nav>
-<section class="rr-sec" id="plan"><h2>The plan</h2>
+<nav class="rr-jump" aria-label="On this page"><a href="#plan">Plan</a><a href="#land">Land</a><a href="#runs">Best runs</a><a href="#duo">Duo</a><a href="#raids">Raids</a></nav>
+<section class="rr-sec" id="plan"><h2>The buy order</h2>
+<p class="rr-note">${esc(D.paysNote)}</p>
 <ol class="rr-plan">
 ${steps}
 </ol>
 <p class="rr-note">${esc(D.planNote.text)} ${chip(D.planNote.label)}</p></section>
+<section class="rr-sec"><h2>Cars</h2><ul class="rr-steps">${D.cars.map(li).join("")}</ul></section>
+<section class="rr-sec" id="land"><h2>Rent or own</h2><ul class="rr-steps">${D.rentOwn.map(li).join("")}</ul></section>
 <section class="rr-sec"><h2>Tips</h2><ul class="rr-steps">${D.tips.map(li).join("")}</ul></section>
 <section class="rr-sec"><h2>Last day</h2><ul class="rr-steps">${D.lastDay.map(li).join("")}</ul></section>
 <section class="rr-sec" id="runs"><h2>Best runs</h2>${bestRuns}</section>
