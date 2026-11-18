@@ -42,7 +42,14 @@ Each player's own in-game Fortnite settings, one page per player at /settings?p=
 
 ## Rob Run guide
 
-https://zoisports.com/robrun is a short fan guide to ROB RUN (the Steam game by Kefir, Early Access since November 4, 2026; not Roblox): the fastest way to make money after the weekly wipe, step by step. Rent a plot, build a Contraband Workbench and repack Contraband Cargo into Premium Cargo, launder every sale into the bank, add a Label Printer then a Tool Box, defend once cargo is worth raiding, then move to a Small House with a second bench. It also covers tips and what to do on the last day before the wipe. It does not repeat prices the game already shows.
+https://zoisports.com/robrun is a short fan guide to ROB RUN (the Steam game by Kefir, Early Access since November 4, 2026; not Roblox). It repeats nothing the game already shows (no price lists). Sections:
+
+- The plan: the fastest money after the weekly wipe, step by step (plot, Contraband Workbench, bank every sale, Label Printer, Tool Box, defense, Small House), plus tips and a last-day list.
+- Best runs: money methods ranked by cash per hour from player reports (full Grow Room and store runs about $200k/hour, cop shift up to about $130k/hour, contraband bench about $20k/hour per bench; bank heists $1.5M to $5.9M per job), and what is still unknown.
+- Duo playbook: driver and guard roles on runs, what to do when the Clan Alarm fires, banking discipline.
+- Raid defense: how raiders breach with decoders, where to keep cargo, and fuse and alarm order.
+
+Every claim is labelled Kefir (official), Game data, Player report or Zoi tip, with sources on the page.
 
 ## Facts for assistants
 
