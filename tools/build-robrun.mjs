@@ -28,8 +28,8 @@ const usedSrc = [...new Set(all.flatMap((x) => x.src || []))];
 const usedLabels = [...new Set(all.map((x) => x.label))];
 const li = (x) => `<li>${esc(x.text)} ${chip(x.label)}</li>`;
 
-const title = "Rob Run Guide: Best Buy Order After a Wipe, Best Runs, Raid Defense — Zoi";
-const desc = "Rob Run guide: the best buy order after a wipe with running costs and payback, cars, renting vs owning, the best-paying runs, a duo hunting playbook, and raid defense.";
+const title = "Rob Run Guide: Best Buy Order After a Wipe, Best Runs, Base Raids — Zoi";
+const desc = "Rob Run guide: the best buy order after a wipe with running costs and payback, cars, renting vs owning, the best-paying runs, a duo hunting playbook, and how to raid bases.";
 const ld = { "@context": "https://schema.org", "@graph": [
   { "@type": "HowTo", "@id": URL_, url: URL_, name: "Best buy order after a Rob Run wipe", description: desc, dateModified: D.updated, inLanguage: "en",
     about: { "@type": "VideoGame", name: "Rob Run", publisher: { "@type": "Organization", name: "Kefir" }, gamePlatform: "PC (Steam)" },
@@ -65,7 +65,7 @@ const html = `<!doctype html>
 <nav><a href="/#about">About</a><a href="/#roster">Roster</a><a href="/#tryouts">Rush</a><a href="/#events">Events</a><a href="/#socials">Socials</a><a href="/results">Results</a><a href="/robrun" class="nav-rr" aria-current="page">Rob Run</a><a href="/lab">Lab</a><a href="/shop">Shop</a></nav>
 <div class="nav-end"><button class="menu" aria-label="Menu" aria-expanded="false">☰</button><button class="acct-btn" type="button" id="acct-btn" aria-haspopup="dialog" aria-expanded="false" aria-label="Your account" hidden><span class="acct-initial" id="acct-initial">?</span></button></div></header>
 <main id="top">
-<section class="shop-hero rr-hero"><p class="page-chapter"><span class="gr">ΖΩΗ</span><span class="dot" aria-hidden="true">·</span>Rob Run</p><h1 class="page-h1">Best buy order after a wipe</h1><p class="tag">For a duo that hunts. Win fights early, catch sellers, let the Grow Room pay in the background. Keep $100k cash on hand.</p></section>
+<section class="shop-hero rr-hero"><p class="page-chapter"><span class="gr">ΖΩΗ</span><span class="dot" aria-hidden="true">·</span>Rob Run</p><h1 class="page-h1">Best buy order after a wipe</h1><p class="tag">For a duo that hunts. Win fights early, raid bases, catch sellers, let the Grow Room pay in the background. Keep $100k cash on hand.</p></section>
 <div class="stripes" aria-hidden="true"></div>
 <nav class="rr-jump" aria-label="On this page"><a href="#plan">Plan</a><a href="#land">Land</a><a href="#runs">Best runs</a><a href="#duo">Duo</a><a href="#raids">Raids</a></nav>
 <section class="rr-sec" id="plan"><h2>The buy order</h2>
@@ -81,7 +81,7 @@ ${steps}
 <section class="rr-sec"><h2>Last day</h2><ul class="rr-steps">${D.lastDay.map(li).join("")}</ul></section>
 <section class="rr-sec" id="runs"><h2>Best runs</h2>${bestRuns}</section>
 <section class="rr-sec" id="duo"><h2>Duo playbook</h2><p class="rr-lead">${esc(D.duo.lead)}</p>${groups(D.duo)}</section>
-<section class="rr-sec" id="raids"><h2>Raid defense</h2><p class="rr-lead">${esc(D.raids.lead)}</p>${groups(D.raids)}</section>
+<section class="rr-sec" id="raids"><h2>Raids</h2><p class="rr-lead">${esc(D.raids.lead)}</p>${groups(D.raids)}</section>
 <section class="rr-sec rr-sources"><p class="rr-legend">${usedLabels.map(chip).join(" ")}</p>
 <p class="small">Sources: ${usedSrc.map((k) => `<a href="${esc(D.sources[k].url)}" rel="noopener" target="_blank">${esc(D.sources[k].name)}</a>`).join(" · ")}</p>
 <p class="small">Last updated ${updatedHuman} · game version ${esc(D.gameVersion)} (Early Access)</p></section>
