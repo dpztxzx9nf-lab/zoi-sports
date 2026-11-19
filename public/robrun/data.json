@@ -1,6 +1,6 @@
 {
   "_readme": "Everything on zoisports.com/robrun. Edit, bump `updated`, then run: node tools/build-robrun.mjs. Only put things here the game does not already show (no price lists). Labels: official = Kefir; data = game files via fan wikis; player = player reports; zoi = our advice.",
-  "updated": "2026-11-18",
+  "updated": "2026-11-19",
   "gameVersion": "0.7.0",
   "sources": {
     "kefirWipe": {
@@ -216,20 +216,30 @@
       "url": "https://robrun.run/guides/hideout/grow-room/"
     },
     "zoiTest": {
-      "name": "Zoi: checked in-game (Nov 18)",
+      "name": "Zoi: checked in-game (Nov 18–19)",
       "url": "https://zoisports.com/robrun"
+    },
+    "wikiBarter": {
+      "name": "ROB RUN Wiki: barter recipes",
+      "url": "https://robrunwiki.com/en/mechanics/barter/"
+    },
+    "wikiGetDecoder": {
+      "name": "ROB RUN Wiki: how to get a Decoder",
+      "url": "https://robrunwiki.com/en/how-to/get-decoder/"
     }
   },
   "plan": [
     {
       "do": "Starter fight kit for both: Harris 500 shotgun, Light Armor, Pouch, Painkillers, Steel Plates, Lockpick, Sports Bag, plus one Action Camera",
-      "why": "Every early fight is inside 10 m, where a $3,500 shotgun downs a player in two shells, about as fast as a $115k SMG. The camera fills as you rob; you'll trade it for the Drill in step 9.",
+      "why": "Every early fight is inside 10 m, where a $3,500 shotgun downs a player in two shells, about as fast as a $115k SMG. This camera unlocks the purple one you'll buy for the Drill. Keep every green decoder you find; shops don't sell them, and three plus $10k become a purple one at the Suspicious Door.",
       "cost": 95700,
       "pays": "first fight you win",
       "label": "data",
       "src": [
         "funPlanner",
-        "rggWeapons"
+        "rggWeapons",
+        "wikiBarter",
+        "zoiTest"
       ],
       "need": 95700
     },
@@ -312,13 +322,14 @@
     },
     {
       "do": "3 Mini Drills + Master Key",
-      "why": "Mini Drills crack the big safes in locked rooms, which drop decoders and loot. One player got 25 decoders in two runs, enough to open a gate and a Grow Room with green fuses. The Master Key opens safes on other bases.",
+      "why": "Mini Drills crack the big safes in locked rooms, which drop decoders and loot. One player got 25 decoders in two runs. Keep the green ones — don't sell them. The Master Key opens safes and cage shelves on bases you raid.",
       "cost": 259000,
       "pays": "first raided Grow Room",
       "label": "player",
       "src": [
         "ytLorrRaid",
-        "funPlanner"
+        "funPlanner",
+        "wikiRaid"
       ],
       "need": 2708100
     },
@@ -335,8 +346,24 @@
       "need": 3407100
     },
     {
+      "do": "Start raiding: convert decoders at the Suspicious Door, then hit unfused Grow Rooms and trailers",
+      "why": "At the Suspicious Door, 3 green decoders plus $10k become 1 purple, or a spare full purple Action Camera becomes 1 purple — we checked both in-game. Save one purple camera for the Drill; the 3-green route is the cheap one. Players report a bare trailer, Grow Room or Workshop has 5 defense (5 green, 2 purple, or 1 legendary), and a Chemical Lab has 3. Skip heavy fused houses. Hack the gate from outside, then one building at a time. One of you hacks, the other covers on foot — you can't shoot from the car. Grab grow product and loose loot first, Master Key the safes, and leave before they repair the panel. Alarms warn the owner. Eviction Rights were pulled on Nov 17, so this is for loot, not the plot.",
+      "cost": 10000,
+      "pays": "first unfused Grow Room",
+      "label": "player",
+      "src": [
+        "wikiBarter",
+        "wikiRaid",
+        "wikiGetDecoder",
+        "zoiTest",
+        "xpjDecoder",
+        "ytLorrRaid"
+      ],
+      "need": 3417100
+    },
+    {
       "do": "Drill kit: Code Tablet research, 2 USB Hacking Tools, $50k",
-      "why": "Fill each USB by hacking 5 computers in locked rooms, then trade the full camera, both USBs and $50k for the Drill at Lenny's. The Drill opens the bank's vault door at level 2; you don't need the ID Card for it. One guide says the camera must be the purple one (+$65k).",
+      "why": "Fill each USB by hacking 5 computers in locked rooms, then trade a full purple (tier II) Action Camera, both USBs and $50k for the Drill at Lenny's. The Camera II research and buy are an extra $65k if you don't have one yet — Camera I does not barter. The Drill opens the bank's vault door at level 2; you don't need the ID Card for it.",
       "cost": 225000,
       "pays": "one vault: 6 × $10k cash, 5 × $60k money bags, 3 safes",
       "label": "data",
@@ -346,7 +373,7 @@
         "fyiBank",
         "funPlanner"
       ],
-      "need": 3632100
+      "need": 3642100
     },
     {
       "do": "Royal E + Turbo Kit",
@@ -360,13 +387,13 @@
         "proCars",
         "funPlanner"
       ],
-      "need": 5021600
+      "need": 5031600
     },
     {
       "do": "Land Plot Title III: move to a level 3 plot",
       "why": "Only if you'll go for the bank's gold room or have 20+ hours of play left; otherwise stop here and bank the rest. Opens Deposit Box Keys, the SR Reaper, Heavy Armor and UV Lamps.",
       "cost": 3000000,
-      "need": 8021600,
+      "need": 8031600,
       "pays": "unlocks tier III",
       "label": "data",
       "src": [
@@ -386,7 +413,7 @@
         "ytSimdexBank",
         "funPlanner"
       ],
-      "need": 8221600
+      "need": 8231600
     },
     {
       "do": "Fight kit III: SR Reaper and Heavy Armor for both",
@@ -398,10 +425,18 @@
         "rgTTD",
         "rggWeapons"
       ],
-      "need": 9641600
+      "need": 9651600
     }
   ],
   "tips": [
+    {
+      "text": "Don't sell green decoders. Three of them plus $10k barter into a purple one at the Suspicious Door.",
+      "label": "data",
+      "src": [
+        "wikiBarter",
+        "zoiTest"
+      ]
+    },
     {
       "text": "Launder after every sale. Banked money can't be stolen by players.",
       "label": "official",
@@ -622,10 +657,12 @@
             ]
           },
           {
-            "text": "Base raids: pick a Grow Room with green fuses outside your own district. Decoders come from Mini Drill safes.",
+            "text": "Base raids: hit unfused Grow Rooms, trailers and Workshops outside your district. One of you hacks, the other covers on foot. Don't jump the fence to skip the gate — players got stuck inside.",
             "label": "player",
             "src": [
-              "ytLorrRaid"
+              "ytLorrRaid",
+              "xpjDecoder",
+              "wikiRaid"
             ]
           }
         ]
@@ -759,8 +796,77 @@
     ]
   },
   "raids": {
-    "lead": "Nothing protects an offline base except fuses and alarms. Here's how raiders get in and what to do about it.",
+    "lead": "Raid other crews for the loot, and hold your own base the same way. Nothing protects an offline base except fuses and alarms.",
     "groups": [
+      {
+        "h": "How you raid",
+        "items": [
+          {
+            "text": "Shops don't sell decoders. Keep every green one. At the Suspicious Door, 3 green plus $10k become 1 purple, or a spare full purple Action Camera becomes 1 purple. We checked both in-game.",
+            "label": "data",
+            "src": [
+              "wikiBarter",
+              "wikiGetDecoder",
+              "zoiTest"
+            ]
+          },
+          {
+            "text": "Save one purple Action Camera for the bank Drill. Trading a camera for a decoder is the expensive route.",
+            "label": "zoi",
+            "src": [
+              "wikiBarter",
+              "funPlanner"
+            ]
+          },
+          {
+            "text": "Players report a bare trailer, Grow Room or Workshop has 5 defense (5 green, 2 purple, or 1 legendary), and a Chemical Lab has 3. A Small House starts at 15, a Mansion at 30. Fuses add more. The 1 / 3 / 5 decoder points are player reports, not game files.",
+            "label": "player",
+            "src": [
+              "wikiRaid",
+              "xpjDecoder"
+            ]
+          },
+          {
+            "text": "Hack the gate from outside, then one building at a time. Don't jump the fence to skip the gate — players got stuck inside and couldn't hack it.",
+            "label": "player",
+            "src": [
+              "xpjDecoder"
+            ]
+          },
+          {
+            "text": "Decoders don't open safes or cage shelves. That takes a Master Key.",
+            "label": "data",
+            "src": [
+              "wikiRaid",
+              "wikiCargo"
+            ]
+          },
+          {
+            "text": "One of you hacks, the other covers on foot. You can't shoot from the car. Grab grow product and loose loot first, then Master Key the safes, and leave before they repair the panel.",
+            "label": "zoi",
+            "src": [
+              "zoiTest",
+              "wikiRaid",
+              "xpjDecoder"
+            ]
+          },
+          {
+            "text": "Each decoder takes about 12 seconds at the panel, so an alarmed owner may make it back. A location alarm warns everyone on the plot.",
+            "label": "player",
+            "src": [
+              "xpjDecoder",
+              "wikiRaid"
+            ]
+          },
+          {
+            "text": "Eviction Rights were pulled from barter on Nov 17, for now. Raids are for loot, not taking the plot.",
+            "label": "official",
+            "src": [
+              "xpjPatch"
+            ]
+          }
+        ]
+      },
       {
         "h": "How raiders get in",
         "items": [
@@ -799,13 +905,6 @@
             "label": "player",
             "src": [
               "xpjDecoder"
-            ]
-          },
-          {
-            "text": "Eviction Rights were pulled from barter on Nov 17, for now.",
-            "label": "official",
-            "src": [
-              "xpjPatch"
             ]
           }
         ]
